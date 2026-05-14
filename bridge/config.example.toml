@@ -1,0 +1,27 @@
+# SMO Archipelago bridge configuration.
+# Copy to config.toml and edit. Or pass --config <path>.
+
+[ap]
+# Archipelago server connection.
+host = "archipelago.gg"
+port = 38281
+slot = "Mario"
+# Password may also be provided via SMOAP_PASSWORD env var (preferred for secrets).
+password = ""
+# Bit flags: 1=remote items, 2=own-world items, 4=starting inventory.
+# Default 7 = receive everything (recommended; needed so moon flags replay on reconnect).
+items_handling = 7
+
+[switch]
+# TCP server the Switch module connects to.
+listen_host = "0.0.0.0"
+listen_port = 17777
+
+[bridge]
+log_level = "INFO"
+# When true, serve the web tracker on web_port.
+web_tracker = true
+web_port = 8000
+# Path to local Archipelago checkout. Empty = look in vendor/Archipelago,
+# then fall back to the SMOAP_AP_PATH env var.
+archipelago_path = ""

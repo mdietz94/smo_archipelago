@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.coverage
+htmlcov/
+
+# Bridge runtime
+bridge/config.toml
+bridge/logs/
+bridge/*.log
+
+# Switch build (NOT submodule paths — those are tracked via .gitmodules)
+switch-mod/build/
+switch-mod/sd-overlay/atmosphere/contents/*/exefs/subsdk9
+switch-mod/sd-overlay/atmosphere/contents/*/exefs/main.npdm
+switch-mod/sd-overlay/atmosphere/contents/*/romfs/ap_config.json
+switch-mod/src/ap/capture_table.h
+
+# Symbol dumps - never commit, contain copyrighted material
+docs/main-*.nso
+docs/symbols-*.json
+docs/ghidra/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local clones we don't track (submodules go in vendor/ instead)
+third_party/
+
+# vendor/ holds submodules — tracked via .gitmodules. Don't ignore the dir.
+# Common build artifacts inside Archipelago should still be ignored.
+vendor/Archipelago/host.yaml
+vendor/Archipelago/Players/
+vendor/Archipelago/output/
+vendor/*/__pycache__/
+
+.claude/worktrees/

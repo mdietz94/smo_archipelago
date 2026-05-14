@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smo-ap-bridge"
+version = "0.1.0"
+description = "Archipelago bridge for Super Mario Odyssey on modded Switch."
+readme = "../README.md"
+requires-python = ">=3.11"
+license = {file = "../LICENSE"}
+authors = [{name = "SMOArchipelago contributors"}]
+
+dependencies = [
+    "websockets>=12.0",
+    "flask>=3.0",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+smo-ap-bridge = "smo_ap_bridge.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["smo_ap_bridge*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"

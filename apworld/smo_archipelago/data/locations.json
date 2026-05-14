@@ -1,0 +1,4940 @@
+[
+    {
+        "name": "Cap: Frog-Jumping Above the Fog",
+        "category": [
+            "Cap Kingdom"
+        ],
+        "region": "Cap Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cap: Frog-Jumping from the Top Deck",
+        "category": [
+            "Cap Kingdom"
+        ],
+        "region": "Cap Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cap: Cap Kingdom Timer Challenge 1",
+        "category": [
+            "Cap Kingdom"
+        ],
+        "region": "Cap Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cap: Good Evening, Captain Toad!",
+        "category": [
+            "Cap Kingdom"
+        ],
+        "region": "Cap Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cap: Shopping in Bonneton",
+        "category": [
+            "Cap Kingdom"
+        ],
+        "region": "Cap Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cap: Skimming the Poison Tide",
+        "category": [
+            "Cap Kingdom"
+        ],
+        "region": "Cap Kingdom",
+        "requires": "{OptOne(Paragoomba)}"
+    },
+    {
+        "name": "Cap: Slipping Through the Poison Tide",
+        "category": [
+            "Cap Kingdom"
+        ],
+        "region": "Cap Kingdom",
+        "requires": "{OptOne(Paragoomba)}"
+    },
+    {
+        "name": "Cap: Push-Block Peril",
+        "category": [
+            "Cap Kingdom"
+        ],
+        "region": "Cap Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cap: Hidden Among the Push-Blocks",
+        "category": [
+            "Cap Kingdom"
+        ],
+        "region": "Cap Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cap: Searching the Frog Pond",
+        "category": [
+            "Cap Kingdom"
+        ],
+        "region": "Cap Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cap: Secrets of the Frog Pond",
+        "category": [
+            "Cap Kingdom"
+        ],
+        "region": "Cap Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cascade: Our First Power Moon",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cascade: Multi Moon Atop the Falls",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cascade: Chomp Through the Rocks",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cascade: Behind the Waterfall",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cascade: On Top of the Rubble",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cascade: Treasure of the Waterfall Basin",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cascade: Above a High Cliff",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cascade: Across the Floating Isles",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cascade: Cascade Kingdom Timer Challenge 1",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cascade: Cascade Kingdom Timer Challenge 2",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": "{ScaleAWall()}"
+    },
+    {
+        "name": "Cascade: Good Morning, Captain Toad!",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cascade: Dinosaur Nest: Big Cleanup!",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cascade: Dinosaur Nest: Running Wild!",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cascade: Nice Shot with the Chain Chomp!",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cascade: Very Nice Shot with the Chain Chomp!",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cascade: Past the Chasm Lifts",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cascade: Hidden Chasm Passage",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cascade: Secret Path to Fossil Falls!",
+        "category": [
+            "Cascade Kingdom",
+            "post-metro"
+        ],
+        "region": "Post-Metro",
+        "requires": "{SnowSeasidePeace()}"
+    },
+    {
+        "name": "Cascade: A Tourist in the Cascade Kingdom",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{SandPeace()} and {MetroPeace()}"
+    },
+    {
+        "name": "Cascade: Rolling Rock By the Falls",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Cascade: Shopping in Fossil Falls",
+        "category": [
+            "Cascade Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: Atop the Highest Tower",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: Moon Shards in the Sand",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: Showdown on the Inverted Pyramid",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{BulletBillSkip()}"
+    },
+    {
+        "name": "Sand: The Hole in the Desert",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{SandPeace()}"
+    },
+    {
+        "name": "Sand: Overlooking the Desert Town",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: Alcove in the Ruins",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: On the Leaning Pillar",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: Hidden Room in the Flowing Sands",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: Secret of the Mural",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: Secret of the Inverted Mural",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{BulletBillSkip()}"
+    },
+    {
+        "name": "Sand: On Top of the Stone Archway",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: From a Crate in the Ruins",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{BulletBillSmallSkip()}"
+    },
+    {
+        "name": "Sand: On the Lone Pillar",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{OptOne(Bullet Bill)}"
+    },
+    {
+        "name": "Sand: On the Statue's Tail",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{BulletBillSkip()}"
+    },
+    {
+        "name": "Sand: Hang Your Hat on the Fountain",
+        "category": [
+            "Sand Kingdom",
+            "Sand Peace"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{SandPeace()}"
+    },
+    {
+        "name": "Sand: Where the Birds Gather",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{OptOne(Ground Pound)}"
+    },
+    {
+        "name": "Sand: Top of a Dune",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{OptOne(Ground Pound)}"
+    },
+    {
+        "name": "Sand: Lost in the Luggage",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{OptOne(Ground Pound)}"
+    },
+    {
+        "name": "Sand: Bullet Bill Breakthrough",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{OptOne(Bullet Bill)}"
+    },
+    {
+        "name": "Sand: Inside a Block is a Hard Place",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: Bird Traveling the Desert",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: Bird Traveling the Wastes",
+        "category": [
+            "Sand Kingdom",
+            "Sand Peace"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{SandPeace()}"
+    },
+    {
+        "name": "Sand: The Lurker Under the Stone",
+        "category": [
+            "Sand Kingdom",
+            "Sand Peace"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{SandPeace()} and {OptOne(Ground Pound)}"
+    },
+    {
+        "name": "Sand: The Treasure of Jaxi Ruins",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: Desert Gardening: Plaza Seed",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{OptOne(Hold/Throw)}"
+    },
+    {
+        "name": "Sand: Desert Gardening: Ruins Seed",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{OptOne(Hold/Throw)}"
+    },
+    {
+        "name": "Sand: Desert Gardening: Seed on the Cliff",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{OptOne(Hold/Throw)}"
+    },
+    {
+        "name": "Sand: Sand Kingdom Timer Challenge 1",
+        "category": [
+            "Sand Kingdom",
+            "Sand Peace"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{SandPeace()} and {OptAll(|Roll| and |Wall Jump|)}"
+    },
+    {
+        "name": "Sand: Sand Kingdom Timer Challenge 2",
+        "category": [
+            "Sand Kingdom",
+            "Sand Peace"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{SandPeace()}"
+    },
+    {
+        "name": "Sand: Sand Kingdom Timer Challenge 3",
+        "category": [
+            "Sand Kingdom",
+            "Sand Peace"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{SandPeace()} and {OptAll(|Jaxi| or (|Long Jump| and |Roll|))}"
+    },
+    {
+        "name": "Sand: Found in the Sand! Good Dog!",
+        "category": [
+            "Sand Kingdom",
+            "Sand Peace"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{SandPeace()} and {OptOne(Ground Pound)}"
+    },
+    {
+        "name": "Sand: Taking Notes: Jump on the Palm",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: Herding Sheep in the Dunes",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: Fishing in the Oasis",
+        "category": [
+            "Sand Kingdom",
+            "Sand Peace"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{SandPeace()} and {OptOne(Lakitu)}"
+    },
+    {
+        "name": "Sand: Love in the Heart of the Desert",
+        "category": [
+            "Sand Kingdom",
+            "Sand Peace"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{SandPeace()} and {OptOne(Goomba)}"
+    },
+    {
+        "name": "Sand: Among the Five Cactuses",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{OptOne(Jaxi)}"
+    },
+    {
+        "name": "Sand: You're Quite a Catch, Captain Toad!",
+        "category": [
+            "Sand Kingdom",
+            "Sand Peace"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{SandPeace()} and {OptOne(Lakitu)}"
+    },
+    {
+        "name": "Sand: Jaxi Reunion!",
+        "category": [
+            "Sand Kingdom",
+            "Sand Peace"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{SandPeace()} and {OptOne(Jaxi)}"
+    },
+    {
+        "name": "Sand: Welcome Back, Jaxi!",
+        "category": [
+            "Sand Kingdom",
+            "Sand Peace"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{SandPeace()} and {OptOne(Jaxi)}"
+    },
+    {
+        "name": "Sand: Wandering Cactus",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{OptOne(Cactus)}"
+    },
+    {
+        "name": "Sand: Sand Quiz: Wonderful!",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: Shopping in Tostarena",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: Employees Only",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{BulletBillSkip()}"
+    },
+    {
+        "name": "Sand: Sand Kingdom Slots",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: Walking the Desert!",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: Hidden Room in the Inverted Pyramid",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{BulletBillSkip()}"
+    },
+    {
+        "name": "Sand: Underground Treasure Chest",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{OptOne(Bullet Bill)}"
+    },
+    {
+        "name": "Sand: Goomba Tower Assembly",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{OptOne(Goomba)}"
+    },
+    {
+        "name": "Sand: Under the Mummy's Curse",
+        "category": [
+            "Sand Kingdom",
+            "Sand Peace"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{SandPeace()}"
+    },
+    {
+        "name": "Sand: Ice Cave Treasure",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{OptOne(Wall Jump)}"
+    },
+    {
+        "name": "Sand: Sphynx's Treasure Vault",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: A Rumble from the Sandy Floor",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{OptOne(Ground Pound)}"
+    },
+    {
+        "name": "Sand: Dancing with New Friends",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{Sombrero()}"
+    },
+    {
+        "name": "Sand: The Invisible Maze",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: Skull Sign in the Transparent Maze",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Sand: The Bullet Bill Maze: Break Through!",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{BulletBillMaze()}"
+    },
+    {
+        "name": "Sand: The Bullet Bill Maze: Side Path",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{BulletBillMaze()}"
+    },
+    {
+        "name": "Sand: Jaxi Driver",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{OptOne(Jaxi)}"
+    },
+    {
+        "name": "Sand: Jaxi Stunt Driving",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{OptOne(Jaxi)}"
+    },
+    {
+        "name": "Sand: Strange Neighborhood",
+        "category": [
+            "Sand Kingdom",
+            "Sand Peace"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{SandPeace()} and {OptOne(Mini Rocket)}"
+    },
+    {
+        "name": "Sand: Above a Strange Neighborhood",
+        "category": [
+            "Sand Kingdom",
+            "Sand Peace"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{SandPeace()} and {OptOne(Mini Rocket)}"
+    },
+    {
+        "name": "Sand: Secret Path to Tostarena!",
+        "category": [
+            "Sand Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{IntoTheLake()} and {MazeSkip()} and (|Power Moon:21| or (|Sand Kingdom Power Moon:16| OR ( |Sand Kingdom Multi-Moon| AND |Sand Kingdom Power Moon:13| ) OR ( |Sand Kingdom Multi-Moon:2| AND |Sand Kingdom Power Moon:10| )))"
+    },
+    {
+        "name": "Lake: Broodals Over the Lake",
+        "category": [
+            "Lake Kingdom"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{LakePeace()}"
+    },
+    {
+        "name": "Lake: Dorrie-Back Rider",
+        "category": [
+            "Lake Kingdom"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{LakePeace()}"
+    },
+    {
+        "name": "Lake: Cheep Cheep Crossing",
+        "category": [
+            "Lake Kingdom"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{LakePeace()}"
+    },
+    {
+        "name": "Lake: End of the Hidden Passage",
+        "category": [
+            "Lake Kingdom"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{IntoTheLake()} and {OptOne(Zipper)}"
+    },
+    {
+        "name": "Lake: What's in the Box?",
+        "category": [
+            "Lake Kingdom",
+            "Into the Lake"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{IntoTheLake()}"
+    },
+    {
+        "name": "Lake: On the Lakeshore",
+        "category": [
+            "Lake Kingdom",
+            "Ground Pound"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{IntoTheLake()} and {OptOne(Ground Pound)}"
+    },
+    {
+        "name": "Lake: From the Broken Pillar",
+        "category": [
+            "Lake Kingdom"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{IntoTheLake()} and {CheepCheepOrGroundPound()}"
+    },
+    {
+        "name": "Lake: Treasure in the Spiky Waterway",
+        "category": [
+            "Lake Kingdom"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{IntoTheLake()} and {SwimOrCheepCheep()}"
+    },
+    {
+        "name": "Lake: Lake Gardening: Spiky Passage Seed",
+        "category": [
+            "Lake Kingdom",
+            "Lake Peace"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{LakePeace()}"
+    },
+    {
+        "name": "Lake: Lake Kingdom Timer Challenge 1",
+        "category": [
+            "Lake Kingdom",
+            "Lake Peace"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{LakePeace()} and {OptOne(Ground Pound)}"
+    },
+    {
+        "name": "Lake: Lake Kingdom Timer Challenge 2",
+        "category": [
+            "Lake Kingdom",
+            "Lake Peace"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{LakePeace()} and {ScaleAWallNoTripleJump()}"
+    },
+    {
+        "name": "Lake: Moon Shards in the Lake",
+        "category": [
+            "Lake Kingdom"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{IntoTheLake()} and {SwimOrCheepCheep()}"
+    },
+    {
+        "name": "Lake: Taking Notes: Dive and Swim",
+        "category": [
+            "Lake Kingdom"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{OptOne(Swim)}"
+    },
+    {
+        "name": "Lake: Taking Notes: In the Cliffside",
+        "category": [
+            "Lake Kingdom"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{OptOne(|Dash (2D)|)}"
+    },
+    {
+        "name": "Lake: Lake Fishing",
+        "category": [
+            "Lake Kingdom",
+            "Lake Peace"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{LakePeace()} and {OptOne(Lakitu)}"
+    },
+    {
+        "name": "Lake: I Met a Lake Cheep Cheep!",
+        "category": [
+            "Lake Kingdom",
+            "Lake Peace"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{LakePeace()} and {OptOne(Cheep Cheep)}"
+    },
+    {
+        "name": "Lake: Our Secret Little Room",
+        "category": [
+            "Lake Kingdom"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{IntoTheLake()}"
+    },
+    {
+        "name": "Lake: Let's Go Swimming, Captain Toad!",
+        "category": [
+            "Lake Kingdom"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{IntoTheLake()} and {CheepCheepOrGroundPound()}"
+    },
+    {
+        "name": "Lake: Shopping in Lake Lamode",
+        "category": [
+            "Lake Kingdom"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{IntoTheLake()}"
+    },
+    {
+        "name": "Lake: A Successful Repair Job",
+        "category": [
+            "Lake Kingdom",
+            "Lake Peace"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{LakePeace()} and {OptOne(Puzzle Part)}"
+    },
+    {
+        "name": "Lake: I Feel Underdressed",
+        "category": [
+            "Lake Kingdom"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{IntoTheLake()} and {Swimwear()}"
+    },
+    {
+        "name": "Lake: Unzip the Chasm",
+        "category": [
+            "Lake Kingdom"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{IntoTheLake()} and {OptOne(Zipper)}"
+    },
+    {
+        "name": "Lake: Super-Secret Zipper",
+        "category": [
+            "Lake Kingdom"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{IntoTheLake()} and {OptOne(Zipper)}"
+    },
+    {
+        "name": "Lake: Jump, Grab, Cling, and Climb",
+        "category": [
+            "Lake Kingdom"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{IntoTheLake()} and {SwimOrCheepCheep()}"
+    },
+    {
+        "name": "Lake: Jump, Grab, and Climb Some More",
+        "category": [
+            "Lake Kingdom"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{IntoTheLake()} and {SwimOrCheepCheep()}"
+    },
+    {
+        "name": "Lake: Secret Path to Lake Lamode!",
+        "category": [
+            "Lake Kingdom",
+            "Snow/Seaside Peace",
+            "post-metro"
+        ],
+        "region": "Post-Metro",
+        "requires": "((|Metro Kingdom Power Moon:75| OR ( |Metro Kingdom Multi-Moon| AND |Metro Kingdom Power Moon:17| ) OR ( |Metro Kingdom Multi-Moon:2| AND |Metro Kingdom Power Moon:14| ))) and {SnowSeasidePeace()}"
+    },
+    {
+        "name": "Lake: Found with Lake Kingdom Art",
+        "category": [
+            "Lake Kingdom",
+            "Lake Peace"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{LakePeace()} and {OptOne(Ground Pound)}"
+    },
+    {
+        "name": "Wooded: Road to Sky Garden",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()}"
+    },
+    {
+        "name": "Wooded: Flower Thieves of Sky Garden",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()}"
+    },
+    {
+        "name": "Wooded: Path to the Secret Flower Field",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()} and {OptOne(Sherm)}"
+    },
+    {
+        "name": "Wooded: Defend the Secret Flower Field",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()} and {OptAll(|Sherm| or |Uproot|)}"
+    },
+    {
+        "name": "Wooded: Behind the Rock Wall",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()} and {OptOne(Sherm)}"
+    },
+    {
+        "name": "Wooded: Back Way Up the Mountain",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()}"
+    },
+    {
+        "name": "Wooded: Rolling Rock in the Woods",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Wooded: Caught Hopping in the Forest!",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Wooded: Thanks for the Charge!",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()}"
+    },
+    {
+        "name": "Wooded: Atop the Tall Tree",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptOne(Uproot)}"
+    },
+    {
+        "name": "Wooded: Tucked Away Inside the Tunnel",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{UprootOrFireBro()}"
+    },
+    {
+        "name": "Wooded: Over the Cliff's Edge",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()} and {OptOne(Sherm)}"
+    },
+    {
+        "name": "Wooded: The Nut 'Round the Corner",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()}"
+    },
+    {
+        "name": "Wooded: Climb the Cliff to Get the Nut",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptOne(Uproot)}"
+    },
+    {
+        "name": "Wooded: The Nut in the Red Maze",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptOne(Uproot)}"
+    },
+    {
+        "name": "Wooded: The Nut at the Dead End",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptOne(Uproot)}"
+    },
+    {
+        "name": "Wooded: Cracked Nut on a Crumbling Tower",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()}"
+    },
+    {
+        "name": "Wooded: The Nut that Grew on the Tall Fence",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()}"
+    },
+    {
+        "name": "Wooded: Fire in the Cave",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Wooded: Hey Out There, Captain Toad!",
+        "category": [
+            "Wooded Kingdom",
+            "Wooded Peace"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{WoodedPeace()} and {OptOne(|Glydon|)}"
+    },
+    {
+        "name": "Wooded: Love in the Forest Ruins",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()} and {OptOne(Goomba)}"
+    },
+    {
+        "name": "Wooded: Inside a Rock in the Forest",
+        "category": [
+            "Wooded Kingdom",
+            "Wooded Peace"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{WoodedPeace()}"
+    },
+    {
+        "name": "Wooded: Shopping in Steam Gardens",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Wooded: Nut Planted in the Tower",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptOne(Uproot)} or {OptAll((|Ground Pound| and |Ground Pound Jump|) or |Backward Somersault| or |Side Somersault| or |Wall Jump|)}"
+    },
+    {
+        "name": "Wooded: Stretching Your Legs",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptOne(Uproot)}"
+    },
+    {
+        "name": "Wooded: Spinning-Platforms Treasure",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()}"
+    },
+    {
+        "name": "Wooded: Make the Secret Flower Field Bloom",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{WoodedPeace()}"
+    },
+    {
+        "name": "Wooded: Rolling Rock in the Deep Woods",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptOne(Hold/Throw)}"
+    },
+    {
+        "name": "Wooded: Glowing in the Deep Woods",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptOne(Hold/Throw)}"
+    },
+    {
+        "name": "Wooded: Past the Peculiar Pipes",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptOne(Hold/Throw)}"
+    },
+    {
+        "name": "Wooded: By the Babbling Brook in Deep Woods",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptOne(Hold/Throw)}"
+    },
+    {
+        "name": "Wooded: The Hard Rock in Deep Woods",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptOne(Hold/Throw)}"
+    },
+    {
+        "name": "Wooded: A Treasure Made from Coins",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptOne(Hold/Throw)} and {OptOne(Coin Coffer)}"
+    },
+    {
+        "name": "Wooded: Beneath the Roots of the Moving Tree",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptOne(Hold/Throw)} and {OptOne(Tree)}"
+    },
+    {
+        "name": "Wooded: Deep Woods Treasure Trap",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptOne(Hold/Throw)}"
+    },
+    {
+        "name": "Wooded: Exploring for Treasure",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{Explorer()} and {OptOne(Hold/Throw)}"
+    },
+    {
+        "name": "Wooded: Wooded Kingdom Timer Challenge 1",
+        "category": [
+            "Wooded Kingdom",
+            "Wooded Peace"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{WoodedPeace()}"
+    },
+    {
+        "name": "Wooded: Wooded Kingdom Timer Challenge 2",
+        "category": [
+            "Wooded Kingdom",
+            "Wooded Peace"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{WoodedPeace()}"
+    },
+    {
+        "name": "Wooded: Flooding Pipeway",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptAll(|Wall Jump| and |Swim|)}"
+    },
+    {
+        "name": "Wooded: Flooding Pipeway Ceiling Secret",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptAll(|Swim| and |Wall Jump| and ((|Ground Pound| and |Ground Pound Jump|) or |Backward Somersault| or |Side Somersault| or (|Dive| and |Cap Jump|)))}"
+    },
+    {
+        "name": "Wooded: Wandering in the Fog",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()} and {OptAll(|Mini Rocket| and |Paragoomba|)}"
+    },
+    {
+        "name": "Wooded: Nut Hidden in the Fog",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()} and {OptAll(|Mini Rocket| and |Paragoomba|)}"
+    },
+    {
+        "name": "Wooded: Flower Road Run",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()} and ({OptOne(Wall Jump)})"
+    },
+    {
+        "name": "Wooded: Flower Road Reach",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()} and {OptOne(Goomba)}"
+    },
+    {
+        "name": "Wooded: Elevator Escalation",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()} and {OptOne(Sherm)}"
+    },
+    {
+        "name": "Wooded: Elevator Blind Spot",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()} and {OptOne(Sherm)}"
+    },
+    {
+        "name": "Wooded: Walking on Clouds",
+        "category": [
+            "Wooded Kingdom",
+            "Wooded Peace"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{WoodedPeace()}"
+    },
+    {
+        "name": "Wooded: Above the Clouds",
+        "category": [
+            "Wooded Kingdom",
+            "Wooded Peace"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{WoodedPeace()}"
+    },
+    {
+        "name": "Wooded: Secret Path to the Steam Gardens!",
+        "category": [
+            "Wooded Kingdom",
+            "Snow/Seaside Peace",
+            "post-metro"
+        ],
+        "region": "Post-Metro",
+        "requires": "{MazeSkip()} and {SnowSeasidePeace()}"
+    },
+    {
+        "name": "Wooded: Found With Wooded Kingdom Art",
+        "category": [
+            "Wooded Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptOne(Ground Pound)}"
+    },
+    {
+        "name": "Cloud: Picture Match: Basically a Goomba",
+        "category": [
+            "Cloud Kingdom"
+        ],
+        "region": "Cloud Kingdom",
+        "requires": "{OptOne(Picture Match Part)}"
+    },
+    {
+        "name": "Lost: Atop a Propeller Pillar",
+        "category": [
+            "Lost Kingdom"
+        ],
+        "region": "Lost Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Lost: Below the Cliff's Edge",
+        "category": [
+            "Lost Kingdom"
+        ],
+        "region": "Lost Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Lost: Inside the Stone Cage",
+        "category": [
+            "Lost Kingdom"
+        ],
+        "region": "Lost Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Lost: On a Tree in the Swamp",
+        "category": [
+            "Lost Kingdom"
+        ],
+        "region": "Lost Kingdom",
+        "requires": "{OptAll(|Tropical Wiggler| or (|Cap Jump| and |Dive|) or (|Wall Jump| and |Glydon|))}"
+    },
+    {
+        "name": "Lost: Over the Fuzzies, Above the Swamp",
+        "category": [
+            "Lost Kingdom"
+        ],
+        "region": "Lost Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Lost: Avoiding Fuzzies Inside the Wall",
+        "category": [
+            "Lost Kingdom"
+        ],
+        "region": "Lost Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Lost: Inside the Rising Stone Pillar",
+        "category": [
+            "Lost Kingdom"
+        ],
+        "region": "Lost Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Lost: Enjoying the View of Forgotten Isle",
+        "category": [
+            "Lost Kingdom",
+            "Wall Jump"
+        ],
+        "region": "Lost Kingdom",
+        "requires": "{OptOne(Wall Jump)}"
+    },
+    {
+        "name": "Lost: On the Mountain Road",
+        "category": [
+            "Lost Kingdom"
+        ],
+        "region": "Lost Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Lost: A Propeller Pillar's Secret",
+        "category": [
+            "Lost Kingdom"
+        ],
+        "region": "Lost Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Lost: Wrecked Rock Block",
+        "category": [
+            "Lost Kingdom"
+        ],
+        "region": "Lost Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Lost: A Butterfly's Treasure",
+        "category": [
+            "Lost Kingdom",
+            "Wall Jump"
+        ],
+        "region": "Lost Kingdom",
+        "requires": "{OptOne(Wall Jump)}"
+    },
+    {
+        "name": "Lost: Caught Hopping in the Jungle!",
+        "category": [
+            "Lost Kingdom"
+        ],
+        "region": "Cloud Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Lost: Cave Gardening",
+        "category": [
+            "Lost Kingdom",
+            "Wall Jump"
+        ],
+        "region": "Lost Kingdom",
+        "requires": "{OptOne(Wall Jump)}"
+    },
+    {
+        "name": "Lost: Moon Shards in the Jungle",
+        "category": [
+            "Lost Kingdom",
+            "Tropical Wiggler"
+        ],
+        "region": "Lost Kingdom",
+        "requires": "{OptOne(Tropical Wiggler)}"
+    },
+    {
+        "name": "Lost: Peeking Out from Under the Bridge",
+        "category": [
+            "Lost Kingdom"
+        ],
+        "region": "Lost Kingdom",
+        "requires": "{OptAll(|Tropical Wiggler| or |Dive|)}"
+    },
+    {
+        "name": "Lost: Twist 'n' Turn-Up Treasure",
+        "category": [
+            "Lost Kingdom",
+            "Tropical Wiggler"
+        ],
+        "region": "Lost Kingdom",
+        "requires": "{OptOne(Tropical Wiggler)}"
+    },
+    {
+        "name": "Lost: Soaring Over Forgotten Isle!",
+        "category": [
+            "Lost Kingdom",
+            "Glydon",
+            "Wall Jump"
+        ],
+        "region": "Lost Kingdom",
+        "requires": "({OptOne(Wall Jump)}) and {OptOne(Glydon)}"
+    },
+    {
+        "name": "Lost: The Caged Gold",
+        "category": [
+            "Lost Kingdom"
+        ],
+        "region": "Lost Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Lost: Get Some Rest, Captain Toad",
+        "category": [
+            "Lost Kingdom",
+            "Tropical Wiggler"
+        ],
+        "region": "Lost Kingdom",
+        "requires": "{OptOne(Tropical Wiggler)}"
+    },
+    {
+        "name": "Lost: Shopping on Forgotten Isle",
+        "category": [
+            "Lost Kingdom",
+            "Wall Jump"
+        ],
+        "region": "Lost Kingdom",
+        "requires": "{OptOne(Wall Jump)}"
+    },
+    {
+        "name": "Metro: New Donk City's Pest Problem",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Metro: Drummer on Board!",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Metro: Guitarist on Board!",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Metro: Bassist on Board!",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Metro: Trumpeter on Board!",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{PostTrumpeter()}"
+    },
+    {
+        "name": "Metro: Powering Up the Station",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{PostTrumpeter()} and {OptOne(Manhole)}"
+    },
+    {
+        "name": "Metro: A Traditional Festival!",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{PostTrumpeter()} and {OptOne(Manhole)}"
+    },
+    {
+        "name": "Metro: Inside an Iron Girder",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Night Metro",
+        "requires": []
+    },
+    {
+        "name": "Metro: Swaying in the Breeze",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Night Metro",
+        "requires": []
+    },
+    {
+        "name": "Metro: Girder Sandwich",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Night Metro",
+        "requires": "{ShermOrLongJump()}"
+    },
+    {
+        "name": "Metro: Glittering Above the Pool",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{FromTheTopOfTheTower()}"
+    },
+    {
+        "name": "Metro: Dizzying Heights",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Metro: Secret Girder Tunnel!",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Metro: Who Piled Garbage on This?",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Metro: Hidden in the Scrap",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Metro: Left at the Cafe?",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Metro: Caught Hopping on a Building!",
+        "category": [
+            "Metro Kingdom",
+            "Metro Peace"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{WallJumpOrPole()} and {MetroPeace()}"
+    },
+    {
+        "name": "Metro: How Do They Take Out the Trash?",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{FromTheTopOfTheTower()}"
+    },
+    {
+        "name": "Metro: Metro Kingdom Timer Challenge 1",
+        "category": [
+            "Metro Kingdom",
+            "Metro Peace"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{MetroPeace()}"
+    },
+    {
+        "name": "Metro: Metro Kingdom Timer Challenge 2",
+        "category": [
+            "Metro Kingdom",
+            "Metro Peace"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{MetroPeace()} and ({OptOne(Motor scooter)})"
+    },
+    {
+        "name": "Metro: City Gardening: Building Planter",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{OptOne(Hold/Throw)}"
+    },
+    {
+        "name": "Metro: City Gardening: Plaza Planter",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{OptOne(Hold/Throw)}"
+    },
+    {
+        "name": "Metro: City Gardening: Rooftop Planter",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{OptOne(Hold/Throw)} and {WallJumpOrPole()}"
+    },
+    {
+        "name": "Metro: How You Doin', Captain Toad?",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Metro: Free Parking: Rooftop Hop",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{OptOne(Motor scooter)}"
+    },
+    {
+        "name": "Metro: Bench Friends",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Metro: Shopping in New Donk City",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Night Metro",
+        "requires": []
+    },
+    {
+        "name": "Metro: Metro Kingdom Slots",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Metro: Jump-Rope Hero",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Metro: Jump-Rope Genius",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Metro: Remotely Captured Car",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{OptOne(RC Car)}"
+    },
+    {
+        "name": "Metro: RC Car Pro!",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{OptOne(RC Car)}"
+    },
+    {
+        "name": "Metro: Taking Notes: In the Private Room",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Metro: City Hall Lost & Found",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Night Metro",
+        "requires": "{OptOne(Wall Jump)}"
+    },
+    {
+        "name": "Metro: Sewer Treasure",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{MetroPeace()}"
+    },
+    {
+        "name": "Metro: Celebrating in the Streets",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{MetroPeace()}"
+    },
+    {
+        "name": "Metro: Pushing Through the Crowd",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Metro: High Over the Crowd",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Metro: Rewiring the Neighborhood",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{Builder()}"
+    },
+    {
+        "name": "Metro: Off the Beaten Wire",
+        "category": [
+            "Metro Kingdom",
+            "Builder"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{Builder()}"
+    },
+    {
+        "name": "Metro: Moon Shards Under Siege",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{OptOne(Taxi)}"
+    },
+    {
+        "name": "Metro: Sharpshooting Under Siege",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{OptOne(Taxi)}"
+    },
+    {
+        "name": "Metro: Inside the Rotating Maze",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{OptOne(Manhole)}"
+    },
+    {
+        "name": "Metro: Outside the Rotating Maze",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{OptOne(Manhole)} and {ScaleAWall()}"
+    },
+    {
+        "name": "Metro: Hanging from a High-Rise",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{OptOne(Mini Rocket)}"
+    },
+    {
+        "name": "Metro: Vaulting up a High-Rise",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{OptOne(Mini Rocket)} and {OptOne(Wall Jump)}"
+    },
+    {
+        "name": "Metro: Bullet Billding",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Metro: One Man's Trash...",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{BulletBillSkip()}"
+    },
+    {
+        "name": "Metro: Motor Scooter: Escape!",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{OptOne(Motor scooter)}"
+    },
+    {
+        "name": "Metro: Big Jump: Escape!",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{OptOne(Motor scooter)}"
+    },
+    {
+        "name": "Metro: Secret Path to New Donk City!",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{BulletBillSkip()}"
+    },
+    {
+        "name": "Metro: A Tourist in the Metro Kingdom!",
+        "category": [
+            "Metro Kingdom",
+            "Sand Peace",
+            "Metro Peace"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{SandPeace()} and {MetroPeace()}"
+    },
+    {
+        "name": "Metro: Found with Metro Kingdom Art",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{PostTrumpeter()}"
+    },
+    {
+        "name": "Complete the Festival",
+        "category": [
+            "Metro Kingdom"
+        ],
+        "region": "Metro Kingdom",
+        "victory": true,
+        "requires": "{MetroPeace()}"
+    },
+    {
+        "name": "Snow: The Icicle Barrier",
+        "category": [
+            "Snow Kingdom",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": ""
+    },
+    {
+        "name": "Snow: The Ice Wall Barrier",
+        "category": [
+            "Snow Kingdom",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Snow: The Gusty Barrier",
+        "category": [
+            "Snow Kingdom",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{OptOne(Ty-foo)}"
+    },
+    {
+        "name": "Snow: The Snowy Mountain Barrier",
+        "category": [
+            "Snow Kingdom",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Snow: The Bound Bowl Grand Prix",
+        "category": [
+            "Snow Kingdom",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{OptOne(Ty-foo)} or {OptOne(Shiverian Racer)}"
+    },
+    {
+        "name": "Snow: Entrance to Shiveria",
+        "category": [
+            "Snow Kingdom",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{ScaleAWall()}"
+    },
+    {
+        "name": "Snow: Behind Snowy Mountain",
+        "category": [
+            "Snow Kingdom",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Snow: Shining in the Snow in Town",
+        "category": [
+            "Snow Kingdom",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Snow: Atop a Blustery Arch",
+        "category": [
+            "Snow Kingdom",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{TyfooOrScaleATallWall()}"
+    },
+    {
+        "name": "Snow: Caught Hopping in the Snow!",
+        "category": [
+            "Snow Kingdom",
+            "Snow Peace",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{SnowPeace()}"
+    },
+    {
+        "name": "Snow: The Shiverian Treasure Chest",
+        "category": [
+            "Snow Kingdom",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Snow: Treasure in the Ice Wall",
+        "category": [
+            "Snow Kingdom",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Snow: Snow Kingdom Timer Challenge 1",
+        "category": [
+            "Snow Kingdom",
+            "Snow Peace",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{SnowPeace()}"
+    },
+    {
+        "name": "Snow: Snow Kingdom Timer Challenge 2",
+        "category": [
+            "Snow Kingdom",
+            "Snow Peace",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{SnowPeace()} and {OptOne(Swim)}"
+    },
+    {
+        "name": "Snow: Moon Shards in the Snow",
+        "category": [
+            "Snow Kingdom",
+            "Snow Peace",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{SnowPeace()}"
+    },
+    {
+        "name": "Snow: Taking Notes: Snow Path Dash",
+        "category": [
+            "Snow Kingdom",
+            "Snow Peace",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{SnowPeace()}"
+    },
+    {
+        "name": "Snow: Fishing in the Glacier!",
+        "category": [
+            "Snow Kingdom",
+            "Snow Peace",
+            "Lakitu",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{SnowPeace()} and {OptOne(Lakitu)}"
+    },
+    {
+        "name": "Snow: Ice-Dodging Goomba Stack",
+        "category": [
+            "Snow Kingdom",
+            "Goomba",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{OptOne(Goomba)}"
+    },
+    {
+        "name": "Snow: Captain Toad is Chilly!",
+        "category": [
+            "Snow Kingdom",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Snow: I'm Not Cold!",
+        "category": [
+            "Snow Kingdom",
+            "Snow Peace",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{SnowPeace()} and {Boxers()}"
+    },
+    {
+        "name": "Snow: Shopping in Shiveria",
+        "category": [
+            "Snow Kingdom",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Snow: Walking on Ice!",
+        "category": [
+            "Snow Kingdom",
+            "Snow Peace",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{SnowPeace()}"
+    },
+    {
+        "name": "Snow: Snowline Circuit Class S",
+        "category": [
+            "Snow Kingdom",
+            "Snow Peace",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{SnowPeace()}"
+    },
+    {
+        "name": "Snow: Dashing Over Cold Water!",
+        "category": [
+            "Snow Kingdom",
+            "Snow Peace",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{SnowPeace()} and {OptAll(|Swim| or |Cap Jump|)}"
+    },
+    {
+        "name": "Snow: Dashing Above and Beyond!",
+        "category": [
+            "Snow Kingdom",
+            "Snow Peace",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{SnowPeace()} and {OptAll(|Swim| or |Cap Jump|)}"
+    },
+    {
+        "name": "Snow: Jump 'n' Swim in the Freezing Water",
+        "category": [
+            "Snow Kingdom",
+            "Snow Peace",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{SnowPeace()} and {OptOne(Swim)}"
+    },
+    {
+        "name": "Snow: Freezing Water Near the Ceiling",
+        "category": [
+            "Snow Kingdom",
+            "Snow Peace",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{SnowPeace()} and {OptOne(Swim)}"
+    },
+    {
+        "name": "Snow: Blowing and Sliding",
+        "category": [
+            "Snow Kingdom",
+            "Snow Peace",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{SnowPeace()}"
+    },
+    {
+        "name": "Snow: Moon Shards in the Cold Room",
+        "category": [
+            "Snow Kingdom",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{Snowsuit()}"
+    },
+    {
+        "name": "Snow: Slip Behind the Ice",
+        "category": [
+            "Snow Kingdom",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{Snowsuit()}"
+    },
+    {
+        "name": "Snow: Spinning Above the Clouds",
+        "category": [
+            "Snow Kingdom",
+            "Snow Peace",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{SnowPeace()}"
+    },
+    {
+        "name": "Snow: High-Altitude Spinning",
+        "category": [
+            "Snow Kingdom",
+            "Snow Peace",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{SnowPeace()}"
+    },
+    {
+        "name": "Snow: Secret Path to Shiveria!",
+        "category": [
+            "Snow Kingdom",
+            "Bowser Peace",
+            "post-metro"
+        ],
+        "region": "Moon Kingdom",
+        "requires": "{BowserPeace()}"
+    },
+    {
+        "name": "Snow: Found with Snow Kingdom Art",
+        "category": [
+            "Snow Kingdom",
+            "post-metro"
+        ],
+        "region": "Snow Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Seaside: The Stone Pillar Seal",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Gushen)}"
+    },
+    {
+        "name": "Seaside: The Lighthouse Seal",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{Lighthouse()}"
+    },
+    {
+        "name": "Seaside: The Hot Spring Seal",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Gushen)}"
+    },
+    {
+        "name": "Seaside: The Seal Above the Canyon",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Seaside: The Glass is Half Full!",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Gushen)}"
+    },
+    {
+        "name": "Seaside: On the Cliff Overlooking the Beach",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptAll(|Gushen| or (|Wall Jump| and |Triple Jump| and |Cap Jump| and |Dive|))}"
+    },
+    {
+        "name": "Seaside: Ride the Jetstream",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptAll(|Gushen| or (|Wall Jump| and |Triple Jump| and |Cap Jump| and |Dive|))}"
+    },
+    {
+        "name": "Seaside: Ocean-Bottom Maze: Treasure",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{SwimOrCheepCheep()}"
+    },
+    {
+        "name": "Seaside: Ocean-Bottom Maze: Hidden Room",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{SwimOrCheepCheep()}"
+    },
+    {
+        "name": "Seaside: Underwater Highway Tunnel",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Cheep Cheep)}"
+    },
+    {
+        "name": "Seaside: Shh! It's a Shortcut!",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Cheep Cheep)}"
+    },
+    {
+        "name": "Seaside: Gap in the Ocean Trench",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Cheep Cheep)}"
+    },
+    {
+        "name": "Seaside: Slip Through the Nesting Spot",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Cheep Cheep)}"
+    },
+    {
+        "name": "Seaside: Merci, Dorrie!",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{SwimOrCheepCheep()}"
+    },
+    {
+        "name": "Seaside: Bonjour, Dorrie!",
+        "category": [
+            "Seaside Kingdom",
+            "Seaside Peace",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{SeasidePeace()}"
+    },
+    {
+        "name": "Seaside: Under a Dangerous Ceiling",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{SwimOrCheepCheep()}"
+    },
+    {
+        "name": "Seaside: What the Waves Left Behind",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Seaside: The Back Canyon: Excavate!",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Seaside: Bubblaine Northern Reaches",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Seaside: Wriggling on the Sandy Bottom",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Seaside: Glass Palace Treasure Chest",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{SwimOrCheepCheep()}"
+    },
+    {
+        "name": "Seaside: Treasure Trap Hidden in the Inlet",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{SwimOrCheepCheep()}"
+    },
+    {
+        "name": "Seaside: Sea Gardening: Inlet Seed",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Swim)}"
+    },
+    {
+        "name": "Seaside: Sea Gardening: Canyon Seed",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Seaside: Sea Gardening: Hot-Spring Seed",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Seaside: Sea Gardening: Ocean Trench Seed",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Swim)}"
+    },
+    {
+        "name": "Seaside: Seaside Kingdom Timer Challenge 1",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Seaside: Seaside Kingdom Timer Challenge 2",
+        "category": [
+            "Seaside Kingdom",
+            "Seaside Peace",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptAll(|Swim| and |Quick Swim|)} and {SeasidePeace()}"
+    },
+    {
+        "name": "Seaside: Found on the Beach! Good Dog!",
+        "category": [
+            "Seaside Kingdom",
+            "Seaside Peace",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{SeasidePeace()}"
+    },
+    {
+        "name": "Seaside: Moon Shards in the Sea",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Swim)}"
+    },
+    {
+        "name": "Seaside: Taking Notes: Ocean Surface Dash",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Seaside: Love by the Seaside",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Goomba)}"
+    },
+    {
+        "name": "Seaside: Lighthouse Leaper",
+        "category": [
+            "Seaside Kingdom",
+            "Seaside Peace",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{SeasidePeace()} and {OptOne(|Glydon|)}"
+    },
+    {
+        "name": "Seaside: Good Job, Captain Toad!",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Gushen)}"
+    },
+    {
+        "name": "Seaside: Ocean Quiz: Good!",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{SwimOrCheepCheep()}"
+    },
+    {
+        "name": "Seaside: Shopping in Bubblaine",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Swim)}"
+    },
+    {
+        "name": "Seaside: Beach Volleyball: Champ",
+        "category": [
+            "Seaside Kingdom",
+            "Seaside Peace",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{SeasidePeace()}"
+    },
+    {
+        "name": "Seaside: Beach Volleyball: Hero of the Beach!",
+        "category": [
+            "Seaside Kingdom",
+            "Seaside Peace",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{SeasidePeace()}"
+    },
+    {
+        "name": "Seaside: Looking Back in the Dark Waterway",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Cheep Cheep)}"
+    },
+    {
+        "name": "Seaside: The Sphynx's Underwater Vault",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Swim)}"
+    },
+    {
+        "name": "Seaside: A Rumble on the Seaside Floor",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Seaside: A Relaxing Dance",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{Resort()}"
+    },
+    {
+        "name": "Seaside: Wading in the Cloud Sea",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Mini Rocket)}"
+    },
+    {
+        "name": "Seaside: Sunken Treasure in the Cloud Sea",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Mini Rocket)}"
+    },
+    {
+        "name": "Seaside: Fly Through the Narrow Valley",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Gushen)}"
+    },
+    {
+        "name": "Seaside: Treasure Chest in the Narrow Valley",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Gushen)}"
+    },
+    {
+        "name": "Seaside: Hurry and Stretch",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Uproot)}"
+    },
+    {
+        "name": "Seaside: Stretch on the Side Path",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptOne(Uproot)}"
+    },
+    {
+        "name": "Seaside: Secret Path to Bubblaine!",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{OptAll(|Wall Jump| and |Cap Jump| and |Dive|)} and {OptOne(Gushen)}"
+    },
+    {
+        "name": "Seaside: Found with Seaside Kingdom Art",
+        "category": [
+            "Seaside Kingdom",
+            "post-metro"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Luncheon: The Broodals Are After Some Cookin'",
+        "category": [
+            "Luncheon Kingdom",
+            "post-metro"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Luncheon: Under the Cheese Rocks",
+        "category": [
+            "Luncheon Kingdom",
+            "post-metro"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptOne(Hammer Bro)}"
+    },
+    {
+        "name": "Luncheon: Big Pot on the Volcano: Dive In!",
+        "category": [
+            "Luncheon Kingdom",
+            "post-metro"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{Meat()}"
+    },
+    {
+        "name": "Luncheon: Climb Up the Cascading Magma",
+        "category": [
+            "Luncheon Kingdom",
+            "post-metro"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{LuncheonPeace()}"
+    },
+    {
+        "name": "Luncheon: Cookatiel Showdown!",
+        "category": [
+            "Luncheon Kingdom",
+            "post-metro"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{LuncheonPeace()}"
+    },
+    {
+        "name": "Luncheon: Piled on the Salt",
+        "category": [
+            "Luncheon Kingdom",
+            "post-metro"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Luncheon: Lurking in the Pillar's Shadow",
+        "category": [
+            "Luncheon Kingdom",
+            "post-metro"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Luncheon: Atop the Jutting Crag",
+        "category": [
+            "Luncheon Kingdom",
+            "post-metro"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Luncheon: Is This an Ingredient Too?!",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{ScaleAWall()}"
+    },
+    {
+        "name": "Luncheon: Atop a Column in a Row",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Luncheon: Surrounded by Tall Mountains",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptOne(Hammer Bro)} and {ClimbToTheMeat()}"
+    },
+    {
+        "name": "Luncheon: Island of Salt Floating in the Lava",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptOne(Lava Bubble)}"
+    },
+    {
+        "name": "Luncheon: Overlooking a Bunch of Ingredients",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{ClimbToTheMeat()}"
+    },
+    {
+        "name": "Luncheon: Light the Lantern on the Small Island",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptAll(|Lava Bubble| and |Hammer Bro|)}"
+    },
+    {
+        "name": "Luncheon: Golden Turnip Recipe 1",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptOne(Hold/Throw)}"
+    },
+    {
+        "name": "Luncheon: Golden Turnip Recipe 2",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptOne(Hold/Throw)}"
+    },
+    {
+        "name": "Luncheon: Golden Turnip Recipe 3",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptOne(Hold/Throw)} and {OptOne(Hammer Bro)}"
+    },
+    {
+        "name": "Luncheon: Luncheon Kingdom Timer Challenge 1",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom",
+            "Wall Jump"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptOne(Wall Jump)}"
+    },
+    {
+        "name": "Luncheon: Luncheon Kingdom Timer Challenge 2",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{Meat()}"
+    },
+    {
+        "name": "Luncheon: Luncheon Kingdom Timer Challenge 3",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{LuncheonPeace()} and {JumpHigh()}"
+    },
+    {
+        "name": "Luncheon: Beneath the Rolling Vegetables",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptAll(|Lava Bubble| and |Hammer Bro|)}"
+    },
+    {
+        "name": "Luncheon: All the Cracks Are Fixed",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptAll(|Lava Bubble| and |Hammer Bro|)}"
+    },
+    {
+        "name": "Luncheon: Taking Notes: Swimming in Magma",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptAll(|Lava Bubble| and |Hammer Bro|)}"
+    },
+    {
+        "name": "Luncheon: Love Above the Lava",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Very Early Luncheon",
+        "requires": "{OptOne(Goomba)}"
+    },
+    {
+        "name": "Luncheon: Shopping in Mount Volbono",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Luncheon: Luncheon Kingdom Slots",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Luncheon: A Strong Simmer",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptOne(Lava Bubble)} and {Chef()}"
+    },
+    {
+        "name": "Luncheon: An Extreme Simmer",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptOne(Lava Bubble)} and {Chef()}"
+    },
+    {
+        "name": "Luncheon: Alcove Behind the Pillars of Magma",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{LuncheonPeace()}"
+    },
+    {
+        "name": "Luncheon: Treasure Beneath the Cheese Rocks",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{Meat()}"
+    },
+    {
+        "name": "Luncheon: Light the Two Flames",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{Meat()} and {OptOne(Fire Bro)}"
+    },
+    {
+        "name": "Luncheon: Light the Far-Off Lanterns",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{Meat()} and {OptOne(Lava Bubble)}"
+    },
+    {
+        "name": "Luncheon: Bon Appetit, Captain Toad!",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{Meat()} and {OptOne(Lava Bubble)}"
+    },
+    {
+        "name": "Luncheon: The Treasure Chest in the Veggies",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{Meat()}"
+    },
+    {
+        "name": "Luncheon: Caught Hopping at the Volcano!",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom",
+            "Luncheon Peace"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{LuncheonPeace()}"
+    },
+    {
+        "name": "Luncheon: Taking Notes: Big Pot Swim",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom",
+            "Luncheon Peace"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{LuncheonPeace()}"
+    },
+    {
+        "name": "Luncheon: Magma Swamp: Floating and Sinking",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Luncheon: Corner of the Magma Swamp",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Luncheon: Magma Narrow Path",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptAll(|Lava Bubble| and |Hammer Bro|)}"
+    },
+    {
+        "name": "Luncheon: Crossing to the Magma",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptAll(|Lava Bubble| and |Hammer Bro|)}"
+    },
+    {
+        "name": "Luncheon: Fork Flickin' to the Summit",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptAll(|Lava Bubble| and |Volbonan|)}"
+    },
+    {
+        "name": "Luncheon: Fork Flickin' Detour",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptAll(|Lava Bubble| and |Volbonan|)}"
+    },
+    {
+        "name": "Luncheon: Excavate 'n' Search the Cheese Rocks",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptOne(Hammer Bro)}"
+    },
+    {
+        "name": "Luncheon: Climb the Cheese Rocks",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptOne(Hammer Bro)}"
+    },
+    {
+        "name": "Luncheon: Spinning Athletics End Goal",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptAll(|Lava Bubble| and |Hammer Bro|)}"
+    },
+    {
+        "name": "Luncheon: Taking Notes: Spinning Athletics",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptAll(|Lava Bubble| and |Hammer Bro|)}"
+    },
+    {
+        "name": "Luncheon: Secret Path to Mount Volbono",
+        "category": [
+            "Luncheon Kingdom"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()}"
+    },
+    {
+        "name": "Luncheon: A Tourist in the Luncheon Kingdom!",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom",
+            "Sand Peace",
+            "Metro Peace",
+            "Luncheon Peace"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{SandPeace()} and {MetroPeace()} and {LuncheonPeace()}"
+    },
+    {
+        "name": "Luncheon: Found with Luncheon Kingdom Art",
+        "category": [
+            "post-metro",
+            "Luncheon Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{Meat()} and {SwimOrCheepCheep()}"
+    },
+    {
+        "name": "Mushroom: Secret Path to Peach's Castle!",
+        "category": [
+            "post-metro",
+            "Mushroom Kingdom"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{OptAll(|Lava Bubble| and |Hammer Bro|)}"
+    },
+    {
+        "name": "Ruined: Battle with the Lord of Lightning!",
+        "category": [
+            "post-metro",
+            "Ruined Kingdom"
+        ],
+        "region": "Ruined Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Ruined: In the Ancient Treasure Chest",
+        "category": [
+            "post-metro",
+            "Ruined Kingdom"
+        ],
+        "region": "Ruined Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Ruined: Roulette Tower: Climbed",
+        "category": [
+            "post-metro",
+            "Ruined Kingdom"
+        ],
+        "region": "Ruined Kingdom",
+        "requires": "{OptOne(Mini Rocket)}"
+    },
+    {
+        "name": "Ruined: Roulette Tower: Stopped",
+        "category": [
+            "post-metro",
+            "Ruined Kingdom"
+        ],
+        "region": "Ruined Kingdom",
+        "requires": "{OptOne(Mini Rocket)}"
+    },
+    {
+        "name": "Bowser's: Infiltrate Bowser's Castle!",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: Smart Bombing",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: Big Broodal Battle",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: Showdown at Bowser's Castle",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: Behind the Big Wall",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: Treasure Inside the Turret",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: From the Side Above the Castle Gate",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{ScaleAWall()}"
+    },
+    {
+        "name": "Bowser's: Sunken Treasure in the Moat",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{OptOne(Swim)}"
+    },
+    {
+        "name": "Bowser's: Past the Moving Wall",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom",
+            "Bowser's Peace"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{BowserPeace()}"
+    },
+    {
+        "name": "Bowser's: Above the Poison Swamp",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom",
+            "Bowser's Peace"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{BowserPeace()} and {NiceFrame()}"
+    },
+    {
+        "name": "Bowser's: Knocking Down the Nice Frame",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom",
+            "Bowser's Peace"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{BowserPeace()} and {NiceFrame()}"
+    },
+    {
+        "name": "Bowser's: Caught on the Iron Fence",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Pokino",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: On the Giant Bowser Statue's Nose",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: Inside a Block in the Castle",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: Caught Hopping at Bowser's Castle!",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom",
+            "Bowser's Peace"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{BowserPeace()}"
+    },
+    {
+        "name": "Bowser's: Exterminate the Ogres!",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: Bowser's Kingdom Timer Challenge 1",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{BowserPeace()}"
+    },
+    {
+        "name": "Bowser's: Taking Notes: Between Spinies",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: Stack Up Above the Wall",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Pokino",
+        "requires": "{OptOne(Goomba)}"
+    },
+    {
+        "name": "Bowser's: Hidden Corridor Under the Floor",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: Poking Your Nose in the Plaster Wall",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: Poking the Turret Wall",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: Poking Your Nose by the Great Gate",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: Jizo All in a Row",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{OptOne(Jizo)}"
+    },
+    {
+        "name": "Bowser's: Underground Jizo",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{OptOne(Jizo)}"
+    },
+    {
+        "name": "Bowser's: Found Behind Bars!",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: Fishing(?) in Bowser's Castle",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom",
+            "Bowser's Peace"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{BowserPeace()} and {OptOne(Lakitu)}"
+    },
+    {
+        "name": "Bowser's: Good to See You, Captain Toad!",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: Shopping at Bowser's Castle",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: Bowser's Castle Treasure Vault",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom",
+            "Bowser's Peace"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{BowserPeace()}"
+    },
+    {
+        "name": "Bowser's: Scene of Crossing the Poison Swamp",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom",
+            "Samurai"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{Samurai()}"
+    },
+    {
+        "name": "Bowser's: Taking Notes: In the Folding Screen",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom",
+            "Samurai"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{Samurai()}"
+    },
+    {
+        "name": "Bowser's: On Top of the Spinning Tower",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom",
+            "Bowser's Peace"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{BowserPeace()}"
+    },
+    {
+        "name": "Bowser's: Down and Up the Spinning Tower",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom",
+            "Bowser's Peace"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{BowserPeace()}"
+    },
+    {
+        "name": "Bowser's: Jizo's Big Adventure",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom",
+            "Bowser's Peace"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{BowserPeace()} and {OptOne(Jizo)} and {OptOne(Wall Jump)}"
+    },
+    {
+        "name": "Bowser's: Jizo and the Hidden Room",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom",
+            "Bowser's Peace"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{BowserPeace()} and {OptOne(Jizo)} and {OptOne(Wall Jump)}"
+    },
+    {
+        "name": "Bowser's: Dashing Above the Clouds",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Bowser's: Dashing Through the Clouds",
+        "category": [
+            "post-metro",
+            "Bowser's Kingdom"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Moon: Shining Above the Moon",
+        "category": [
+            "post-metro",
+            "Moon Kingdom"
+        ],
+        "region": "Moon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Moon: Along the Cliff Face",
+        "category": [
+            "post-metro",
+            "Moon Kingdom"
+        ],
+        "region": "Moon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Moon: The Tip of a White Spire",
+        "category": [
+            "post-metro",
+            "Moon Kingdom"
+        ],
+        "region": "Moon Kingdom",
+        "requires": "{ParabonesSkip()} and {OptOne(Banzai Bill)} and ({OptOne(Wall Jump)})"
+    },
+    {
+        "name": "Moon: Rolling Rock on the Moon",
+        "category": [
+            "post-metro",
+            "Moon Kingdom"
+        ],
+        "region": "Moon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Moon: Caught Hopping on the Moon!",
+        "category": [
+            "post-metro",
+            "Moon Kingdom"
+        ],
+        "region": "Moon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Moon: Cliffside Treasure Chest",
+        "category": [
+            "post-metro",
+            "Moon Kingdom"
+        ],
+        "region": "Moon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Moon: Moon Kingdom Timer Challenge 1",
+        "category": [
+            "post-metro",
+            "Moon Kingdom"
+        ],
+        "region": "Moon Kingdom",
+        "requires": "{OptOne(|Long Jump|)}"
+    },
+    {
+        "name": "Moon: Taking Notes: On the Moon's Surface",
+        "category": [
+            "post-metro",
+            "Moon Kingdom"
+        ],
+        "region": "Moon Kingdom",
+        "requires": "{OptOne(|Long Jump|)}"
+    },
+    {
+        "name": "Moon: Under the Bowser Statue",
+        "category": [
+            "post-metro",
+            "Moon Kingdom"
+        ],
+        "region": "Moon Kingdom",
+        "requires": "{OptOne(|Bowser Statue|)}"
+    },
+    {
+        "name": "Moon: In a Hole in the Magma",
+        "category": [
+            "post-metro",
+            "Moon Kingdom"
+        ],
+        "region": "Moon Kingdom",
+        "requires": "{OptOne(|Parabones|)}"
+    },
+    {
+        "name": "Moon: Around the Barrier Wall",
+        "category": [
+            "post-metro",
+            "Moon Kingdom"
+        ],
+        "region": "Moon Kingdom",
+        "requires": "{ParabonesSkip()} and {OptOne(Banzai Bill)}"
+    },
+    {
+        "name": "Moon: On Top of the Cannon",
+        "category": [
+            "post-metro",
+            "Moon Kingdom"
+        ],
+        "region": "Moon Kingdom",
+        "requires": "{ParabonesSkip()} and {OptOne(Banzai Bill)}"
+    },
+    {
+        "name": "Moon: Fly to the Treasure Chest and Back",
+        "category": [
+            "post-metro",
+            "Moon Kingdom"
+        ],
+        "region": "Moon Kingdom",
+        "requires": "{ParabonesSkip()} and {OptOne(Banzai Bill)}"
+    },
+    {
+        "name": "Moon: Up in the Rafters",
+        "category": [
+            "post-metro",
+            "Moon Kingdom",
+            "Banzai Bill",
+            "Parabones Skip",
+            "Wall Jump"
+        ],
+        "region": "Moon Kingdom",
+        "requires": "{ParabonesSkip()} and {OptOne(Banzai Bill)} and ({OptOne(Wall Jump)})"
+    },
+    {
+        "name": "Defeat Bowser and Escape the Moon",
+        "category": [
+            "Moon Kingdom"
+        ],
+        "region": "Moon Kingdom",
+        "victory": true,
+        "requires": "{OptAll(|Banzai Bill| and |Bowser|)} and {ParabonesSkip()}"
+    },
+    {
+        "name": "Capture: Paragoomba",
+        "category": [
+            "Capture"
+        ],
+        "region": "Cap Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Binoculars",
+        "category": [
+            "Capture"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Bullet Bill",
+        "category": [
+            "Capture"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Action: Jaxi",
+        "category": [
+            "Action"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Moe-Eye",
+        "category": [
+            "Capture"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Cactus",
+        "category": [
+            "Capture"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Goomba",
+        "category": [
+            "Capture"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Knucklotec's Fist",
+        "category": [
+            "Capture"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "|Bullet Bill|"
+    },
+    {
+        "name": "Capture: Mini Rocket",
+        "category": [
+            "Capture"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "( ({OptAll(|Bullet Bill| AND |Knucklotec's Fist|)}) OR (|Power Moon:29| or ((( ( |Sand Kingdom Power Moon:16| OR ( |Sand Kingdom Multi-Moon| AND |Sand Kingdom Power Moon:13| ) OR ( |Sand Kingdom Multi-Moon:2| AND |Sand Kingdom Power Moon:10| ) ) AND ( |Lake Kingdom Power Moon:8| OR ( |Lake Kingdom Multi-Moon| AND |Lake Kingdom Power Moon:5| ) ) ))) and {LakePeace()}))"
+    },
+    {
+        "name": "Capture: Glydon",
+        "category": [
+            "Capture"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "( ({OptAll(|Bullet Bill| AND |Knucklotec's Fist|)}) OR (|Power Moon:37| or ((( ( |Sand Kingdom Power Moon:16| OR ( |Sand Kingdom Multi-Moon| AND |Sand Kingdom Power Moon:13| ) OR ( |Sand Kingdom Multi-Moon:2| AND |Sand Kingdom Power Moon:10| ) ) AND ( |Lake Kingdom Power Moon:8| OR ( |Lake Kingdom Multi-Moon| AND |Lake Kingdom Power Moon:5| ) ) AND |Sherm| AND |Uproot| ))) and {IntoTheLake()} and {MazeSkip()}) OR (|Power Moon:53| or ((( ( |Sand Kingdom Power Moon:16| OR ( |Sand Kingdom Multi-Moon| AND |Sand Kingdom Power Moon:13| ) OR ( |Sand Kingdom Multi-Moon:2| AND |Sand Kingdom Power Moon:10| ) ) AND ( |Lake Kingdom Power Moon:8| OR ( |Lake Kingdom Multi-Moon| AND |Lake Kingdom Power Moon:5| ) ) AND ( |Wooded Kingdom Power Moon:16| OR ( |Wooded Kingdom Multi-Moon| AND |Wooded Kingdom Power Moon:13| ) OR ( |Wooded Kingdom Multi-Moon:2| AND |Wooded Kingdom Power Moon:10| ) ) ))) and {IntoTheLake()} and {MazeSkip()} and {OptOne(Wall Jump)}) )"
+    },
+    {
+        "name": "Capture: Lakitu",
+        "category": [
+            "Capture"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "( ({OptAll(|Bullet Bill| AND |Knucklotec's Fist|)}) OR (|Power Moon:29| or (( ( |Sand Kingdom Power Moon:16| OR ( |Sand Kingdom Multi-Moon| AND |Sand Kingdom Power Moon:13| ) OR ( |Sand Kingdom Multi-Moon:2| AND |Sand Kingdom Power Moon:10| ) ) AND ( |Wooded Kingdom Power Moon:16| OR ( |Wooded Kingdom Multi-Moon| AND |Wooded Kingdom Power Moon:13| ) OR ( |Wooded Kingdom Multi-Moon:2| AND |Wooded Kingdom Power Moon:10| ) ) ) ))) or ( ( |Bullet Bill| AND |Knucklotec's Fist| ) OR (|Power Moon:37| or ((( ( |Sand Kingdom Power Moon:16| OR ( |Sand Kingdom Multi-Moon| AND |Sand Kingdom Power Moon:13| ) OR ( |Sand Kingdom Multi-Moon:2| AND |Sand Kingdom Power Moon:10| ) ) AND ( |Wooded Kingdom Power Moon:16| OR ( |Wooded Kingdom Multi-Moon| AND |Wooded Kingdom Power Moon:13| ) OR ( |Wooded Kingdom Multi-Moon:2| AND |Wooded Kingdom Power Moon:10| ) ) ))) and (|Uproot| or ( ( ( |Ground Pound Jump| and |Ground Pound| ) or |Backward Somersault| or |Side Somersault| or ( |Wall Jump| and |Dive| ) or |Triple Jump| ) and ( |Long Jump| or |Triple Jump| or |Backward Somersault| or |Side Somersault| ) and |Cap Jump| and |Dive| ))) )"
+    },
+    {
+        "name": "Capture: Zipper",
+        "category": [
+            "Capture"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{IntoTheLake()}"
+    },
+    {
+        "name": "Capture: Cheep Cheep",
+        "category": [
+            "Capture"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{IntoTheLake()}"
+    },
+    {
+        "name": "Capture: Puzzle Part",
+        "category": [
+            "Capture"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{IntoTheLake()}"
+    },
+    {
+        "name": "Capture: Poison Piranha Plant",
+        "category": [
+            "Capture"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()}"
+    },
+    {
+        "name": "Capture: Uproot",
+        "category": [
+            "Capture"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Fire Bro",
+        "category": [
+            "Capture"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()}"
+    },
+    {
+        "name": "Capture: Sherm",
+        "category": [
+            "Capture"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()}"
+    },
+    {
+        "name": "Capture: Coin Coffer",
+        "category": [
+            "Capture"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{MazeSkip()} or {OptOne(Hold/Throw)}"
+    },
+    {
+        "name": "Capture: Tree",
+        "category": [
+            "Capture"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptOne(Hold/Throw)}"
+    },
+    {
+        "name": "Capture: Boulder",
+        "category": [
+            "Capture"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{OptOne(Hold/Throw)}"
+    },
+    {
+        "name": "Capture: Picture Match Part",
+        "category": [
+            "Capture"
+        ],
+        "region": "Cloud Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Tropical Wiggler",
+        "category": [
+            "Capture"
+        ],
+        "region": "Lost Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Action: Scooter",
+        "category": [
+            "Action"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Pole",
+        "category": [
+            "Capture"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Manhole",
+        "category": [
+            "Capture"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Taxi",
+        "category": [
+            "Capture"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: RC Car",
+        "category": [
+            "Capture"
+        ],
+        "region": "Metro Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Ty-foo",
+        "category": [
+            "post-metro",
+            "Capture"
+        ],
+        "region": "Snow Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Shiverian Racer",
+        "category": [
+            "post-metro",
+            "Capture"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "|Ty-foo|"
+    },
+    {
+        "name": "Capture: Snow Cheep Cheep",
+        "category": [
+            "post-metro",
+            "Capture"
+        ],
+        "region": "Snow Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Gushen",
+        "category": [
+            "post-metro",
+            "Capture"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Lava Bubble",
+        "category": [
+            "post-metro",
+            "Capture"
+        ],
+        "region": "Very Early Luncheon",
+        "requires": []
+    },
+    {
+        "name": "Capture: Volbonan",
+        "category": [
+            "post-metro",
+            "Capture"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Hammer Bro",
+        "category": [
+            "post-metro",
+            "Capture"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Meat",
+        "category": [
+            "post-metro",
+            "Capture"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "|Hammer Bro|"
+    },
+    {
+        "name": "Capture: Fire Piranha Plant",
+        "category": [
+            "post-metro",
+            "Capture"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "|Hammer Bro| AND |Meat| AND |Lava Bubble|"
+    },
+    {
+        "name": "Capture: Pokio",
+        "category": [
+            "post-metro",
+            "Capture"
+        ],
+        "region": "Pokino",
+        "requires": []
+    },
+    {
+        "name": "Capture: Jizo",
+        "category": [
+            "post-metro",
+            "Capture"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Bowser Statue",
+        "category": [
+            "post-metro",
+            "Capture"
+        ],
+        "region": "Moon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Parabones",
+        "category": [
+            "post-metro",
+            "Capture"
+        ],
+        "region": "Moon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Capture: Banzai Bill",
+        "category": [
+            "post-metro",
+            "Capture"
+        ],
+        "region": "Moon Kingdom",
+        "requires": "{ParabonesSkip()}"
+    },
+    {
+        "name": "Capture: Chargin' Chuck",
+        "category": [
+            "post-metro",
+            "Capture"
+        ],
+        "region": "Moon Kingdom",
+        "requires": "{ParabonesSkip()} and {OptOne(Banzai Bill)}"
+    },
+    {
+        "name": "Capture: Bowser",
+        "category": [
+            "post-metro",
+            "Capture"
+        ],
+        "region": "Moon Kingdom",
+        "requires": "{ParabonesSkip()} and {OptOne(Banzai Bill)}"
+    },
+    {
+        "name": "Shop: Black Top Hat",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Cap Kingdom",
+        "requires": "{RegionalCap()}"
+    },
+    {
+        "name": "Shop: Black Tuxedo",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Cap Kingdom",
+        "requires": "{RegionalCap()}"
+    },
+    {
+        "name": "Shop: Caveman Headwear",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": "{RegionalCascade()}"
+    },
+    {
+        "name": "Shop: Caveman Outfit",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": "{RegionalCascade()}"
+    },
+    {
+        "name": "Shop: Sombrero",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{RegionalSand()}"
+    },
+    {
+        "name": "Shop: Poncho",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{RegionalSand()}"
+    },
+    {
+        "name": "Shop: Cowboy Hat",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{RegionalSand()}"
+    },
+    {
+        "name": "Shop: Cowboy Outfit",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{RegionalSand()}"
+    },
+    {
+        "name": "Shop: Swim Goggles",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{RegionalLake()}"
+    },
+    {
+        "name": "Shop: Swimwear",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{RegionalLake()}"
+    },
+    {
+        "name": "Shop: Explorer Hat",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{RegionalWooded()}"
+    },
+    {
+        "name": "Shop: Explorer Outfit",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{RegionalWooded()}"
+    },
+    {
+        "name": "Shop: Scientist Visor",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{RegionalWooded()}"
+    },
+    {
+        "name": "Shop: Scientist Outfit",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{RegionalWooded()}"
+    },
+    {
+        "name": "Shop: Aviator Cap",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Lost Kingdom",
+        "requires": "{RegionalLost()}"
+    },
+    {
+        "name": "Shop: Aviator Outfit",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Lost Kingdom",
+        "requires": "{RegionalLost()}"
+    },
+    {
+        "name": "Shop: Builder Helmet",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{RegionalMetro()}"
+    },
+    {
+        "name": "Shop: Builder Outfit",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{RegionalMetro()}"
+    },
+    {
+        "name": "Shop: Golf Cap",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{RegionalMetro()}"
+    },
+    {
+        "name": "Shop: Golf Outfit",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{RegionalMetro()}"
+    },
+    {
+        "name": "Shop: Snow Hood",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{RegionalSnow()}"
+    },
+    {
+        "name": "Shop: Snow Suit",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{RegionalSnow()}"
+    },
+    {
+        "name": "Shop: Resort Hat",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{RegionalSeaside()}"
+    },
+    {
+        "name": "Shop: Resort Outfit",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{RegionalSeaside()}"
+    },
+    {
+        "name": "Shop: Sailor Hat",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{RegionalSeaside()}"
+    },
+    {
+        "name": "Shop: Sailor Suit",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{RegionalSeaside()}"
+    },
+    {
+        "name": "Shop: Chef Hat",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{RegionalLuncheon()}"
+    },
+    {
+        "name": "Shop: Chef Suit",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{RegionalLuncheon()}"
+    },
+    {
+        "name": "Shop: Painter's Cap",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{RegionalLuncheon()}"
+    },
+    {
+        "name": "Shop: Painter's Outfit",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{RegionalLuncheon()}"
+    },
+    {
+        "name": "Shop: Samurai Helmet",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{RegionalBowser()}"
+    },
+    {
+        "name": "Shop: Samurai Armor",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{RegionalBowser()}"
+    },
+    {
+        "name": "Shop: Happi Headband",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{RegionalBowser()}"
+    },
+    {
+        "name": "Shop: Happi Outfit",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{RegionalBowser()}"
+    },
+    {
+        "name": "Shop: Employee Cap",
+        "category": [
+            "Shop",
+            "Coin"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Shop: Employee Uniform",
+        "category": [
+            "Shop",
+            "Coin"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Shop: Boxer Shorts",
+        "category": [
+            "Shop",
+            "Coin"
+        ],
+        "region": "Sand Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Shop: Fashionable Cap",
+        "category": [
+            "Shop",
+            "Coin"
+        ],
+        "region": "Lake Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Shop: Fashionable Outfit",
+        "category": [
+            "Shop",
+            "Coin"
+        ],
+        "region": "Lake Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Shop: Mechanic Cap",
+        "category": [
+            "Shop",
+            "Coin"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Shop: Mechanic Outfit",
+        "category": [
+            "Shop",
+            "Coin"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Shop: Black Fedora",
+        "category": [
+            "Shop",
+            "Coin"
+        ],
+        "region": "Night Metro",
+        "requires": []
+    },
+    {
+        "name": "Shop: Black Suit",
+        "category": [
+            "Shop",
+            "Coin"
+        ],
+        "region": "Night Metro",
+        "requires": []
+    },
+    {
+        "name": "Shop: Pirate Hat",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Coin"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Shop: Pirate Outfit",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Coin"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Shop: Clown Hat",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Coin"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Shop: Clown Suit",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Coin"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Shop: Football Helmet",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Coin"
+        ],
+        "region": "Moon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Shop: Football Uniform",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Coin"
+        ],
+        "region": "Moon Kingdom",
+        "requires": []
+    },
+    {
+        "name": "Shop: Plush Frog",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Cap Kingdom",
+        "requires": "{RegionalCap()}"
+    },
+    {
+        "name": "Shop: Bonneton Tower Model",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Cap Kingdom",
+        "requires": "{RegionalCap()}"
+    },
+    {
+        "name": "Shop: T-Rex Model",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": "{RegionalCascade()}"
+    },
+    {
+        "name": "Shop: Triceratops Trophy",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": "{RegionalCascade()}"
+    },
+    {
+        "name": "Shop: Inverted Pyramid Model",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{RegionalSand()}"
+    },
+    {
+        "name": "Shop: Jaxi Statue",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{RegionalSand()}"
+    },
+    {
+        "name": "Shop: Underwater Dome",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{RegionalLake()}"
+    },
+    {
+        "name": "Shop: Rubber Dorrie",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{RegionalLake()}"
+    },
+    {
+        "name": "Shop: Flowers from Steam Gardens",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{RegionalWooded()}"
+    },
+    {
+        "name": "Shop: Steam Gardener Watering Can",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{RegionalWooded()}"
+    },
+    {
+        "name": "Shop: Potted Palm Tree",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Lost Kingdom",
+        "requires": "{RegionalLost()}"
+    },
+    {
+        "name": "Shop: Butterfly Mobile",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Lost Kingdom",
+        "requires": "{RegionalLost()}"
+    },
+    {
+        "name": "Shop: Pauline Statue",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{RegionalMetro()}"
+    },
+    {
+        "name": "Shop: New Donk City Hall Model",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{RegionalMetro()}"
+    },
+    {
+        "name": "Shop: Shiverian Rug",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{RegionalSnow()}"
+    },
+    {
+        "name": "Shop: Shiverian Nesting Dolls",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{RegionalSnow()}"
+    },
+    {
+        "name": "Shop: Sand Jar",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{RegionalSeaside()}"
+    },
+    {
+        "name": "Shop: Glass Tower Model",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{RegionalSeaside()}"
+    },
+    {
+        "name": "Shop: Souvenir Forks",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{RegionalLuncheon()}"
+    },
+    {
+        "name": "Shop: Vegetable Plate",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{RegionalLuncheon()}"
+    },
+    {
+        "name": "Shop: Paper Lantern",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{RegionalBowser()}"
+    },
+    {
+        "name": "Shop: Jizo Statue",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{RegionalBowser()}"
+    },
+    {
+        "name": "Shop: Cap Kingdom Sticker",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Cap Kingdom",
+        "requires": "{RegionalCap()}"
+    },
+    {
+        "name": "Shop: Cascade Kingdom Sticker",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Cascade Kingdom",
+        "requires": "{RegionalCascade()}"
+    },
+    {
+        "name": "Shop: Sand Kingdom Sticker",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Sand Kingdom",
+        "requires": "{RegionalSand()}"
+    },
+    {
+        "name": "Shop: Lake Kingdom Sticker",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Lake Kingdom",
+        "requires": "{RegionalLake()}"
+    },
+    {
+        "name": "Shop: Wooded Kingdom Sticker",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Wooded Kingdom",
+        "requires": "{RegionalWooded()}"
+    },
+    {
+        "name": "Shop: Lost Kingdom Sticker",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Lost Kingdom",
+        "requires": "{RegionalLost()}"
+    },
+    {
+        "name": "Shop: Metro Kingdom Sticker",
+        "category": [
+            "Shop",
+            "Regional"
+        ],
+        "region": "Metro Kingdom",
+        "requires": "{RegionalMetro()}"
+    },
+    {
+        "name": "Shop: Snow Kingdom Sticker",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Snow Kingdom",
+        "requires": "{RegionalSnow()}"
+    },
+    {
+        "name": "Shop: Seaside Kingdom Sticker",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Seaside Kingdom",
+        "requires": "{RegionalSeaside()}"
+    },
+    {
+        "name": "Shop: Luncheon Kingdom Sticker",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Luncheon Kingdom",
+        "requires": "{RegionalLuncheon()}"
+    },
+    {
+        "name": "Shop: Bowser's Kingdom Sticker",
+        "category": [
+            "post-metro",
+            "Shop",
+            "Regional"
+        ],
+        "region": "Bowser's Kingdom",
+        "requires": "{RegionalBowser()}"
+    },
+    {
+        "name": "World Peace",
+        "category": [
+            "Moon Kingdom"
+        ],
+        "region": "Moon Kingdom",
+        "victory": true,
+        "requires": "{OptAll(|Banzai Bill| and |Bowser|)} and {ParabonesSkip()} and {SandPeace()} and {LakePeace()} and {WoodedPeace()} and {MetroPeace()} and {SnowPeace()} and {SeasidePeace()} and {SnowSeasidePeace()} and {LuncheonPeace()} and {BowserPeace()}"
+    }
+]

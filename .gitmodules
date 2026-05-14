@@ -1,0 +1,9 @@
+[submodule "vendor/Archipelago"]
+	path = vendor/Archipelago
+	url = https://github.com/ArchipelagoMW/Archipelago.git
+[submodule "switch-mod/exlaunch"]
+	path = switch-mod/exlaunch
+	url = https://github.com/shadowninja108/exlaunch.git
+[submodule "switch-mod/lunakit-vendor"]
+	path = switch-mod/lunakit-vendor
+	url = https://github.com/Amethyst-szs/smo-lunakit.git

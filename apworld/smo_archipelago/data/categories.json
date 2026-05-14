@@ -1,0 +1,351 @@
+{
+    "Paragoomba": {
+        "hidden": true
+    },
+    "Bullet Bill": {
+        "hidden": true
+    },
+    "Knucklotec's Fist": {
+        "hidden": true
+    },
+    "Lakitu": {
+        "hidden": true
+    },
+    "Goomba": {
+        "hidden": true
+    },
+    "Jaxi": {
+        "hidden": true
+    },
+    "Cactus": {
+        "hidden": true
+    },
+    "Sombrero": {
+        "hidden": true
+    },
+    "Mini Rocket": {
+        "hidden": true
+    },
+    "Zipper": {
+        "hidden": true
+    },
+    "Cheep Cheep": {
+        "hidden": true
+    },
+    "Puzzle Part": {
+        "hidden": true
+    },
+    "Swimwear": {
+        "hidden": true
+    },
+    "Sherm": {
+        "hidden": true
+    },
+    "Uproot": {
+        "hidden": true
+    },
+    "Glydon": {
+        "hidden": true
+    },
+    "Coin Coffer": {
+        "hidden": true
+    },
+    "Tree": {
+        "hidden": true
+    },
+    "Explorer": {
+        "hidden": true
+    },
+    "Picture Match Part": {
+        "hidden": true
+    },
+    "Tropical Wiggler": {
+        "hidden": true
+    },
+    "Manhole": {
+        "hidden": true
+    },
+    "RC Car": {
+        "hidden": true
+    },
+    "Builder": {
+        "hidden": true
+    },
+    "Taxi": {
+        "hidden": true
+    },
+    "Ty-foo": {
+        "hidden": true
+    },
+    "Shiverian Racer": {
+        "hidden": true
+    },
+    "Snowsuit": {
+        "hidden": true
+    },
+    "Bowser": {
+        "hidden": true
+    },
+    "Gushen": {
+        "hidden": true
+    },
+    "Lighthouse": {
+        "hidden": true
+    },
+    "Resort": {
+        "hidden": true
+    },
+    "Hammer Bro": {
+        "hidden": true
+    },
+    "Meat": {
+        "hidden": true
+    },
+    "Lava Bubble": {
+        "hidden": true
+    },
+    "Chef": {
+        "hidden": true
+    },
+    "Fire Bro": {
+        "hidden": true
+    },
+    "Volbonan": {
+        "hidden": true
+    },
+    "Pokino": {
+        "hidden": true
+    },
+    "Jizo": {
+        "hidden": true
+    },
+    "Samurai": {
+        "hidden": true
+    },
+    "Bowser Statue": {
+        "hidden": true
+    },
+    "Parabones": {
+        "hidden": true
+    },
+    "Banzai Bill": {
+        "hidden": true
+    },
+    "Sand Peace": {
+        "yaml_option": [
+            "include_post_peace_moons"
+        ],
+        "hidden": true
+    },
+    "Lake Peace": {
+        "yaml_option": [
+            "include_post_peace_moons"
+        ],
+        "hidden": true
+    },
+    "Wooded Peace": {
+        "yaml_option": [
+            "include_post_peace_moons"
+        ],
+        "hidden": true
+    },
+    "Night Metro": {
+        "hidden": true
+    },
+    "Metro Peace": {
+        "yaml_option": [
+            "include_post_peace_moons"
+        ],
+        "hidden": true
+    },
+    "Snow Peace": {
+        "yaml_option": [
+            "include_post_peace_moons"
+        ],
+        "hidden": true
+    },
+    "Seaside Peace": {
+        "yaml_option": [
+            "include_post_peace_moons"
+        ],
+        "hidden": true
+    },
+    "Snow/Seaside Peace": {
+        "yaml_option": [
+            "include_post_peace_moons"
+        ],
+        "hidden": true
+    },
+    "Luncheon Peace": {
+        "yaml_option": [
+            "include_post_peace_moons"
+        ],
+        "hidden": true
+    },
+    "Bowser's Peace": {
+        "yaml_option": [
+            "include_post_peace_moons"
+        ],
+        "hidden": true
+    },
+    "Capture": {
+        "yaml_option": [
+            "capturesanity"
+        ]
+    },
+    "Coin": {
+        "yaml_option": [
+            "coin_shops"
+        ],
+        "hidden": true
+    },
+    "Regional": {
+        "yaml_option": [
+            "regional_shops"
+        ],
+        "hidden": true
+    },
+    "Action": {
+        "yaml_option": [
+            "action_rando"
+        ]
+    },
+    "post-metro": {
+        "yaml_option": [
+            "include_post_metro_moons"
+        ],
+        "hidden": true
+    },
+    "genericmoon": {
+        "yaml_option": [
+            "generic_moons"
+        ],
+        "hidden": true
+    },
+    "specificmoon": {
+        "yaml_option": [
+            "!generic_moons"
+        ],
+        "hidden": true
+    },
+    "Bullet Bill Skip": {
+        "hidden": true
+    },
+    "Bullet Bill Small Skip": {
+        "hidden": true
+    },
+    "Bullet Bill Maze": {
+        "hidden": true
+    },
+    "Into the Lake": {
+        "hidden": true
+    },
+    "Swim and Cheep Cheep": {
+        "hidden": true
+    },
+    "Cheep Cheep or Ground Pound": {
+        "hidden": true
+    },
+    "Maze Skip": {
+        "hidden": true
+    },
+    "Sherm or Long Jump": {
+        "hidden": true
+    },
+    "Post-Trumpeter": {
+        "hidden": true
+    },
+    "From the Top of the Tower": {
+        "hidden": true
+    },
+    "Wall Jump or Pole": {
+        "hidden": true
+    },
+    "Ty-foo or Scale a Tall Wall": {
+        "hidden": true
+    },
+    "Scale a Wall": {
+        "hidden": true
+    },
+    "Scale a Wall (No Triple Jump)": {
+        "hidden": true
+    },
+    "Swim or Cap Jump": {
+        "hidden": true
+    },
+    "Long Jump": {
+        "hidden": true
+    },
+    "Roll": {
+        "hidden": true
+    },
+    "Ground Pound": {
+        "hidden": true
+    },
+    "Dive": {
+        "hidden": true
+    },
+    "Ground Pound Jump": {
+        "hidden": true
+    },
+    "Backward Somersault": {
+        "hidden": true
+    },
+    "Side Somersault": {
+        "hidden": true
+    },
+    "Triple Jump": {
+        "hidden": true
+    },
+    "Wall Jump": {
+        "hidden": true
+    },
+    "Hold/Throw": {
+        "hidden": true
+    },
+    "Swim": {
+        "hidden": true
+    },
+    "Motor scooter": {
+        "hidden": true
+    },
+    "Uproot or Fire Bro": {
+        "hidden": true
+    },
+    "Dash (2D)": {
+        "hidden": true
+    },
+    "Tropical Wiggler or Dive": {
+        "hidden": true
+    },
+    "Tropical Wiggler or Wall Jump": {
+        "hidden": true
+    },
+    "Swim or Cheep Cheep": {
+        "hidden": true
+    },
+    "Climb to the Meat": {
+        "hidden": true
+    },
+    "Nice Frame": {
+        "hidden": true
+    },
+    "Parabones Skip": {
+        "hidden": true
+    },
+    "Jump High": {
+        "hidden": true
+    },
+    "Cheep Cheep or Swim": {
+        "hidden": true
+    },
+    "Quick Swim": {
+        "hidden": true
+    },
+    "Very Early Luncheon": {
+        "hidden": true
+    },
+    "Boxers": {
+        "hidden": true
+    }
+}
