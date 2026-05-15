@@ -272,6 +272,15 @@ class SmoApBridgeContext:
 
     async def _handle_ap_package(self, cmd: str, args: dict, ctx: Any) -> None:
         if cmd == "Connected":
+            # CommonContext maintains its own item_names / location_names cache,
+            # populated either from `DataPackage` packets or from Archipelago's
+            # shipped `network_data_package.json`. The latter satisfies the
+            # client without ever sending a `DataPackage` packet — which means
+            # our `_handle_ap_package("DataPackage", ...)` never fires and our
+            # `self._dp` stays empty. Copy from CommonContext on Connected so
+            # location-id lookup in `report_check` works regardless of how the
+            # data arrived.
+            self._populate_datapackage_from_ctx(ctx)
             self._state.set_ap_conn("ready")
             self._state.slot = ctx.auth or self.slot
             await self._send_ap_state("ready")
@@ -320,6 +329,31 @@ class SmoApBridgeContext:
                     f"[deathlink in] source={source or '?'} cause={cause or '?'}"
                 )
                 await self._send_kill(KillMsg(source=source, cause=cause))
+
+    def _populate_datapackage_from_ctx(self, ctx: Any) -> None:
+        """Pull item/location name<->id from CommonContext into self._dp."""
+        # ctx.item_names / ctx.location_names are NameLookupDicts keyed by
+        # game name; each entry is {id: name}.
+        for game in (self.GAME_NAME, "Archipelago"):
+            try:
+                loc_map = ctx.location_names[game]  # {id: name}
+                item_map = ctx.item_names[game]
+            except (KeyError, TypeError):
+                continue
+            n_loc = n_item = 0
+            for loc_id, loc_name in loc_map.items():
+                if isinstance(loc_id, int) and loc_id > 0:
+                    self._dp.location_name_to_id[loc_name] = loc_id
+                    self._dp.location_id_to_name[loc_id] = loc_name
+                    n_loc += 1
+            for item_id, item_name in item_map.items():
+                if isinstance(item_id, int) and item_id > 0:
+                    self._dp.item_name_to_id[item_name] = item_id
+                    self._dp.item_id_to_name[item_id] = item_name
+                    n_item += 1
+            if n_loc or n_item:
+                log.info("populated datapackage from ctx for %s: %d items, %d locations",
+                         game, n_item, n_loc)
 
     @staticmethod
     def _sender_name(ctx: Any, player_idx: int | None) -> str:

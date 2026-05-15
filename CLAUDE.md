@@ -54,6 +54,8 @@ The PC bridge owns AP-protocol complexity (websocket + deflate + TLS + reconnect
 - **M4**: read-only state mirroring — **DONE.** All 6 game-event hooks (MoonGet, CaptureStart, ScenarioFlag, SaveLoad, Ending, Death) emit raw SMO identifiers to the bridge. Bridge resolves via `shine_map.json` / `capture_map.json`. DeathLink outbound wired (inbound kill lands in M6). `Check` is now `char[64]` buffers + `FlatHashSet<4096>` for `locations_checked` (allocator NULL-deref workaround in our subsdk9 link). Validated in Ryujinx 2026-05-15.
 - **M4.5**: state reconciliation across disconnects — **CODE COMPLETE.** Bridge accepts new `state_begin` / `state_chunk` / `state_end` snapshot from Switch on every (re)connect (transitively on save load via `requestRehello`); accumulates raw IDs by stage and dispatches each entry through the same `check` path live moon-get hooks use. `BridgeState.add_checked_location` dedupes by full ItemRef identity so replays are no-ops. Switch fixes outbound check drop bug in `pumpOnce` (peek-then-pop). 11 new bridge tests; switch-mod enumerate functions stubbed pending M5/M6 GameDataHolder traversal.
 - **M5**: web tracker — **CODE COMPLETE** (Flask + SSE, served on :8000)
+- **M5.5**: AP server live integration — **DONE 2026-05-15.** Forked apworld zipped to `vendor/Archipelago/custom_worlds/smo_archipelago.apworld` via `scripts/install_apworld.py`. Seed generation via `scripts/ap_generate.py` (thin wrapper that pre-sets `ModuleUpdate.update_ran = True` to suppress AP's auto-pip on world-specific deps). MultiServer wrapper at `scripts/ap_server.py`. Bridge ↔ local AP loopback validated end-to-end: `>> check Cap: Frog-Jumping Above the Fog` → bridge translates → `LocationChecks` to AP → AP sends `ReceivedItems` → bridge forwards `ItemMsg` to fake-Switch (all under 1s per round-trip). Bridge fix in `ap_client.py::_populate_datapackage_from_ctx` hydrates `self._dp` from CommonContext's `location_names`/`item_names` on `Connected` (CommonContext satisfies its own lookup from Archipelago's shipped `network_data_package.json` and never relays a `DataPackage` packet that our `on_package` could catch). Regression test `bridge/tests/test_ap_loopback.py` skips unless `SMOAP_LIVE_AP=1`; 43 existing tests still green. Test seed at `bridge/test_seeds/smo_loopback.yaml` (gitignored output at `bridge/test_seeds/out/`).
+- **M5.7**: Ryujinx E2E — Next milestone. Replace fake-Switch with Ryujinx-hosted real mod; same loop. Gates real-Switch deploy.
 - **M6**: item application (received items → GameDataHolder writes) — also lands snapshot enumerate bodies (`enumerateOwnedShines` / `enumerateOwnedCaptures`); same GameDataHolder traversal as `grantShine`
 - **M7**: capture lock + goal detection
 - **M8**: apworld extensions + in-game ImGui + polish
@@ -70,7 +72,7 @@ C:\Users\maxwe\SMOArchipelago\
   apworld/                       Forked manual_smo_mp3 → smo_archipelago
     smo_archipelago/             Full package; only `data/game.json` creator field changed
     README.md
-  bridge/                        Python bridge — 19 tests pass
+  bridge/                        Python bridge — 43 tests pass (+1 live-AP skipped)
     smo_ap_bridge/
       __main__.py
       config.py                  TOML loader, CLI overrides, env var SMOAP_PASSWORD / SMOAP_AP_PATH
@@ -81,7 +83,7 @@ C:\Users\maxwe\SMOArchipelago\
       state.py                   Thread-safe state mirror for tracker + replay
       tracker_web.py             Flask app on :8000, /api/snapshot
       logging_setup.py
-    tests/                       19 passing tests
+    tests/                       43 passing (test_ap_loopback.py skips unless SMOAP_LIVE_AP=1)
     pyproject.toml
     requirements.txt
     config.example.toml
@@ -190,37 +192,62 @@ Critical bug we hit twice. `lunakit-vendor/src/lib/nx/kernel/svc.h` and `lib/nx/
 ## How to run the bridge
 
 ```pwsh
-cd C:\Users\maxwe\SMOArchipelago\bridge
-python -m pytest                                       # 19 tests pass
-python -m smo_ap_bridge --no-web-tracker               # without web tracker
-python -m smo_ap_bridge --config config.toml --web-tracker  # full
+cd C:\Users\maxwe\Documents\smo_archipelago\bridge
+.\.venv\Scripts\python -m pytest                            # 43 tests pass (1 skipped: live-AP)
+.\.venv\Scripts\python -m smo_ap_bridge --no-web-tracker    # without web tracker
+.\.venv\Scripts\python -m smo_ap_bridge --config config.local.toml --web-tracker  # full
 ```
 
-Bridge listens on `0.0.0.0:17777` (Switch TCP) and `0.0.0.0:8000` (web tracker). AP-side connection requires the Archipelago submodule at `vendor/Archipelago/`.
+Bridge listens on `0.0.0.0:17777` (Switch TCP) and `0.0.0.0:8000` (web tracker). AP-side connection requires `vendor/Archipelago/` submodule with deps installed (see "Loopback dev setup" in README).
 
-Quick loopback smoke test (separate shell, while bridge is running):
+## AP loopback (recommended pre-Ryujinx test)
+
+Validates the whole bridge↔AP stack without booting SMO. After fresh clone:
+
 ```pwsh
-python C:\Users\maxwe\SMOArchipelago\scripts\bridge_smoke_test.py
+# Build apworld zip
+bridge/.venv/Scripts/python scripts/install_apworld.py
+
+# Generate test seed (one-time per apworld change)
+bridge/.venv/Scripts/python scripts/ap_generate.py `
+    --player_files_path bridge/test_seeds --outputpath bridge/test_seeds/out
+
+# Unzip the .archipelago server file out of the player zip
+bridge/.venv/Scripts/python -c "import zipfile, glob; [zipfile.ZipFile(z).extractall('bridge/test_seeds/out') for z in glob.glob('bridge/test_seeds/out/AP_*.zip')]"
+
+# Host server (pane A)
+bridge/.venv/Scripts/python scripts/ap_server.py --port 38281 bridge/test_seeds/out/AP_*.archipelago
+
+# Bridge (pane B) — needs bridge/config.local.toml with host=localhost slot=Mario
+bridge/.venv/Scripts/python -m smo_ap_bridge --config bridge/config.local.toml
+
+# Drive checks (pane C)
+python scripts/bridge_smoke_test.py
+# Expect: each `>> check` mirrored by a `<< item` within ~1s
+
+# Or scripted via pytest:
+$env:SMOAP_LIVE_AP="1"; bridge/.venv/Scripts/python -m pytest -v bridge/tests/test_ap_loopback.py
+```
+
+Quick old-style smoke test (Switch-only, no AP server):
+```pwsh
+python C:\Users\maxwe\Documents\smo_archipelago\scripts\bridge_smoke_test.py
 ```
 
 ## What's next
 
-**In Ryujinx** (gate before Switch):
+**M5.7 — Ryujinx E2E** (next milestone): the AP loopback above, but with the real M3/M4 mod running in Ryujinx instead of `bridge_smoke_test.py`. Steps:
 
 1. Boot SMO 1.0.0 in Ryujinx with our `subsdk9` deployed. Confirm `smoap.log` appears under `%APPDATA%/Ryujinx/sdcard/atmosphere/contents/0100000000010000/`. Ryujinx's game library must hold the 1.0.0 version (re-import if it still has 1.3.0).
 2. Once `smoap.log` is non-empty, the soft-install logs will name any symbols that didn't resolve. Fall back to delta-polling per-hook if needed (most likely candidate: `setGotShine` if inlined).
 3. Verify worker thread reaches `connect()` (LAN IP from `BRIDGE_HOST` cmake var). Bridge running on PC should log `switch HELLO`.
+4. With AP server already running (per the loopback recipe above), collect a moon in-game and confirm `LocationChecks` is logged at the AP server and the bridge logs `ItemMsg` going back down (it'll be a no-op on the Switch until M6, but the round-trip should be observable).
 
 **Then on real Switch** (only after Ryujinx green):
-4. `cmake --install build` → `xcopy /E /I /Y switch-mod\sd-overlay\atmosphere D:\atmosphere`.
-5. Boot SMO. Same `smoap.log` should appear under SD's `atmosphere/contents/0100000000010000/`.
+5. `cmake --install build` → `xcopy /E /I /Y switch-mod\sd-overlay\atmosphere D:\atmosphere`.
+6. Boot SMO. Same `smoap.log` should appear under SD's `atmosphere/contents/0100000000010000/`.
 
-**In parallel** (independent of Switch):
-6. Add Archipelago submodule: `git submodule add https://github.com/ArchipelagoMW/Archipelago.git vendor/Archipelago`.
-7. Generate test seed from forked apworld.
-8. Verify bridge ↔ AP server connectivity.
-
-After Ryujinx + real Switch boot clean with logs visible, **M4 implementation** is on Claude's plate: fill the trampoline bodies in `MoonGetHook.cpp` and `CaptureStartHook.cpp`, implement `game/MoonApply::extractShineCoords`, wire to `reportMoonChecked` / `reportCaptureChecked`.
+**After M5.7 — M6 implementation**: fill in-game item application — `game/MoonApply::grantShine` (idempotent GameDataHolder write), `game/CaptureGate::captureBlocked` (bitset gate on `PlayerHackKeeper::startHack`), and the snapshot enumerate bodies (`enumerateOwnedShines` / `enumerateOwnedCaptures`).
 
 ## Adding new hook targets
 

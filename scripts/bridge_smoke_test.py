@@ -24,10 +24,10 @@ HOST = "127.0.0.1"
 PORT = 17777
 
 CANNED_CHECKS = [
-    {"t": "check", "kind": "moon", "kingdom": "Cap",     "shine_id": "Spinning-Hat Stack"},
-    {"t": "check", "kind": "moon", "kingdom": "Cascade", "shine_id": "Our First Power Moon"},
-    {"t": "check", "kind": "capture", "cap": "Frog"},
-    {"t": "check", "kind": "moon", "kingdom": "Sand",    "shine_id": "Inkblot Trail"},
+    {"t": "check", "kind": "moon",    "kingdom": "Cap",     "shine_id": "Frog-Jumping Above the Fog"},
+    {"t": "check", "kind": "moon",    "kingdom": "Cascade", "shine_id": "Our First Power Moon"},
+    {"t": "check", "kind": "capture", "cap": "Paragoomba"},
+    {"t": "check", "kind": "moon",    "kingdom": "Sand",    "shine_id": "Atop the Highest Tower"},
 ]
 
 

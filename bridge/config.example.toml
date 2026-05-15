@@ -3,6 +3,10 @@
 
 [ap]
 # Archipelago server connection.
+# For local development (M5.5 loopback), use host = "localhost" and host a
+# MultiServer on the same machine — see the loopback recipe in ../README.md.
+# A copy of this file with localhost settings is conventionally `config.local.toml`
+# (gitignored).
 host = "archipelago.gg"
 port = 38281
 slot = "Mario"

@@ -2,6 +2,8 @@
 
 Single persistent TCP connection. Each message is one line of UTF-8 JSON terminated by `\n`. Field `t` is the message type (short string). Both sides are pure event streams (no request/response pairing).
 
+> **Dev tip (M5.5):** to exercise the bridge end-to-end without a Switch, run `scripts/bridge_smoke_test.py` against a bridge connected to a local MultiServer hosting a seed of the forked apworld. See the "Loopback dev setup" recipe in [`../README.md`](../README.md) for the full sequence, or run `SMOAP_LIVE_AP=1 pytest bridge/tests/test_ap_loopback.py` for the scripted version.
+
 - Default port: **17777** (configurable on both sides; bridge in `config.toml`, Switch in `romfs/ap_config.json`)
 - Max line length: **8 KiB**. Longer lines are dropped and the parser resyncs to the next `\n`.
 - Canonical kingdom / capture / shine names come from `apworld/smo_archipelago/data/items.json` and `data/locations.json`. Switch holds a static lookup; bridge reads the JSON directly.

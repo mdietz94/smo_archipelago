@@ -1,0 +1,23 @@
+name: Mario
+game: Manual_SMO_archipelago
+description: SMO local loopback test (single-slot, items_handling=7, no deathlink)
+
+Manual_SMO_archipelago:
+  # minimal: only the goal must be reachable. The apworld's regional/coin
+  # shop and post-Bowser side-chain rules are too strict for full accessibility.
+  # Minimal accessibility lets generation succeed for loopback testing.
+  accessibility: minimal
+  goal: World Peace
+  death_link: false
+  filler_traps: 0
+
+  # All category toggles default to on; we explicitly enable the big ones
+  # so the seed has a meaningful number of locations regardless of upstream
+  # apworld default-flips.
+  include_post_peace_moons: true
+  include_post_metro_moons: true
+  capturesanity: true
+  coin_shops: true
+  regional_shops: true
+  action_rando: false
+  generic_moons: false
