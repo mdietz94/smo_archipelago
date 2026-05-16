@@ -66,7 +66,7 @@ def _import_common_context(ap_path_hint: str | None = None):
     if ap_path is None:
         raise RuntimeError(
             "Archipelago checkout not found. Add it as a submodule:\n"
-            "  cd C:\\Users\\maxwe\\SMOArchipelago\n"
+            "  cd C:\\Users\\maxwe\\Documents\\smo_archipelago\n"
             "  git submodule add https://github.com/ArchipelagoMW/Archipelago.git vendor/Archipelago\n"
             "  git submodule update --init --recursive\n"
             "Or set archipelago_path in config.toml or the SMOAP_AP_PATH env var."

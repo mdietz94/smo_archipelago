@@ -1,4 +1,4 @@
-# SMO Archipelago
+# Spicy Meatball Overdrive
 
 A real Archipelago client for **Super Mario Odyssey** on a modded Nintendo Switch.
 

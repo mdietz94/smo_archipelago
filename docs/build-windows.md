@@ -15,7 +15,7 @@ Setup:
 # 1. Clone Archipelago into vendor/ as a submodule.
 #    (Archipelago refuses pip install — its setup.py blocks it. We add it as
 #    a submodule and the bridge auto-finds it via sys.path injection.)
-cd C:\Users\maxwe\SMOArchipelago
+cd C:\Users\maxwe\Documents\smo_archipelago
 git submodule add https://github.com/ArchipelagoMW/Archipelago.git vendor/Archipelago
 git submodule update --init --recursive
 
@@ -33,7 +33,7 @@ If you want Archipelago somewhere else (existing checkout you keep up to date), 
 Run:
 
 ```pwsh
-cd C:\Users\maxwe\SMOArchipelago\bridge
+cd C:\Users\maxwe\Documents\smo_archipelago\bridge
 python -m smo_ap_bridge --config config.toml --web-tracker
 ```
 
@@ -58,7 +58,7 @@ Prerequisites:
 Bootstrap (one time):
 
 ```pwsh
-cd C:\Users\maxwe\SMOArchipelago\switch-mod
+cd C:\Users\maxwe\Documents\smo_archipelago\switch-mod
 git submodule add https://github.com/shadowninja108/exlaunch.git exlaunch
 git submodule add https://github.com/Amethyst-szs/smo-lunakit.git lunakit-vendor
 git submodule update --init --recursive
@@ -67,7 +67,7 @@ git submodule update --init --recursive
 Configure & build:
 
 ```pwsh
-cd C:\Users\maxwe\SMOArchipelago\switch-mod
+cd C:\Users\maxwe\Documents\smo_archipelago\switch-mod
 cmake -S . -B build -G Ninja `
       -DCMAKE_TOOLCHAIN_FILE=lunakit-vendor/cmake/toolchain.cmake `
       -DSMO_VERSION=1.0.0
@@ -82,7 +82,7 @@ Output: `switch-mod/sd-overlay/atmosphere/contents/0100000000010000/exefs/subsdk
 After updating `apworld/smo_archipelago/data/items.json`, regenerate the bit-index table the Switch uses:
 
 ```pwsh
-python C:\Users\maxwe\SMOArchipelago\scripts\sync_capture_table.py
+python C:\Users\maxwe\Documents\smo_archipelago\scripts\sync_capture_table.py
 ```
 
 (There's also a PowerShell version `sync_capture_table.ps1` if your execution policy permits it.)
@@ -90,7 +90,7 @@ python C:\Users\maxwe\SMOArchipelago\scripts\sync_capture_table.py
 ## Tests
 
 ```pwsh
-cd C:\Users\maxwe\SMOArchipelago\bridge
+cd C:\Users\maxwe\Documents\smo_archipelago\bridge
 python -m pip install pytest pytest-asyncio
 python -m pytest -v
 ```
@@ -99,13 +99,13 @@ python -m pytest -v
 
 In one shell:
 ```pwsh
-cd C:\Users\maxwe\SMOArchipelago\bridge
+cd C:\Users\maxwe\Documents\smo_archipelago\bridge
 python -m smo_ap_bridge --no-web-tracker
 ```
 
 In another shell:
 ```pwsh
-python C:\Users\maxwe\SMOArchipelago\scripts\bridge_smoke_test.py
+python C:\Users\maxwe\Documents\smo_archipelago\scripts\bridge_smoke_test.py
 ```
 
 The fake-Switch script connects, sends `hello`, and emits a synthetic `check` every 5s. Bridge logs should show the handshake and your bridge's AP-server status.

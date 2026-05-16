@@ -1,4 +1,4 @@
-// SMO Archipelago module entry point.
+// Spicy Meatball Overdrive — Switch module entry point.
 //
 // Loaded by exlaunch as `subsdk9` from
 // sd:/atmosphere/contents/0100000000010000/exefs/subsdk9.

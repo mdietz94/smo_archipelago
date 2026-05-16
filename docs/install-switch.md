@@ -26,7 +26,7 @@ sd:/atmosphere/contents/0100000000010000/
 `ap_config.json` is generated at cmake configure time from `switch-mod/romfs/ap_config.json.in`. Pass overrides at configure — they're sticky in the cmake cache, so `--build` and `--install` runs reuse them:
 
 ```pwsh
-cd C:\Users\maxwe\SMOArchipelago\switch-mod
+cd C:\Users\maxwe\Documents\smo_archipelago\switch-mod
 & "C:/Program Files/CMake/bin/cmake.exe" -S . -B build -G Ninja `
     -DCMAKE_TOOLCHAIN_FILE=lunakit-vendor/cmake/toolchain.cmake `
     -DBRIDGE_HOST=192.168.1.187     # your PC's LAN IP
@@ -79,7 +79,7 @@ The M3 build delivers:
 
 1. Start the bridge on PC:
    ```pwsh
-   cd C:\Users\maxwe\SMOArchipelago\bridge
+   cd C:\Users\maxwe\Documents\smo_archipelago\bridge
    python -m smo_ap_bridge --config config.toml --web-tracker
    ```
 2. Confirm bridge logs `switch server listening on ('0.0.0.0', 17777)`.

@@ -1,4 +1,4 @@
-# SMO Archipelago apworld
+# Spicy Meatball Overdrive apworld
 
 Forked from [empathy-mp3/SMO-manual-AP](https://github.com/empathy-mp3/SMO-manual-AP) (`manual_smo_mp3`).
 
@@ -8,8 +8,8 @@ This fork registers as `Manual_SMO_archipelago` (vs upstream's `Manual_SMO_mp3`)
 
 ```
 # In an Archipelago checkout:
-ln -s /path/to/SMOArchipelago/apworld/smo_archipelago worlds/smo_archipelago
-# or on Windows: mklink /D worlds\smo_archipelago C:\Users\maxwe\SMOArchipelago\apworld\smo_archipelago
+ln -s /path/to/spicy-meatball-overdrive/apworld/smo_archipelago worlds/smo_archipelago
+# or on Windows: mklink /D worlds\smo_archipelago C:\Users\maxwe\Documents\smo_archipelago\apworld\smo_archipelago
 ```
 
 Generate a YAML, run `Generate.py`. The `.archipelago` it produces should be played with `python -m smo_ap_bridge` from `bridge/` — *not* the original Manual client.

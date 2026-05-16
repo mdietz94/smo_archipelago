@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "smo-ap-bridge"
 version = "0.1.0"
-description = "Archipelago bridge for Super Mario Odyssey on modded Switch."
+description = "Spicy Meatball Overdrive — Archipelago bridge for Super Mario Odyssey on modded Switch."
 readme = "../README.md"
 requires-python = ">=3.11"
 license = {file = "../LICENSE"}
-authors = [{name = "SMOArchipelago contributors"}]
+authors = [{name = "Spicy Meatball Overdrive contributors"}]
 
 dependencies = [
     "websockets>=12.0",

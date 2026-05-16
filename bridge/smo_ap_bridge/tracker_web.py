@@ -28,7 +28,7 @@ _TEMPLATE = """<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>SMO Archipelago Tracker</title>
+  <title>Spicy Meatball Overdrive Tracker</title>
   <style>
     body { font-family: system-ui, sans-serif; background:#1a1a1a; color:#e8e8e8;
            margin: 0; padding: 1.5rem; }
@@ -50,7 +50,7 @@ _TEMPLATE = """<!doctype html>
   </style>
 </head>
 <body>
-  <h1>SMO Archipelago — slot <span id="slot">?</span> · seed <span id="seed">?</span></h1>
+  <h1>Spicy Meatball Overdrive — slot <span id="slot">?</span> · seed <span id="seed">?</span></h1>
   <div class="grid">
     <div class="card"><h2>Connections</h2>
       <div>AP: <span class="conn" id="ap_conn">?</span></div>

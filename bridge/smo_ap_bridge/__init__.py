@@ -1,4 +1,4 @@
-"""SMO Archipelago bridge.
+"""Spicy Meatball Overdrive bridge.
 
 A small Python service that connects:
   - Archipelago server (websocket, deflate)  <->  this bridge  <->  SMO Switch module (line-JSON TCP)

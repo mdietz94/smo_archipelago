@@ -26,7 +26,7 @@ log = logging.getLogger("smo_ap_bridge")
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="smo-ap-bridge",
-                                description="SMO Archipelago bridge")
+                                description="Spicy Meatball Overdrive bridge")
     p.add_argument("--config", type=Path, default=None,
                    help="Path to config TOML (default: ./config.toml if it exists)")
     p.add_argument("--ap", dest="ap_addr", default=None,

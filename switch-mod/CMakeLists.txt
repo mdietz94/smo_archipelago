@@ -1,4 +1,4 @@
-# SMO Archipelago Switch module.
+# Spicy Meatball Overdrive — Switch module.
 #
 # Builds an exlaunch subsdk9 ELF that ships as:
 #   sd:/atmosphere/contents/0100000000010000/exefs/subsdk9

@@ -1,6 +1,6 @@
 # CLAUDE.md — context for the next session
 
-This file is a fast-load brief for picking up the project cold. Read it first, then `docs/architecture.md` and the plan file at `C:\Users\maxwe\.claude\plans\after-much-work-i-tender-thompson.md`.
+This file is a fast-load brief for picking up the **Spicy Meatball Overdrive** project cold. (Project was previously called `SMOArchipelago`; the directory name `smo_archipelago/` and the Python/apworld package identifiers still spell "smo" — they parse as "Spicy Meatball Overdrive" now and renaming them would break existing seeds, configs, and the deployed mod path.) Read this file first, then `docs/architecture.md` and the plan file at `C:\Users\maxwe\.claude\plans\after-much-work-i-tender-thompson.md`.
 
 ## ⚠️ CRITICAL: Never commit Nintendo IP
 
@@ -105,7 +105,7 @@ The PC bridge owns AP-protocol complexity (websocket + deflate + TLS + reconnect
 ## Repository layout
 
 ```
-C:\Users\maxwe\SMOArchipelago\
+C:\Users\maxwe\Documents\smo_archipelago\
   README.md                      Project overview
   CLAUDE.md                      ← this file
   LICENSE                        MIT
@@ -168,7 +168,7 @@ C:\Users\maxwe\SMOArchipelago\
 | `C:\Users\maxwe\.switch\prod.keys` | Console keys (hactool default location). Also `dev.keys` |
 | `D:\switch\` | User's microSD — DO NOT write large files here, it's the actual SD card |
 | `C:\Users\maxwe\.claude\plans\after-much-work-i-tender-thompson.md` | The authoritative plan (FW 21.2 + 1.0.0 simplification) |
-| `C:\Users\maxwe\.claude\projects\C--Users-maxwe-SMOArchipelago\memory\` | Auto-memory directory |
+| `C:\Users\maxwe\.claude\projects\C--Users-maxwe-Documents-smo-archipelago\memory\` | Auto-memory directory |
 
 ## Dev loop — Ryujinx FIRST, real Switch never as the primary test
 
@@ -181,10 +181,10 @@ The flow:
 #    Generate switch-mod/src/ap/capture_table.h. The file is gitignored — the
 #    build will fail with "../ap/capture_table.h: No such file or directory"
 #    on the first compile of CaptureGate.cpp until you run this.
-python C:\Users\maxwe\SMOArchipelago\scripts\sync_capture_table.py
+python C:\Users\maxwe\Documents\smo_archipelago\scripts\sync_capture_table.py
 
 # 1. Build (~10s)
-cd C:\Users\maxwe\SMOArchipelago\switch-mod
+cd C:\Users\maxwe\Documents\smo_archipelago\switch-mod
 $env:DEVKITPRO = "C:/devkitPro"
 & "C:/Program Files/CMake/bin/cmake.exe" -S . -B build -G Ninja `
     -DCMAKE_TOOLCHAIN_FILE=lunakit-vendor/cmake/toolchain.cmake `
@@ -213,7 +213,7 @@ Only after Ryujinx boots clean → propose deploying to the real Switch:
 
 ```pwsh
 & "C:/Program Files/CMake/bin/cmake.exe" --install build  # populates sd-overlay/
-xcopy /E /I /Y C:\Users\maxwe\SMOArchipelago\switch-mod\sd-overlay\atmosphere D:\atmosphere
+xcopy /E /I /Y C:\Users\maxwe\Documents\smo_archipelago\switch-mod\sd-overlay\atmosphere D:\atmosphere
 ```
 
 If a Switch deploy ever causes the corruption icon: Settings → Data Management → Software → Super Mario Odyssey → Check for Corrupted Data. NOT a reinstall.
@@ -309,7 +309,7 @@ All three are GameDataHolder reads/writes. Symbol set is in `switch-mod/src/hook
 
 ```pwsh
 # Bridge tests (Python)
-cd C:\Users\maxwe\SMOArchipelago\bridge
+cd C:\Users\maxwe\Documents\smo_archipelago\bridge
 python -m pytest -v
 
 # Switch-module host tests (C++ via standalone msys2 mingw64 g++; devkitPro
@@ -327,17 +327,17 @@ $env:Path = "C:\msys64\mingw64\bin;" + $env:Path
 .\test_protocol.exe
 
 # Switch-module cross build (devkitA64 + Windows CMake; not msys2 cmake)
-cd C:\Users\maxwe\SMOArchipelago\switch-mod
+cd C:\Users\maxwe\Documents\smo_archipelago\switch-mod
 $env:DEVKITPRO = "C:/devkitPro"
 & "C:/Program Files/CMake/bin/cmake.exe" -S . -B build -G Ninja -DCMAKE_TOOLCHAIN_FILE=lunakit-vendor/cmake/toolchain.cmake
 & "C:/Program Files/CMake/bin/cmake.exe" --build build
 & "C:/Program Files/CMake/bin/cmake.exe" --install build  # populates sd-overlay/
 
 # Regenerate capture table after apworld change
-python C:\Users\maxwe\SMOArchipelago\scripts\sync_capture_table.py
+python C:\Users\maxwe\Documents\smo_archipelago\scripts\sync_capture_table.py
 
 # Loopback smoke test (with bridge running separately)
-python C:\Users\maxwe\SMOArchipelago\scripts\bridge_smoke_test.py
+python C:\Users\maxwe\Documents\smo_archipelago\scripts\bridge_smoke_test.py
 ```
 
 **Critical cross-build gotcha**: msys2 cmake (`/c/devkitPro/msys2/usr/bin/cmake`) inside Git Bash CANNOT find DEVKITPRO (it expects `/opt/devkitpro` mount which Git Bash doesn't have). Use the Windows CMake at `C:/Program Files/CMake/bin/cmake.exe` with `DEVKITPRO=C:/devkitPro` env var.
