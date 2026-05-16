@@ -12,7 +12,7 @@ from ..Locations import ManualLocation
 from ..Data import game_table, item_table, location_table, region_table
 
 # These helper methods allow you to determine if an option has been set, or what its value is, for any player in the multiworld
-from ..Helpers import is_option_enabled
+from ..Helpers import is_location_enabled
 
 # calling logging.info("message") anywhere below in this file will output the message to both console and log file
 import logging
@@ -37,30 +37,16 @@ def before_create_regions(world: World, multiworld: MultiWorld, player: int):
 
 # Called after regions and locations are created, in case you want to see or modify that information. Victory location is included.
 def after_create_regions(world: World, multiworld: MultiWorld, player: int):
-    # Use this hook to remove locations from the world
-    include_post_peace_moons = is_option_enabled(multiworld, player, "include_post_peace_moons")
-    capturesanity = is_option_enabled(multiworld, player, "capturesanity")
-    coin_shops = is_option_enabled(multiworld, player, "coin_shops")
-    regional_shops = is_option_enabled(multiworld, player, "regional_shops")
-    include_post_metro_moons = is_option_enabled(multiworld, player, "include_post_metro_moons")
-
-
-    locationNamesToRemove = []
-
-    for location in world.location_table:
-        if "Capture" in location.get("category", []) and not capturesanity:
-            locationNamesToRemove.append(location["name"])
-        elif "Coin" in location.get("category", []) and not coin_shops:
-            locationNamesToRemove.append(location["name"])
-        elif "Regional" in location.get("category", []) and not regional_shops:
-            locationNamesToRemove.append(location["name"])
-        elif "post-metro" in location.get("category", []) and not include_post_metro_moons:
-            locationNamesToRemove.append(location["name"])
-        elif not include_post_peace_moons:
-            if not set(["Sand Peace", "Lake Peace", "Wooded Peace", "Metro Peace", "Snow Peace", "Seaside Peace", "Snow/Seaside Peace", "Luncheon Peace", "Bowser's Peace"]).isdisjoint(location.get("category", [])):
-                locationNamesToRemove.append(location["name"])
-
-    # Add your code here to calculate which locations to remove
+    # Every location whose category set resolves "disabled" via the generic
+    # category/yaml_option machinery (see Helpers.is_location_enabled and the
+    # before_is_category_enabled hook below) is removed here. Adding a new
+    # toggle is now a pure data edit: tag the category in categories.json with
+    # a yaml_option, tag affected locations, and you're done.
+    locationNamesToRemove = [
+        location["name"]
+        for location in world.location_table
+        if not is_location_enabled(multiworld, player, location)
+    ]
 
     for region in multiworld.regions:
         if region.player == player:

@@ -4,9 +4,45 @@ from ..Locations import ManualLocation
 from ..Items import ManualItem
 
 
+# Peace categories gated by per-kingdom toggles. The kingdom toggle alone
+# would suffice via categories.json::yaml_option, but include_post_peace_moons
+# is preserved as a master override (backward compat with old yamls).
+PEACE_CATEGORY_TO_OPTION = {
+    "Cap Peace": "include_cap_peace_moons",
+    "Cascade Peace": "include_cascade_peace_moons",
+    "Sand Peace": "include_sand_peace_moons",
+    "Lake Peace": "include_lake_peace_moons",
+    "Wooded Peace": "include_wooded_peace_moons",
+    "Lost Peace": "include_lost_peace_moons",
+    "Metro Peace": "include_metro_peace_moons",
+    "Snow Peace": "include_snow_peace_moons",
+    "Seaside Peace": "include_seaside_peace_moons",
+    "Luncheon Peace": "include_luncheon_peace_moons",
+    "Bowser's Peace": "include_bowsers_peace_moons",
+    "Cloud Peace": "include_cloud_peace_moons",
+}
+SHARED_PEACE_CATEGORY = "Snow/Seaside Peace"
+
+
 # Use this if you want to override the default behavior of is_option_enabled
 # Return True to enable the category, False to disable it, or None to use the default behavior
 def before_is_category_enabled(multiworld: MultiWorld, player: int, category_name: str) -> Optional[bool]:
+    from ..Helpers import is_option_enabled
+
+    is_peace = category_name in PEACE_CATEGORY_TO_OPTION or category_name == SHARED_PEACE_CATEGORY
+    if is_peace and not is_option_enabled(multiworld, player, "include_post_peace_moons"):
+        # Master kill-switch: skip all Peace moons regardless of per-kingdom toggles.
+        return False
+
+    if category_name == SHARED_PEACE_CATEGORY:
+        # "Secret Path to Lake Lamode!" and "Secret Path to the Steam Gardens!"
+        # are reachable from either Snow or Seaside after that kingdom is at
+        # peace -- include if EITHER per-kingdom toggle is on.
+        return (
+            is_option_enabled(multiworld, player, "include_snow_peace_moons")
+            or is_option_enabled(multiworld, player, "include_seaside_peace_moons")
+        )
+
     return None
 
 # Use this if you want to override the default behavior of is_option_enabled
