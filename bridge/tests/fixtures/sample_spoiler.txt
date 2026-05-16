@@ -1,0 +1,55 @@
+Archipelago Version 0.4.5 for Seed: 12345
+
+Player 1: Mario
+Game:                            Manual_SMO_archipelago
+
+Player 2: Link
+Game:                            A Link to the Past
+
+
+Locations:
+
+Mario (Manual_SMO_archipelago):
+    Cap: Frog-Jumping Above the Fog: Power Moon (Mario)
+    Cap: Cap Kingdom Timer Challenge 1: Cascade Kingdom Power Moon (Mario)
+    Cascade: Our First Power Moon: Sand Kingdom Power Moon (Link)
+    Cascade: Multi Moon Atop the Falls: Cascade Kingdom Multi-Moon (Mario)
+    Sand: Atop the Highest Tower: Goomba (Mario)
+    Sand: Moon Shards in the Sand: Sand Kingdom Power Moon (Mario)
+    Sand: Showdown on the Inverted Pyramid: Sand Kingdom Multi-Moon (Link)
+    Lake: Broodals Over the Lake: Lake Kingdom Power Moon (Mario)
+
+Link (A Link to the Past):
+    Hyrule Castle - Big Key Chest: Cap Kingdom Power Moon (Mario)
+    Eastern Palace - Big Key Chest: Cascade Kingdom Power Moon (Mario)
+    Desert Palace - Big Key Chest: Sand Kingdom Power Moon (Mario)
+    Tower of Hera - Big Key Chest: Triforce (Link)
+
+
+Playthrough:
+
+ 1: {
+    Mario (Manual_SMO_archipelago): Cap: Frog-Jumping Above the Fog -> Power Moon (Mario)
+    Mario (Manual_SMO_archipelago): Cap: Cap Kingdom Timer Challenge 1 -> Cascade Kingdom Power Moon (Mario)
+    Link (A Link to the Past): Hyrule Castle - Big Key Chest -> Cap Kingdom Power Moon (Mario)
+ }
+ 2: {
+    Mario (Manual_SMO_archipelago): Cascade: Our First Power Moon -> Sand Kingdom Power Moon (Link)
+    Mario (Manual_SMO_archipelago): Cascade: Multi Moon Atop the Falls -> Cascade Kingdom Multi-Moon (Mario)
+    Link (A Link to the Past): Eastern Palace - Big Key Chest -> Cascade Kingdom Power Moon (Mario)
+ }
+ 3: {
+    Mario (Manual_SMO_archipelago): Sand: Atop the Highest Tower -> Goomba (Mario)
+    Mario (Manual_SMO_archipelago): Sand: Moon Shards in the Sand -> Sand Kingdom Power Moon (Mario)
+    Mario (Manual_SMO_archipelago): Sand: Showdown on the Inverted Pyramid -> Sand Kingdom Multi-Moon (Link)
+    Link (A Link to the Past): Desert Palace - Big Key Chest -> Sand Kingdom Power Moon (Mario)
+ }
+ 4: {
+    Mario (Manual_SMO_archipelago): Lake: Broodals Over the Lake -> Lake Kingdom Power Moon (Mario)
+ }
+
+
+Paths:
+
+Mario:
+   Cap: Frog-Jumping Above the Fog: (Cascade Kingdom, "starting")
