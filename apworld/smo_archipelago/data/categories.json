@@ -131,21 +131,39 @@
     "Banzai Bill": {
         "hidden": true
     },
+    "Cap Peace": {
+        "yaml_option": [
+            "include_cap_peace_moons"
+        ],
+        "hidden": true
+    },
+    "Cascade Peace": {
+        "yaml_option": [
+            "include_cascade_peace_moons"
+        ],
+        "hidden": true
+    },
     "Sand Peace": {
         "yaml_option": [
-            "include_post_peace_moons"
+            "include_sand_peace_moons"
         ],
         "hidden": true
     },
     "Lake Peace": {
         "yaml_option": [
-            "include_post_peace_moons"
+            "include_lake_peace_moons"
         ],
         "hidden": true
     },
     "Wooded Peace": {
         "yaml_option": [
-            "include_post_peace_moons"
+            "include_wooded_peace_moons"
+        ],
+        "hidden": true
+    },
+    "Lost Peace": {
+        "yaml_option": [
+            "include_lost_peace_moons"
         ],
         "hidden": true
     },
@@ -154,37 +172,79 @@
     },
     "Metro Peace": {
         "yaml_option": [
-            "include_post_peace_moons"
+            "include_metro_peace_moons"
         ],
         "hidden": true
     },
     "Snow Peace": {
         "yaml_option": [
-            "include_post_peace_moons"
+            "include_snow_peace_moons"
         ],
         "hidden": true
     },
     "Seaside Peace": {
         "yaml_option": [
-            "include_post_peace_moons"
+            "include_seaside_peace_moons"
         ],
         "hidden": true
     },
     "Snow/Seaside Peace": {
         "yaml_option": [
-            "include_post_peace_moons"
+            "include_snow_peace_moons"
         ],
         "hidden": true
     },
     "Luncheon Peace": {
         "yaml_option": [
-            "include_post_peace_moons"
+            "include_luncheon_peace_moons"
         ],
         "hidden": true
     },
     "Bowser's Peace": {
         "yaml_option": [
-            "include_post_peace_moons"
+            "include_bowsers_peace_moons"
+        ],
+        "hidden": true
+    },
+    "Cloud Peace": {
+        "yaml_option": [
+            "include_cloud_peace_moons"
+        ],
+        "hidden": true
+    },
+    "Deep Woods": {
+        "yaml_option": [
+            "include_deep_woods_moons"
+        ],
+        "hidden": true
+    },
+    "Minigame": {
+        "yaml_option": [
+            "include_minigame_moons"
+        ],
+        "hidden": true
+    },
+    "Hint Art": {
+        "yaml_option": [
+            "include_hint_art_moons"
+        ],
+        "hidden": true
+    },
+    "Tourist": {
+        "yaml_option": [
+            "include_tourist_moons"
+        ],
+        "hidden": true
+    },
+    "Long Course": {
+        "yaml_option": [
+            "include_long_course_moons"
+        ],
+        "hidden": true
+    },
+    "Precision Capture": {
+        "yaml_option": [
+            "include_precision_capture_moons"
         ],
         "hidden": true
     },

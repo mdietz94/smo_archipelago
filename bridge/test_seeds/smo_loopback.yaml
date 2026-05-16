@@ -14,8 +14,32 @@ Manual_SMO_archipelago:
   # All category toggles default to on; we explicitly enable the big ones
   # so the seed has a meaningful number of locations regardless of upstream
   # apworld default-flips.
-  include_post_peace_moons: true
+  include_post_peace_moons: true   # master kill-switch for ALL per-kingdom Peace categories
   include_post_metro_moons: true
   capturesanity: true
   coin_shops: true
   regional_shops: true
+
+  # Per-kingdom Peace toggles (default true). Effective only when the master
+  # include_post_peace_moons is also true; otherwise master wins and all
+  # Peace moons are removed.
+  include_cap_peace_moons: true
+  include_cascade_peace_moons: true
+  include_sand_peace_moons: true
+  include_lake_peace_moons: true
+  include_wooded_peace_moons: true
+  include_lost_peace_moons: true
+  include_metro_peace_moons: true
+  include_snow_peace_moons: true
+  include_seaside_peace_moons: true
+  include_luncheon_peace_moons: true
+  include_bowsers_peace_moons: true
+  include_cloud_peace_moons: true
+
+  # Per-area annoying-cluster toggles (default true).
+  include_deep_woods_moons: true        # Wooded Kingdom Deep Woods area
+  include_minigame_moons: true          # Slots / Quizzes / Volleyball / Jump-Rope / Roulette
+  include_hint_art_moons: true          # "Found with X Kingdom Art" + Walking the Desert
+  include_tourist_moons: true           # "A Tourist in X Kingdom" chains
+  include_long_course_moons: true       # Long obstacle / precision platforming courses
+  include_precision_capture_moons: true # Bullet Bill Maze / Jaxi races / Jizo / Pokio / etc.
