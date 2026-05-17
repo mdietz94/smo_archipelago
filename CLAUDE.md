@@ -193,7 +193,11 @@ C:\Users\maxwe\Documents\smo_archipelago\
       game/{MoonApply,CaptureGate,KingdomUnlock}.{cpp,hpp}
       ui/ApHudOverlay.{cpp,hpp}
       util/{Json,Log}.{cpp,hpp}
-    romfs/ap_config.json         Switch reads at runtime for the bridge IP
+    romfs/ap_config.json         INFORMATIONAL ONLY — bridge IP/port are baked in at
+                                 compile time via CMake -DBRIDGE_HOST/-DBRIDGE_PORT. The
+                                 runtime SD-read path was abandoned (MountSdCardForDebug
+                                 fails on retail/newer FW). See ApConfig.cpp:1-8. Editing
+                                 this JSON on the SD does NOTHING — rebuild instead.
     lunakit-vendor/              Vendored LunaKit submodule
   scripts/
     switch_smoke_test.py         Fake-Switch end-to-end test (formerly bridge_smoke_test.py)
