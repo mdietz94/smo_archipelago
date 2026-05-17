@@ -109,10 +109,10 @@ def _smo_yaml(overrides: dict[str, bool], slot_name: str = "Mario") -> str:
                      for k, v in base.items())
     return (
         f"name: {slot_name}\n"
-        f"game: Manual_SMO_archipelago\n"
+        f"game: Spicy Meatball Overdrive\n"
         f"description: gen-sweep test\n"
         f"\n"
-        f"Manual_SMO_archipelago:\n"
+        f"Spicy Meatball Overdrive:\n"
         f"{body}\n"
     )
 

@@ -47,12 +47,16 @@ from .hooks.Data import hook_interpret_slot_data
 
 class SMOSettings(settings.Group):
     """SMO Client settings. Lives in `~/.archipelago/host.yaml` under the
-    `manual_smo_archipelago_options:` key. Auto-created with defaults on
-    first load; users edit to override.
+    `smo_options:` key (Archipelago derives this from the apworld zip's
+    stem — our zip is `smo.apworld`, so the loaded module is `worlds.smo`
+    and the settings key is `smo_options`). NOT the AP game name
+    ("Spicy Meatball Overdrive") and NOT the in-repo source folder name
+    (`smo_archipelago/`). Auto-created with defaults on first load; users
+    edit to override.
 
     Example yaml block:
 
-      manual_smo_archipelago_options:
+      smo_options:
         switch_listen_host: "0.0.0.0"
         switch_listen_port: 17777
         deathlink_default: false

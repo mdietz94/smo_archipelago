@@ -37,7 +37,7 @@ if TYPE_CHECKING:  # pragma: no cover
 log = logging.getLogger(__name__)
 
 
-GAME_NAME = "Manual_SMO_archipelago"
+GAME_NAME = "Spicy Meatball Overdrive"
 
 
 class SMOClientCommandProcessor(ClientCommandProcessor):

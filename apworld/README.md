@@ -2,7 +2,7 @@
 
 Forked from [empathy-mp3/SMO-manual-AP](https://github.com/empathy-mp3/SMO-manual-AP) (`manual_smo_mp3`).
 
-This fork registers as `Manual_SMO_archipelago` (vs upstream's `Manual_SMO_mp3`) so seeds generated for it are paired with the real-client bridge in `bridge/`. Item / location / rule data is unchanged from upstream as of the M2 fork (parity).
+This fork registers as `Spicy Meatball Overdrive` (vs upstream's `Manual_SMO_mp3`) so seeds generated for it are paired with the real Switch client. Item / location / rule data is unchanged from upstream as of the M2 fork (parity); subsequent milestones added per-kingdom toggles, AP-credit moon counters, capture lock enforcement, and the SMO Client itself.
 
 ## Installing for generation
 
@@ -18,7 +18,7 @@ Generate a YAML, run `Generate.py`. The `.archipelago` it produces should be pla
 
 | | upstream | this fork (M2) |
 |---|---|---|
-| Game name | `Manual_SMO_mp3` | `Manual_SMO_archipelago` |
+| Game name | `Manual_SMO_mp3` | `Spicy Meatball Overdrive` |
 | Item pool | identical | identical |
 | Locations | identical | identical |
 | Rules | identical | identical |

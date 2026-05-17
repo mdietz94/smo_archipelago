@@ -106,7 +106,7 @@ $env:SMOAP_LIVE_AP="1"
 
 # 2. Edit per-user settings in ~/.archipelago/host.yaml (optional —
 #    defaults work for localhost AP)
-# manual_smo_archipelago_options:
+# smo_options:
 #   switch_listen_port: 17777
 #   deathlink_default: false
 

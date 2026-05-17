@@ -1,8 +1,8 @@
 name: Mario
-game: Manual_SMO_archipelago
+game: Spicy Meatball Overdrive
 description: SMO local loopback test (single-slot, items_handling=7, no deathlink)
 
-Manual_SMO_archipelago:
+Spicy Meatball Overdrive:
   # minimal: only the goal must be reachable. The apworld's regional/coin
   # shop and post-Bowser side-chain rules are too strict for full accessibility.
   # Minimal accessibility lets generation succeed for loopback testing.

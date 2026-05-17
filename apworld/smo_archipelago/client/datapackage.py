@@ -69,13 +69,14 @@ class DataPackage:
             directory. Used for the loose-source dev path and unit tests.
 
           apworld_package: import path of the apworld package (e.g.
-            "worlds.smo_archipelago" when running from the .apworld zip,
-            "smo_archipelago" from a loose source on sys.path). Loaded via
-            importlib.resources so it works whether the package is on the
-            filesystem OR inside a zip — that's what the Launcher-spawned
-            client needs because the apworld zip in custom_worlds/ isn't a
-            real directory and `Path.exists()` returns False on virtual zip
-            paths.
+            "worlds.smo" when running from the .apworld zip — Archipelago
+            derives the module name from the zip stem `smo.apworld`, or
+            "smo_archipelago" from a loose source on sys.path — the in-repo
+            folder kept its historical name). Loaded via importlib.resources
+            so it works whether the package is on the filesystem OR inside a
+            zip — that's what the Launcher-spawned client needs because the
+            apworld zip in custom_worlds/ isn't a real directory and
+            `Path.exists()` returns False on virtual zip paths.
         """
         self.item_id_to_name: dict[int, str] = {}
         self.location_id_to_name: dict[int, str] = {}
@@ -110,7 +111,7 @@ class DataPackage:
 
         Works for both loose-source (filesystem) and zipped apworld
         installations. The package argument is the import name of the
-        apworld root package (e.g. "worlds.smo_archipelago").
+        apworld root package (e.g. "worlds.smo").
         """
         from importlib.resources import files
         try:
