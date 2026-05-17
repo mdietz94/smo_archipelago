@@ -102,6 +102,16 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
     PyInstaller builds (multiprocessing.Process child can't read its
     bundled `kivy/data/style.kv` out of library.zip).
     """
+    # IMPORTANT: kvui MUST be imported before any kivy.* module. kvui asserts
+    # `"kivy" not in sys.modules` at its top and, as a side effect, sets
+    # KIVY_DATA_DIR to point at AP's frozen-installer-extracted data dir.
+    # Without this side effect, `from kivy.app import App` cascades into
+    # kivy.lang.builder which open()s style.kv at the package-relative
+    # default — inside library.zip in frozen builds — and aborts with
+    # FileNotFoundError ("kivy\data\style.kv"). v0.1.1 through v0.1.3-alpha
+    # all hit this. Same import-order rule client/gui.py follows.
+    import kvui  # noqa: F401
+
     # Lazy Kivy import — keeps the apworld importable on headless gen hosts.
     from kivy.app import App
     from kivy.clock import Clock
