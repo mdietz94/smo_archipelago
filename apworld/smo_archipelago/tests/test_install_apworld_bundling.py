@@ -7,6 +7,14 @@ and calling main directly) catches argument-parsing and exit-code regressions.
 
 Skipped when run outside the repo (e.g. against a zip-installed apworld via
 the in-zip tests/, which we don't ship — tests are excluded from the zip).
+
+`--bundle-mod` tests self-skip when `switch-mod/lunakit-vendor/` isn't
+populated — the python-unit CI job intentionally doesn't init the C++
+submodules (they're AArch64-only and the host tests don't use them); the
+release workflow does init them, so the bundling code is still exercised
+end-to-end when it actually matters. Per-submodule guard rather than a
+single broad skip so `--bundle-scripts` keeps running even when the
+switch-mod submodule is absent.
 """
 
 from __future__ import annotations
@@ -22,6 +30,22 @@ import pytest
 REPO = Path(__file__).resolve().parents[3]
 INSTALL_SCRIPT = REPO / "scripts" / "install_apworld.py"
 OUTPUT_PATH = REPO / "vendor" / "Archipelago" / "custom_worlds" / "smo.apworld"
+LUNAKIT_TOOLCHAIN = REPO / "switch-mod" / "lunakit-vendor" / "cmake" / "toolchain.cmake"
+
+
+def _switch_mod_submodule_present() -> bool:
+    """True iff the switch-mod submodules are populated (toolchain.cmake
+    is the sentinel — install_apworld.py also checks this exact file)."""
+    return LUNAKIT_TOOLCHAIN.exists()
+
+
+# Module-level skip marker for tests that need the C++ submodules.
+needs_switch_mod_submodule = pytest.mark.skipif(
+    not _switch_mod_submodule_present(),
+    reason=f"switch-mod submodules not populated ({LUNAKIT_TOOLCHAIN} "
+           f"missing); run `git submodule update --init --recursive` to "
+           f"enable --bundle-mod tests",
+)
 
 
 def _run_install(args: list[str]) -> tuple[int, str, str]:
@@ -98,6 +122,7 @@ def test_default_install_excludes_setup_bundle(install_script_present) -> None:
         )
 
 
+@needs_switch_mod_submodule
 def test_bundle_mod_includes_switch_mod_sources(install_script_present) -> None:
     rc, out, err = _run_install(["--bundle-mod"])
     assert rc == 0, f"exit {rc}: stdout={out!r} stderr={err!r}"
@@ -110,6 +135,7 @@ def test_bundle_mod_includes_switch_mod_sources(install_script_present) -> None:
         assert required in members, f"missing {required}"
 
 
+@needs_switch_mod_submodule
 def test_bundle_mod_excludes_build_artifacts(install_script_present) -> None:
     rc, _, _ = _run_install(["--bundle-mod"])
     assert rc == 0
@@ -133,6 +159,7 @@ def test_bundle_scripts_includes_extractor(install_script_present) -> None:
         assert required in members, f"missing {required}"
 
 
+@needs_switch_mod_submodule
 def test_bundle_combined_produces_complete_release_zip(install_script_present) -> None:
     """The release CI calls with both flags. This is the 'full release zip'
     end-to-end test."""
