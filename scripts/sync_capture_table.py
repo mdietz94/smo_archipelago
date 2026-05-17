@@ -21,18 +21,41 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    # Defaults are computed off this script's location, matching the dev
+    # source-checkout layout. When invoked from the wizard inside AP's
+    # frozen Launcher the bundled apworld layout doesn't match those
+    # defaults (items.json is at <bundled>/data/ rather than
+    # <bundled>/apworld/smo_archipelago/data/, switch_mod has an
+    # underscore not a hyphen, capture_map.json lives in %APPDATA%/...
+    # /data/ where the extractor wrote it). The wizard passes explicit
+    # --items / --capture-map / --out so all three paths resolve.
     here = Path(__file__).resolve().parent.parent
-    items_path = here / "apworld" / "smo_archipelago" / "data" / "items.json"
-    out_path = here / "switch-mod" / "src" / "ap" / "capture_table.h"
-    capture_map_path = (
+    default_items = here / "apworld" / "smo_archipelago" / "data" / "items.json"
+    default_out = here / "switch-mod" / "src" / "ap" / "capture_table.h"
+    default_capture_map = (
         here / "apworld" / "smo_archipelago" / "client" / "data" / "capture_map.json"
     )
+
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
+    ap.add_argument("--items", type=Path, default=default_items,
+                    help=f"apworld items.json (default: {default_items})")
+    ap.add_argument("--out", type=Path, default=default_out,
+                    help=f"output capture_table.h (default: {default_out})")
+    ap.add_argument("--capture-map", type=Path, default=default_capture_map,
+                    help=f"optional capture_map.json for hack_name mapping "
+                         f"(default: {default_capture_map})")
+    args = ap.parse_args(argv)
+
+    items_path = args.items
+    out_path = args.out
+    capture_map_path = args.capture_map
 
     if not items_path.exists():
         print(f"items.json not found at {items_path}", file=sys.stderr)
@@ -100,4 +123,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

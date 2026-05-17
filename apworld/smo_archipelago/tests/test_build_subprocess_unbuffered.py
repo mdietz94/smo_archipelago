@@ -178,3 +178,45 @@ def test_python_invoker_handles_pythonw(monkeypatch) -> None:
     must be recognized as such even though its name isn't 'python'."""
     monkeypatch.setattr(build.sys, "executable", r"C:\Python313\pythonw.exe")
     assert build._python_invoker() == [r"C:\Python313\pythonw.exe"]
+
+
+def test_run_sync_capture_table_threads_explicit_paths(tmp_path) -> None:
+    """sync_capture_table.py has the same REPO_ROOT-relative defaults as
+    extract_shine_map.py — items.json + the capture_table.h output path
+    + capture_map.json. All three must be passed explicitly from the
+    wizard because the bundled layout doesn't match the dev-checkout
+    layout the defaults assume.
+
+    Regression test for the v0.1.8-alpha bug report:
+      items.json not found at C:\\...\\bundled\\apworld\\smo_archipelago\\data\\items.json
+      [stream] subprocess exited with code 1"""
+    captured: dict = {}
+
+    def fake_stream(cmd, *, cwd=None, env=None, on_line=None):
+        captured["cmd"] = cmd
+        return build.BuildResult(ok=True, returncode=0, log="")
+
+    (tmp_path / "sync_capture_table.py").write_text("")
+    (tmp_path / "items.json").write_text("[]")
+    fake_mod = tmp_path / "switch_mod"
+    fake_mod.mkdir()
+    with patch.object(build, "_stream_subprocess", fake_stream), \
+         patch.object(build, "bundled_script",
+                      lambda name: tmp_path / name), \
+         patch.object(build, "bundled_data_file",
+                      lambda name: tmp_path / name), \
+         patch.object(build, "bundled_switch_mod", lambda: fake_mod), \
+         patch.object(build, "data_dir", lambda: tmp_path):
+        build.run_sync_capture_table()
+
+    cmd = captured["cmd"]
+    assert "--items" in cmd, f"--items missing from sync cmd: {cmd}"
+    assert "--out" in cmd, f"--out missing from sync cmd: {cmd}"
+    assert "--capture-map" in cmd, f"--capture-map missing from sync cmd: {cmd}"
+    # The --out path must land inside switch_mod so the cmake build picks
+    # up the generated header.
+    out_idx = cmd.index("--out") + 1
+    assert "switch_mod" in cmd[out_idx], (
+        f"--out {cmd[out_idx]!r} should land inside switch_mod/ so cmake "
+        f"finds the generated capture_table.h"
+    )

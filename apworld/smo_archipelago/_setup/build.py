@@ -315,10 +315,25 @@ def run_sync_capture_table(on_line: ProgressFn | None = None) -> BuildResult:
     Switch mod build needs at compile time. Idempotent — safe to run before
     every build. The build will fail with a compiler error if this is
     skipped (the header is gitignored).
+
+    All three paths are passed explicitly because the script's
+    `Path(__file__).parent.parent`-relative defaults assume a dev source
+    checkout layout. In the bundled layout: items.json lives at
+    <bundled>/data/, switch_mod uses an underscore (Python module-name
+    convention), and capture_map.json is wherever the extract step wrote
+    it under %APPDATA%/SMOArchipelago/data/.
     """
     script = bundled_script("sync_capture_table.py")
+    items = bundled_data_file("items.json")
+    out_header = bundled_switch_mod() / "src" / "ap" / "capture_table.h"
+    capture_map = data_dir() / "capture_map.json"
     return _stream_subprocess(
-        [*_python_invoker(), str(script)],
+        [
+            *_python_invoker(), str(script),
+            "--items", str(items),
+            "--out", str(out_header),
+            "--capture-map", str(capture_map),
+        ],
         on_line=on_line,
     )
 
