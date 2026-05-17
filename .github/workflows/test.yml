@@ -46,6 +46,14 @@ jobs:
           pip install -r requirements.ci.txt
           pip install pytest pytest-asyncio
 
+      # network_data_package is assembled at import time of `worlds`
+      # (vendor/Archipelago/worlds/__init__.py L195) by iterating
+      # AutoWorldRegister.world_types. SMO is only in that map if the
+      # apworld zip is present in custom_worlds/ when discovery runs,
+      # so install it before pytest imports CommonClient.
+      - name: Install apworld zip (so SMO registers in AP's data package)
+        run: python scripts/install_apworld.py
+
       - name: Run pytest
         run: python -m pytest -v apworld/smo_archipelago/tests/
 
