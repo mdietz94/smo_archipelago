@@ -152,11 +152,19 @@ def run_extract_maps(
     Outputs are written into the per-user `%APPDATA%/SMOArchipelago/data/`
     so SMOClient picks them up via the search path added in `client/main.py`.
     Nothing lands inside the repo.
+
+    The child process is forced unbuffered via `-u` + `PYTHONUNBUFFERED=1`.
+    Without this, the wizard's log box stays blank for the full 30-90s of
+    venv-creation + `pip install oead` (both produce zero output normally,
+    AND Python buffers stdout when it isn't a TTY — combined silence makes
+    the wizard look frozen). The env var also propagates through the
+    `os.execv` the bootstrap does to relaunch under the new venv's
+    interpreter, where the `-u` flag is otherwise lost.
     """
     script = bundled_script("extract_shine_map.py")
     out_dir = data_dir()
     args = [
-        sys.executable, str(script),
+        sys.executable, "-u", str(script),
         "--nsp", str(nsp_path),
         "--out", str(out_dir / "shine_map.json"),
         "--review", str(out_dir / "shine_map_review.json"),
@@ -167,7 +175,8 @@ def run_extract_maps(
         args += ["--keys", str(keys_path)]
     if hactool_path:
         args += ["--hactool", str(hactool_path)]
-    return _stream_subprocess(args, on_line=on_line)
+    env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+    return _stream_subprocess(args, env=env, on_line=on_line)
 
 
 def run_cmake_configure(

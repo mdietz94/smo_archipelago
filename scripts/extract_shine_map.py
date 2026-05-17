@@ -54,9 +54,16 @@ def _bootstrap_and_reexec() -> None:
     Only invoked when `import oead` fails. After re-exec we're inside the venv
     and the second `import oead` at the top of this file succeeds. Idempotent:
     if the venv already exists we skip creation and only re-exec.
+
+    All prints use `flush=True` and pip runs without `--quiet` so the wizard
+    that captures our stdout sees real-time progress during the otherwise-
+    silent ~30-90s of venv creation + oead install. Without this the wizard's
+    log box stays blank until the extraction step proper starts, and users
+    reasonably conclude the whole thing has hung.
     """
     if not VENV_PY.exists():
-        print(f"[bootstrap] creating Python 3.12 venv at {VENV_DIR}", file=sys.stderr)
+        print(f"[bootstrap] creating Python 3.12 venv at {VENV_DIR}",
+              file=sys.stderr, flush=True)
         try:
             subprocess.run(["py", "-3.12", "-m", "venv", str(VENV_DIR)], check=True)
         except (FileNotFoundError, subprocess.CalledProcessError) as e:
@@ -64,15 +71,28 @@ def _bootstrap_and_reexec() -> None:
                 f"ERROR: Python 3.12 not available via `py -3.12` ({e}).\n"
                 f"Install:  winget install -e --id Python.Python.3.12"
             )
-        print(f"[bootstrap] installing oead in {VENV_DIR}", file=sys.stderr)
+        print(f"[bootstrap] installing oead in {VENV_DIR} (one-time, ~30-60s)",
+              file=sys.stderr, flush=True)
+        # No --quiet: pip's "Collecting / Downloading / Installing" lines are
+        # the only signal that anything is happening during the install.
         subprocess.run(
-            [str(VENV_PY), "-m", "pip", "install", "--quiet", "oead"],
+            [str(VENV_PY), "-m", "pip", "install", "oead"],
             check=True,
         )
+        print(f"[bootstrap] venv ready; re-executing under {VENV_PY}",
+              file=sys.stderr, flush=True)
     # Re-exec ourselves in the venv. os.execv on Windows replaces the current
-    # process; the next `import oead` will succeed.
-    os.execv(str(VENV_PY), [str(VENV_PY), __file__] + sys.argv[1:])
+    # process; the next `import oead` will succeed. Preserve `-u` so the
+    # post-execv child stays unbuffered for the wizard's log capture.
+    os.execv(str(VENV_PY), [str(VENV_PY), "-u", __file__] + sys.argv[1:])
 
+
+# Eagerly tell the caller we've started — without this the wizard's log box
+# can sit empty for several seconds while Python imports the stdlib graph
+# above before we even reach the oead check. flush=True so the line isn't
+# swallowed by stdout buffering in case the caller forgot -u/PYTHONUNBUFFERED.
+print("[extract] starting; checking for oead Python package...",
+      file=sys.stderr, flush=True)
 
 try:
     import oead  # type: ignore
