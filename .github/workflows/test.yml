@@ -1,0 +1,141 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel in-flight runs for the same branch when a new commit lands.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-unit:
+    name: Python unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          submodules: false
+
+      # Only vendor/Archipelago is needed for the Python suite. The C++
+      # exlaunch/lunakit-vendor submodules are AArch64-only and the host
+      # tests don't use them.
+      - name: Initialize Archipelago submodule
+        run: git submodule update --init --depth 1 vendor/Archipelago
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      # Filter AP's requirements down to the headless-server subset:
+      #   - kivy/kivymd:  GUI, not needed for tests (also slow to build on CI)
+      #   - pyshortcuts:  desktop integration
+      #   - Pymem:        Windows-only (ctypes against the Win32 process API)
+      # ModuleUpdate.update_ran=True in ap_generate.py / ap_server.py keeps
+      # AP from auto-pip'ing the rest at runtime.
+      - name: Install Archipelago deps (headless subset)
+        run: |
+          python -m pip install --upgrade pip wheel
+          grep -Ev '^(kivy|kivymd|pyshortcuts|Pymem)' vendor/Archipelago/requirements.txt > requirements.ci.txt
+          pip install -r requirements.ci.txt
+          pip install pytest pytest-asyncio
+
+      # network_data_package is assembled at import time of `worlds`
+      # (vendor/Archipelago/worlds/__init__.py L195) by iterating
+      # AutoWorldRegister.world_types. SMO is only in that map if the
+      # apworld zip is present in custom_worlds/ when discovery runs,
+      # so install it before pytest imports CommonClient.
+      - name: Install apworld zip (so SMO registers in AP's data package)
+        run: python scripts/install_apworld.py
+
+      - name: Run pytest
+        run: python -m pytest -v apworld/smo_archipelago/tests/
+
+  python-live-ap:
+    name: Live AP loopback + generation sweep
+    runs-on: ubuntu-latest
+    needs: python-unit
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          submodules: false
+
+      - name: Initialize Archipelago submodule
+        run: git submodule update --init --depth 1 vendor/Archipelago
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install Archipelago deps (headless subset)
+        run: |
+          python -m pip install --upgrade pip wheel
+          grep -Ev '^(kivy|kivymd|pyshortcuts|Pymem)' vendor/Archipelago/requirements.txt > requirements.ci.txt
+          pip install -r requirements.ci.txt
+          pip install pytest pytest-asyncio
+
+      # Required by test_ap_loopback (the bridge loads the apworld from
+      # vendor/Archipelago/custom_worlds/) and test_apworld_generation
+      # (the fixture rebuilds it but a baseline install is harmless).
+      - name: Install apworld zip
+        run: python scripts/install_apworld.py
+
+      # SMOAP_GEN_TEST_FAST keeps the generation sweep to the headline
+      # all-on / all-off cases — full sweep is 18 scenarios * 2 (solo +
+      # multi-world partner) and runs several minutes per CI worker.
+      - name: Run live-AP tests
+        env:
+          SMOAP_LIVE_AP: '1'
+          SMOAP_GEN_TEST_FAST: '1'
+        run: |
+          python -m pytest -v \
+            apworld/smo_archipelago/tests/test_ap_loopback.py \
+            apworld/smo_archipelago/tests/test_apworld_generation.py
+
+  cpp-host:
+    name: Switch-mod host tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          submodules: false
+
+      # ubuntu-latest already ships a recent g++ (>= 13). All three host
+      # tests are pure C++20, header-only-from-the-Switch-side via
+      # SMOAP_HOST_TEST guards (see switch-mod/src/util/Log.hpp).
+      - name: Show compiler version
+        run: g++ --version
+
+      - name: Build + run test_json
+        run: |
+          g++ -std=c++20 -Wall -Wextra -O0 -g \
+            switch-mod/tests/test_json.cpp \
+            switch-mod/src/util/Json.cpp \
+            -Iswitch-mod/src -o test_json
+          ./test_json
+
+      - name: Build + run test_protocol
+        run: |
+          g++ -std=c++20 -Wall -Wextra -O0 -g \
+            switch-mod/tests/test_protocol.cpp \
+            switch-mod/src/ap/ApProtocol.cpp \
+            switch-mod/src/util/Json.cpp \
+            -Iswitch-mod/src -o test_protocol
+          ./test_protocol
+
+      - name: Build + run test_cappy_messenger
+        run: |
+          g++ -std=c++20 -Wall -Wextra -O0 -g -DSMOAP_HOST_TEST \
+            switch-mod/tests/test_cappy_messenger.cpp \
+            switch-mod/src/ui/CappyMessenger.cpp \
+            -Iswitch-mod/src -o test_cappy_messenger
+          ./test_cappy_messenger
