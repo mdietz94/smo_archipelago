@@ -213,6 +213,56 @@ def test_cmake_3_24_0_exact_boundary(fake_run) -> None:
     assert r.ok
 
 
+def test_cmake_prefers_windows_native_over_path(monkeypatch, tmp_path, fake_run) -> None:
+    """Regression test for v0.1.8-alpha build crash:
+      CMake Error: The source directory "/c/.../C:/Users/.../switch_mod" does not exist.
+
+    Root cause: devkitPro's installer prepends `C:\\devkitPro\\msys2\\usr\\bin`
+    to PATH. A bare `cmake` then resolves to msys2's posix-style cmake,
+    which treats `:` as a path separator (not a drive-letter marker) and
+    mangles `C:\\Users\\...` into `/c/cwd/C:/Users/...`. The Windows-native
+    Kitware CMake at C:/Program Files/CMake/bin/cmake.exe handles
+    drive letters correctly. Detector must probe canonical install paths
+    FIRST, fall back to PATH only when none of them exist."""
+    fake_cmake = tmp_path / "kitware-cmake.exe"
+    fake_cmake.write_text("")  # exists() must be True
+    monkeypatch.setattr(prereqs, "_CMAKE_DEFAULT_PATHS", (fake_cmake,))
+    fake_run({
+        f"{fake_cmake} --version": (0, "cmake version 3.30.5\n", ""),
+        "cmake --version": (0, "cmake version 3.28.0\n", ""),  # would-be msys2 fallback
+    })
+    r = check_cmake()
+    assert r.ok
+    assert "3.30.5" in r.detail, (
+        f"expected Windows-native cmake (3.30.5), got {r.detail!r}; "
+        f"PATH-fallback 3.28.0 should have been skipped"
+    )
+    assert prereqs.resolved_cmake() == str(fake_cmake), (
+        f"resolved_cmake() must return the Windows-native path so the "
+        f"build step doesn't re-resolve to msys2's cmake via PATH"
+    )
+
+
+def test_cmake_falls_back_to_path_when_no_windows_install(
+    monkeypatch, fake_run,
+) -> None:
+    """No Kitware cmake installed at the canonical Windows paths → use
+    whatever's on PATH. Most users have it via PATH only; that case has
+    to stay working."""
+    monkeypatch.setattr(prereqs, "_CMAKE_DEFAULT_PATHS", ())  # empty probe list
+    fake_run({"cmake --version": (0, "cmake version 3.30.5\n", "")})
+    r = check_cmake()
+    assert r.ok
+    assert prereqs.resolved_cmake() == "cmake"
+
+
+def test_resolved_cmake_defaults_to_bare_name_when_check_not_run(monkeypatch) -> None:
+    """Callers that bypass check_cmake (tests, direct REPL usage) get a
+    sensible fallback rather than a None-deref."""
+    monkeypatch.setattr(prereqs, "_resolved_cmake", None)
+    assert prereqs.resolved_cmake() == "cmake"
+
+
 # ---------- check_ninja ----------
 
 def test_ninja_present(fake_run) -> None:

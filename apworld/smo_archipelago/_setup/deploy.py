@@ -175,3 +175,34 @@ def deploy_to_ryujinx(
             files=[],
             error=f"{type(e).__name__}: {e}",
         )
+
+
+def deploy_to_custom_folder(
+    custom_root: Path,
+    build_outputs: dict[str, Path],
+) -> DeployResult:
+    """Copy build outputs to an arbitrary folder using the SD-card layout.
+
+    Useful when the user wants to manage SD-card sync themselves —
+    e.g. UMS later, or copy via DBI / Goldleaf, or stage on a Dropbox
+    folder before a manual transfer. We write the same `atmosphere/
+    contents/0100000000010000/{exefs,romfs}/` subtree the SD-card
+    deploy produces, just under the user's chosen folder root, so they
+    can drop the entire subtree onto a Switch SD card and have it work
+    without any path-rewriting.
+    """
+    try:
+        dests = _sd_layout(custom_root)
+        copied = _copy_files(build_outputs, dests)
+        return DeployResult(
+            ok=True,
+            target=f"Custom folder at {custom_root}",
+            files=copied,
+        )
+    except (OSError, PermissionError) as e:
+        return DeployResult(
+            ok=False,
+            target=f"Custom folder at {custom_root}",
+            files=[],
+            error=f"{type(e).__name__}: {e}",
+        )

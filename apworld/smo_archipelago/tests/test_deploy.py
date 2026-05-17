@@ -14,6 +14,7 @@ from _setup.deploy import (
     DeployResult,
     _ryujinx_layout,
     _sd_layout,
+    deploy_to_custom_folder,
     deploy_to_ryujinx,
     deploy_to_sd,
     detect_ryujinx_path,
@@ -125,3 +126,45 @@ def test_detect_ryujinx_path_returns_path_when_present(
     (tmp_path / "Ryujinx").mkdir()
     monkeypatch.setenv("APPDATA", str(tmp_path))
     assert detect_ryujinx_path() == tmp_path / "Ryujinx"
+
+
+def test_deploy_to_custom_folder_uses_sd_card_layout(tmp_path: Path) -> None:
+    """The custom-folder deploy must lay files out using the SD-card
+    layout (atmosphere/contents/<title-id>/{exefs,romfs}/) so the user
+    can drop the entire subtree onto a Switch SD card root and have it
+    work without any path rewriting."""
+    sources = _make_fake_build(tmp_path)
+    custom_root = tmp_path / "MyStaging"
+    custom_root.mkdir()
+
+    result = deploy_to_custom_folder(custom_root, sources)
+    assert result.ok, f"deploy failed: {result.error}"
+    assert "Custom folder" in result.target
+    assert custom_root.name in result.target
+
+    base = custom_root / "atmosphere" / "contents" / SMO_TITLE_ID
+    assert (base / "exefs" / "subsdk9").is_file()
+    assert (base / "exefs" / "main.npdm").is_file()
+    assert (base / "romfs" / "ap_config.json").is_file()
+    # Bytes match — confirms it's a real copy, not just a touch.
+    assert (base / "exefs" / "subsdk9").read_bytes() == sources["subsdk9"].read_bytes()
+
+
+def test_deploy_to_custom_folder_handles_permission_error(
+    monkeypatch, tmp_path: Path,
+) -> None:
+    """Same error-wrapping discipline as deploy_to_sd / deploy_to_ryujinx
+    — surface the OSError as a DeployResult so the wizard can offer Retry
+    instead of crashing."""
+    sources = _make_fake_build(tmp_path)
+    custom_root = tmp_path / "Locked"
+    custom_root.mkdir()
+    import shutil
+    monkeypatch.setattr(
+        shutil, "copy2",
+        lambda src, dst: (_ for _ in ()).throw(PermissionError("no write")),
+    )
+    result = deploy_to_custom_folder(custom_root, sources)
+    assert not result.ok
+    assert "PermissionError" in result.error
+    assert "Custom folder" in result.target

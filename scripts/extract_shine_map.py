@@ -23,11 +23,19 @@ Prereqs the user must have:
 """
 from __future__ import annotations
 
+# Pre-import diagnostic line: proves the script even started executing.
+# When the AP frozen Launcher's wizard captures our stdout, "no output for
+# 60s" usually means we never got here (path resolution broke, stdout pipe
+# closed). Print to stderr (wizard merges stderr->stdout) and flush so the
+# line appears even if the parent forgot -u / PYTHONUNBUFFERED.
+import sys
+print(f"[extract] script invoked: __file__={__file__!r}", file=sys.stderr, flush=True)
+print(f"[extract] python={sys.executable!r} argv={sys.argv!r}", file=sys.stderr, flush=True)
+
 import argparse
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -565,6 +573,11 @@ def write_outputs(resolved: list[ResolvedShine], review: ReviewReport,
 
 
 def main(argv: list[str] | None = None) -> int:
+    # `global` must precede any use of the name; the --locations / --items
+    # defaults below reference these module-level constants, so the
+    # declaration has to come first.
+    global APWORLD_LOCATIONS, APWORLD_ITEMS
+
     ap = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=__doc__.split("\n\n", 1)[0],
@@ -588,7 +601,23 @@ def main(argv: list[str] | None = None) -> int:
                     help=f"output capture review (default: {DEFAULT_CAP_REVIEW})")
     ap.add_argument("--romfs", type=Path, default=None,
                     help="skip NSP extract; use pre-extracted RomFS directory")
+    # Overrides for the apworld data files used in cross-validation. When
+    # invoked from the wizard inside AP's frozen Launcher, the data files
+    # have been extracted out of the .apworld zip to a separate location
+    # (see _setup.build.bundled_data_file) — the REPO_ROOT-relative
+    # defaults below only resolve on a dev source checkout.
+    ap.add_argument("--locations", type=Path, default=APWORLD_LOCATIONS,
+                    help=f"apworld locations.json (default: {APWORLD_LOCATIONS})")
+    ap.add_argument("--items", type=Path, default=APWORLD_ITEMS,
+                    help=f"apworld items.json (default: {APWORLD_ITEMS})")
     args = ap.parse_args(argv)
+
+    # Re-bind the module globals the rest of the script reads. Cheaper
+    # than threading args through every callsite — these are read-only
+    # path constants downstream. (The `global` declaration is above, at
+    # the top of main(), because Python requires it before any use.)
+    APWORLD_LOCATIONS = args.locations
+    APWORLD_ITEMS = args.items
 
     if not APWORLD_LOCATIONS.exists():
         return _fail(f"apworld locations.json not found at {APWORLD_LOCATIONS}")

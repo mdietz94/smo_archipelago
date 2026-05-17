@@ -229,7 +229,76 @@ def _parse_cmake_version(text: str) -> tuple[int, int, int] | None:
     return (int(major), int(minor), int(patch))
 
 
+# Canonical Windows-CMake install locations from Kitware's MSI. Probed
+# BEFORE the bare-name PATH lookup because devkitPro's installer adds
+# `C:\devkitPro\msys2\usr\bin` to the front of PATH, which means a plain
+# `cmake` resolves to msys2's posix-style cmake — and that build treats
+# `C:\path` as a relative path (msys2 uses `:` as a path separator, not
+# a drive letter), turning the Switch-mod source path into
+# "/c/cwd/C:/Users/.../switch_mod" → CMake error: source dir does not
+# exist. The Kitware-built Windows cmake handles drive letters
+# correctly. CLAUDE.md flags this gotcha.
+_CMAKE_DEFAULT_PATHS = (
+    Path("C:/Program Files/CMake/bin/cmake.exe"),
+    Path("C:/Program Files (x86)/CMake/bin/cmake.exe"),
+)
+
+# Module-level cache for the resolved cmake binary path. `check_cmake`
+# writes it; `resolved_cmake()` reads. Other modules (build.py) use the
+# getter rather than re-running detection.
+_resolved_cmake: str | None = None
+
+
+def resolved_cmake() -> str:
+    """Return the cmake binary path resolved by the most recent
+    `check_cmake` call, or the bare name "cmake" if detection hasn't
+    been run (fallback so callers don't crash on direct invocation in
+    tests etc.). Production callers should always run check_cmake first.
+    """
+    return _resolved_cmake if _resolved_cmake is not None else "cmake"
+
+
 def check_cmake() -> PrereqResult:
+    """Probe Windows-native CMake first, then fall back to PATH.
+
+    Side effect: writes the resolved binary path to module-level
+    `_resolved_cmake` so `run_cmake_configure` / `run_cmake_build` can
+    invoke the SAME cmake the prereq check passed — without this, the
+    build step could pick up a different (msys2) cmake from PATH and
+    blow up with drive-letter resolution errors.
+    """
+    global _resolved_cmake
+
+    # Try canonical Kitware install paths first.
+    candidates: list[str] = []
+    for default in _CMAKE_DEFAULT_PATHS:
+        if default.exists():
+            candidates.append(str(default))
+    # Then fall back to whatever's on PATH (might be msys2 cmake — works
+    # for many users but breaks on the Switch-mod build; if it's the
+    # only option, surface it anyway so we can produce a useful error
+    # later).
+    candidates.append("cmake")
+
+    for cand in candidates:
+        r = _safe_run([cand, "--version"])
+        if r is None or r[0] != 0:
+            continue
+        ver = _parse_cmake_version(r[1] or r[2])
+        if ver is None:
+            continue
+        if (ver[0], ver[1]) < MIN_CMAKE:
+            # Found a working cmake but it's too old; keep looking in
+            # case another candidate is newer.
+            continue
+        _resolved_cmake = cand
+        return PrereqResult(
+            "cmake", f"CMake {MIN_CMAKE[0]}.{MIN_CMAKE[1]}+", True,
+            f"{ver[0]}.{ver[1]}.{ver[2]} ({cand})",
+        )
+
+    # Nothing usable — replay PATH cmake one more time so the failure
+    # detail mirrors what the user would see manually.
     r = _safe_run(["cmake", "--version"])
     if r is None or r[0] != 0:
         return PrereqResult(
@@ -244,16 +313,11 @@ def check_cmake() -> PrereqResult:
             "found, but couldn't parse `cmake --version` output",
             INSTALL_URLS["cmake"],
         )
-    if (ver[0], ver[1]) < MIN_CMAKE:
-        return PrereqResult(
-            "cmake", f"CMake {MIN_CMAKE[0]}.{MIN_CMAKE[1]}+", False,
-            f"{ver[0]}.{ver[1]}.{ver[2]} too old (need "
-            f"{MIN_CMAKE[0]}.{MIN_CMAKE[1]}+)",
-            INSTALL_URLS["cmake"],
-        )
     return PrereqResult(
-        "cmake", f"CMake {MIN_CMAKE[0]}.{MIN_CMAKE[1]}+", True,
-        f"{ver[0]}.{ver[1]}.{ver[2]}",
+        "cmake", f"CMake {MIN_CMAKE[0]}.{MIN_CMAKE[1]}+", False,
+        f"{ver[0]}.{ver[1]}.{ver[2]} too old (need "
+        f"{MIN_CMAKE[0]}.{MIN_CMAKE[1]}+)",
+        INSTALL_URLS["cmake"],
     )
 
 

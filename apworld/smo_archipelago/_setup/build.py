@@ -19,11 +19,12 @@ import os
 import shutil
 import subprocess
 import sys
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable
 
-from . import build_dir, data_dir
+from . import appdata_root, build_dir, data_dir
 
 # Where the bundled C++ sources + extractor scripts live inside the apworld.
 # Filled by `install_apworld.py --bundle-mod --bundle-scripts`. On dev
@@ -32,6 +33,46 @@ from . import build_dir, data_dir
 _SETUP_ROOT = Path(__file__).resolve().parent
 _BUNDLED_MOD = _SETUP_ROOT / "switch_mod"
 _BUNDLED_SCRIPTS = _SETUP_ROOT / "scripts"
+
+# Memoizes the resolved on-disk location of the bundled tree. None means
+# "haven't checked yet"; once resolved we never re-extract during the same
+# process lifetime.
+_extracted_bundled_root: Path | None = None
+
+
+def _python_invoker() -> list[str]:
+    """Return the command prefix that invokes a Python script via subprocess.
+
+    Under AP's official Windows installer, `sys.executable` is
+    `ArchipelagoLauncher.exe` — a PyInstaller-bundled launcher that
+    argparse-parses its own argv. Spawning `[sys.executable, "-u",
+    "script.py", "--nsp", ...]` doesn't run Python on script.py; it
+    re-invokes the launcher with those args, which fails with
+    "unrecognized arguments: -u --nsp ...". (Reproduced in the
+    diagnostic build's extract.log.)
+
+    Fall back to the `py` launcher (`py -3.12`), which the wizard's
+    prereq check has already confirmed exists and works. We prefer 3.12
+    over the system default because the extractor's bootstrap re-execs
+    into a 3.12 venv anyway — invoking with 3.12 from the start means
+    the os.execv is a no-op when oead is already installed.
+
+    On a dev source checkout, `sys.executable` IS a Python interp and
+    we use it directly so the script runs under the same venv the
+    developer set up for the rest of SMOClient.
+    """
+    exe_name = Path(sys.executable).stem.lower()
+    if exe_name in ("python", "python3", "py", "pythonw"):
+        return [sys.executable]
+    # Frozen-launcher path: probe alternatives in preference order.
+    if shutil.which("py"):
+        return ["py", "-3.12"]
+    for candidate in ("python3.12", "python3", "python"):
+        if shutil.which(candidate):
+            return [candidate]
+    # Last-resort: return sys.executable so the resulting error at
+    # least shows what we tried (better than spawning nothing at all).
+    return [sys.executable]
 
 # Progress-line callback type: receives one rstripped line of stdout/stderr
 # from the child process per call. None means "process finished" — wizard
@@ -52,28 +93,166 @@ class BuildResult:
     log: str
 
 
+def _find_apworld_zip(setup_root: Path) -> Path | None:
+    """Walk up from `_SETUP_ROOT` looking for a `.apworld` file ancestor.
+
+    Returns the zip path if `setup_root` is inside a zip-loaded apworld
+    (the production case under AP's frozen Launcher), or None on a dev
+    source checkout where `_SETUP_ROOT` is a real on-disk directory."""
+    cur = setup_root
+    # Walk up at most ~10 levels; .apworld is normally 2-3 levels above us.
+    for _ in range(10):
+        # `is_file()` distinguishes "real zip ancestor" from "real directory".
+        if cur.suffix == ".apworld" and cur.is_file():
+            return cur
+        parent = cur.parent
+        if parent == cur:
+            return None
+        cur = parent
+    return None
+
+
+def _extract_bundled_tree() -> Path:
+    """Extract the bundled `scripts/` + `switch_mod/` trees from inside
+    `smo.apworld` to a real filesystem location, and return that location.
+
+    Necessary because:
+      - AP loads `.apworld` files via Python's zipimporter. Code inside
+        the zip imports fine, but `Path(__file__).parent / "scripts" /
+        "x.py"` is a path string with the .apworld ZIP-file as a midpoint
+        directory — `Path.exists()` returns False, `subprocess.run()`
+        can't invoke files at such paths.
+      - The extractor script bootstraps a venv next to itself
+        (`<script_dir>/.extract-venv/`); cmake reads switch_mod/ as a
+        regular source tree. Both need real on-disk files.
+
+    Caches in `_extracted_bundled_root` so we extract once per process.
+    On a dev source checkout where `_SETUP_ROOT` is a real directory,
+    the in-place path is returned without copying.
+
+    Extraction target: `%APPDATA%/SMOArchipelago/bundled/`. The 1500-odd
+    files (~25 MB unpacked) plus the eventual ~5 GB RomFS cache and
+    Python 3.12 venv live there too — kept off C: root and out of the
+    AP install dir (which on the official installer requires admin to
+    write to)."""
+    global _extracted_bundled_root
+    if _extracted_bundled_root is not None:
+        return _extracted_bundled_root
+
+    apworld_zip = _find_apworld_zip(_SETUP_ROOT)
+    if apworld_zip is None:
+        # Dev / source checkout — _SETUP_ROOT IS the real on-disk dir.
+        _extracted_bundled_root = _SETUP_ROOT
+        return _extracted_bundled_root
+
+    dst = appdata_root() / "bundled"
+    # Marker file records the source-zip mtime so a refresh of the
+    # apworld (e.g. user upgrades to a new release) triggers re-extract
+    # instead of using a stale cached copy.
+    marker = dst / ".source-zip-mtime"
+    src_mtime = apworld_zip.stat().st_mtime
+    if marker.exists():
+        try:
+            cached_mtime = float(marker.read_text(encoding="utf-8").strip())
+            if cached_mtime == src_mtime and (dst / "scripts").exists():
+                _extracted_bundled_root = dst
+                return _extracted_bundled_root
+        except (ValueError, OSError):
+            pass  # corrupt marker — re-extract
+
+    # Stale or absent — wipe and re-extract.
+    if dst.exists():
+        shutil.rmtree(dst, ignore_errors=True)
+    dst.mkdir(parents=True, exist_ok=True)
+
+    # We extract two subtrees from inside `smo.apworld`:
+    #   smo/_setup/scripts/...  ->  <bundled>/scripts/...
+    #   smo/_setup/switch_mod/... -> <bundled>/switch_mod/...
+    #   smo/data/...            ->  <bundled>/data/...
+    #
+    # The `smo/_setup/` ones are the cross-compile scripts + sources
+    # subprocesses invoke directly. The `smo/data/` ones are items.json
+    # and locations.json, which the extractor reads on disk for
+    # cross-validation against the SMO RomFS dump. (The rest of the
+    # apworld — Python modules, client/, hooks/ — is loaded by zipimport
+    # from inside the .apworld zip and doesn't need extraction.)
+    prefixes = (
+        ("smo/_setup/", ""),     # extract sibling to "scripts/" + "switch_mod/"
+        ("smo/data/", "data/"),  # extract at <bundled>/data/<filename>
+    )
+    with zipfile.ZipFile(apworld_zip) as zf:
+        for info in zf.infolist():
+            name = info.filename
+            for src_prefix, dst_prefix in prefixes:
+                if not name.startswith(src_prefix):
+                    continue
+                rel = dst_prefix + name[len(src_prefix):]
+                if rel == dst_prefix:  # the prefix entry itself
+                    break
+                target = dst / rel
+                if info.is_dir() or name.endswith("/"):
+                    target.mkdir(parents=True, exist_ok=True)
+                    break
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(info) as src_f, open(target, "wb") as dst_f:
+                    shutil.copyfileobj(src_f, dst_f)
+                break  # name matched this prefix; don't try the next
+
+    marker.write_text(str(src_mtime), encoding="utf-8")
+    _extracted_bundled_root = dst
+    return _extracted_bundled_root
+
+
 def bundled_switch_mod() -> Path:
     """Path to the bundled `switch_mod/` source tree, or raises if absent.
 
-    Absent means the apworld zip was built without `--bundle-mod`, or this
-    is a dev checkout where the bundling hasn't been done. In production
-    this never raises (CI always passes --bundle-mod); in dev the message
-    tells you to run install_apworld.py with the right flags."""
-    if not (_BUNDLED_MOD / "CMakeLists.txt").exists():
+    On a frozen-Launcher install this extracts the tree out of the
+    apworld zip to %APPDATA%/SMOArchipelago/bundled/ on first call.
+    Absent (after a successful extract) means the apworld zip was built
+    without `--bundle-mod`, or this is a dev checkout where the bundling
+    hasn't been done."""
+    root = _extract_bundled_tree()
+    mod = root / "switch_mod"
+    if not (mod / "CMakeLists.txt").exists():
         raise FileNotFoundError(
-            f"bundled switch_mod sources not found at {_BUNDLED_MOD}. "
+            f"bundled switch_mod sources not found at {mod}. "
             f"Run `python scripts/install_apworld.py --bundle-mod` first."
         )
-    return _BUNDLED_MOD
+    return mod
 
 
 def bundled_script(name: str) -> Path:
-    """Path to a bundled extractor/sync script, or raises if absent."""
-    p = _BUNDLED_SCRIPTS / name
+    """Path to a bundled extractor/sync script, or raises if absent.
+
+    On a frozen-Launcher install this extracts the scripts/ folder out of
+    the apworld zip to %APPDATA%/SMOArchipelago/bundled/scripts/ on first
+    call. Subsequent calls hit the cached extraction. The script can
+    therefore write its venv + RomFS cache to siblings of its own
+    location, which it expects to be a real on-disk directory."""
+    root = _extract_bundled_tree()
+    p = root / "scripts" / name
     if not p.exists():
         raise FileNotFoundError(
             f"bundled script {name!r} not found at {p}. "
             f"Run `python scripts/install_apworld.py --bundle-scripts` first."
+        )
+    return p
+
+
+def bundled_data_file(name: str) -> Path:
+    """Path to a bundled apworld data file (items.json, locations.json),
+    or raises if absent.
+
+    Same zip-extraction story as bundled_script: the extractor reads
+    these on disk for cross-validation, so we need a real filesystem
+    path, not a zipimport-style path inside the .apworld."""
+    root = _extract_bundled_tree()
+    p = root / "data" / name
+    if not p.exists():
+        raise FileNotFoundError(
+            f"bundled data file {name!r} not found at {p}. "
+            f"This usually means the apworld was built without the data "
+            f"directory — re-run `python scripts/install_apworld.py`."
         )
     return p
 
@@ -90,6 +269,11 @@ def _stream_subprocess(
 
     stderr is merged into stdout so cmake's "this file failed to compile"
     interleaves correctly with the progress chatter on stdout.
+
+    The exact `cmd` is emitted via `on_line` BEFORE spawning so the
+    wizard's file log + Kivy widget show what would have been run, even
+    if the child produces zero output (which has been the failure mode
+    we keep chasing in the extract step).
     """
     log_lines: list[str] = []
 
@@ -97,6 +281,8 @@ def _stream_subprocess(
         log_lines.append(line)
         if on_line is not None:
             on_line(line)
+
+    _emit(f"[stream] spawning: {cmd}")
 
     try:
         proc = subprocess.Popen(
@@ -113,10 +299,12 @@ def _stream_subprocess(
         _emit(msg)
         return BuildResult(ok=False, returncode=127, log=msg)
 
+    _emit(f"[stream] spawned pid={proc.pid}; waiting for stdout...")
     assert proc.stdout is not None
     for raw in proc.stdout:
         _emit(raw.rstrip("\r\n"))
     rc = proc.wait()
+    _emit(f"[stream] subprocess exited with code {rc}")
     return BuildResult(ok=(rc == 0), returncode=rc, log="\n".join(log_lines))
 
 
@@ -127,10 +315,25 @@ def run_sync_capture_table(on_line: ProgressFn | None = None) -> BuildResult:
     Switch mod build needs at compile time. Idempotent — safe to run before
     every build. The build will fail with a compiler error if this is
     skipped (the header is gitignored).
+
+    All three paths are passed explicitly because the script's
+    `Path(__file__).parent.parent`-relative defaults assume a dev source
+    checkout layout. In the bundled layout: items.json lives at
+    <bundled>/data/, switch_mod uses an underscore (Python module-name
+    convention), and capture_map.json is wherever the extract step wrote
+    it under %APPDATA%/SMOArchipelago/data/.
     """
     script = bundled_script("sync_capture_table.py")
+    items = bundled_data_file("items.json")
+    out_header = bundled_switch_mod() / "src" / "ap" / "capture_table.h"
+    capture_map = data_dir() / "capture_map.json"
     return _stream_subprocess(
-        [sys.executable, str(script)],
+        [
+            *_python_invoker(), str(script),
+            "--items", str(items),
+            "--out", str(out_header),
+            "--capture-map", str(capture_map),
+        ],
         on_line=on_line,
     )
 
@@ -163,13 +366,20 @@ def run_extract_maps(
     """
     script = bundled_script("extract_shine_map.py")
     out_dir = data_dir()
+    # Point the extractor at the bundled apworld data files explicitly.
+    # Its REPO_ROOT-relative default (`<__file__>.parent.parent / "apworld"
+    # / "smo_archipelago" / "data" / "locations.json"`) assumes a dev
+    # source checkout layout; the post-zip-extract bundled layout puts
+    # them at <bundled>/data/.
     args = [
-        sys.executable, "-u", str(script),
+        *_python_invoker(), "-u", str(script),
         "--nsp", str(nsp_path),
         "--out", str(out_dir / "shine_map.json"),
         "--review", str(out_dir / "shine_map_review.json"),
         "--cap-out", str(out_dir / "capture_map.json"),
         "--cap-review", str(out_dir / "capture_map_review.json"),
+        "--locations", str(bundled_data_file("locations.json")),
+        "--items", str(bundled_data_file("items.json")),
     ]
     if keys_path:
         args += ["--keys", str(keys_path)]
@@ -198,9 +408,16 @@ def run_cmake_configure(
     if devkitpro:
         env["DEVKITPRO"] = devkitpro
     toolchain = mod_root / "lunakit-vendor" / "cmake" / "toolchain.cmake"
+    # Use the cmake binary the prereq check resolved (Windows-native if
+    # available). A bare `"cmake"` here would re-resolve via PATH, and
+    # devkitPro's installer puts `C:\devkitPro\msys2\usr\bin` ahead of
+    # the Windows CMake install dir — msys2 cmake then mangles
+    # `C:\Users\...` paths into `/c/cwd/C:/Users/...` because it treats
+    # `:` as a path separator rather than a drive-letter marker.
+    from .prereqs import resolved_cmake
     return _stream_subprocess(
         [
-            "cmake",
+            resolved_cmake(),
             "-S", str(mod_root),
             "-B", str(build_dir() / "cmake"),
             "-G", "Ninja",
@@ -216,8 +433,10 @@ def run_cmake_build(on_line: ProgressFn | None = None) -> BuildResult:
     """CMake build step: invokes Ninja under the hood, produces
     `subsdk9`, `subsdk9.elf`, `main.npdm`, `ap_config.json` inside
     `%APPDATA%/SMOArchipelago/build/cmake/`."""
+    # Same Windows-vs-msys2 cmake-binary rationale as run_cmake_configure.
+    from .prereqs import resolved_cmake
     return _stream_subprocess(
-        ["cmake", "--build", str(build_dir() / "cmake")],
+        [resolved_cmake(), "--build", str(build_dir() / "cmake")],
         on_line=on_line,
     )
 

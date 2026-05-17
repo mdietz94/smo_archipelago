@@ -49,6 +49,7 @@ from .build import (
 )
 from .deploy import (
     DeployResult,
+    deploy_to_custom_folder,
     deploy_to_ryujinx,
     deploy_to_sd,
     detect_ryujinx_path,
@@ -82,6 +83,28 @@ def save_setup_state(state: dict[str, Any]) -> None:
         p.write_text(json.dumps(state, indent=2), encoding="utf-8")
     except OSError as e:
         log.warning("failed to write setup_state.json: %s", e)
+
+
+def _wizard_log_path():
+    return appdata_root() / "wizard.log"
+
+
+def wizard_log(line: str) -> None:
+    """Append a breadcrumb to %APPDATA%/SMOArchipelago/wizard.log.
+
+    Independent of the per-step extract.log (which only covers the
+    extract subprocess) — this captures page transitions, deploy
+    handler entry/exit, populate() execution, exception tracebacks,
+    etc. so a "black screen, no text" report has SOMETHING for us to
+    read after the fact.
+    """
+    import time
+    try:
+        p = _wizard_log_path()
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(f"[{time.strftime('%H:%M:%S')}] {line}\n")
+    except OSError:
+        pass  # best-effort; log losing a line shouldn't break the wizard
 
 
 # ---------------------------------------------------------------------------
@@ -158,20 +181,23 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
 
     # ----------------------------- shared state ---------------------------
 
+    saved_state = load_setup_state()
     wizard_state: dict[str, Any] = {
         "smoap_path": smoap_path,
         "smoap": parse_smoap(Path(smoap_path)) if smoap_path else None,
         "nsp_path": None,        # Path | None
         "bridge_ip": detect_lan_ip(),
         "build_done": False,     # set True when cmake completes
-        "deploy_target": load_setup_state().get("deploy_target", "ryujinx"),
+        "deploy_target": saved_state.get("deploy_target", "ryujinx"),
         "ryujinx_root": str(detect_ryujinx_path() or ""),
         "sd_root": "",
+        "custom_root": saved_state.get("custom_root", ""),
         # Set by the Done page's "Launch SMOClient" button before stopping
         # Kivy. The caller (in __init__.py) reads this after `App().run()`
         # returns and performs the actual SMOClient launch.
         "launch_smoclient_after_close": False,
     }
+    wizard_log(f"=== wizard start (smoap={smoap_path!r}) ===")
 
     sm = ScreenManager()
 
@@ -342,6 +368,16 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
         root.add_widget(_h1("Extract moon + capture maps"))
         status = _label("Starting extraction...")
         root.add_widget(status)
+        # Always-visible hint pointing at the parallel file log. The Kivy
+        # text widget can hide output in subtle ways (worker-thread races,
+        # clock-callback drops, multiprocess pipe weirdness); the file log
+        # is the ground-truth backstop.
+        log_hint = _label(
+            "If this looks frozen, tail %APPDATA%\\SMOArchipelago\\extract.log "
+            "to see what the subprocess is actually doing.",
+            height=24,
+        )
+        root.add_widget(log_hint)
         log_lines: list[str] = []
         log_box = TextInput(text="", readonly=True, font_name="RobotoMono-Regular"
                             if False else "Roboto",
@@ -355,6 +391,27 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
         root.add_widget(nav)
         s.add_widget(root)
 
+        # File-log handle shared across helpers. Opened/closed by start_worker.
+        # Mirrors every on_line message + adds wizard-side breadcrumbs the
+        # subprocess can't emit (heartbeats, the exact spawn command, etc).
+        extract_log_path = appdata_root() / "extract.log"
+        _state: dict[str, Any] = {
+            "log_file": None,            # TextIOWrapper | None
+            "last_output_ts": None,      # float
+            "worker_thread": None,
+            "heartbeat_thread": None,
+        }
+
+        def _log_to_file(line: str) -> None:
+            f = _state["log_file"]
+            if f is not None:
+                try:
+                    import time
+                    f.write(f"[{time.strftime('%H:%M:%S')}] {line}\n")
+                    f.flush()
+                except Exception:
+                    pass
+
         def append_line(line: str) -> None:
             log_lines.append(line)
             # Cap the visible log so 5000 lines of compiler output don't
@@ -364,12 +421,60 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
             log_box.text = "\n".join(log_lines[-300:])
 
         def on_line(line: str) -> None:
+            """Worker-thread callback: invoked from `_stream_subprocess`'s
+            stdout-reader loop once per child-process line. Two destinations:
+
+              1. The file log, immediately + synchronously, so the line is
+                 durable even if the wizard process dies before the next
+                 Kivy frame.
+              2. The Kivy text widget, via Clock.schedule_once because we're
+                 on a worker thread and direct UI mutation is unsafe.
+
+            Also updates the heartbeat timestamp so the watcher knows the
+            subprocess is still producing output."""
+            import time
+            _state["last_output_ts"] = time.monotonic()
+            _log_to_file(line)
             from kivy.clock import Clock as _Clock
             _Clock.schedule_once(lambda dt: append_line(line))
 
+        def _heartbeat() -> None:
+            """Emit "still running" lines to BOTH the file log and the
+            Kivy widget every 10s of subprocess silence. Lets the user
+            distinguish "wizard hung" from "subprocess working silently".
+            Exits when the worker thread terminates."""
+            import time
+            while True:
+                worker = _state.get("worker_thread")
+                if worker is None or not worker.is_alive():
+                    return
+                time.sleep(5)
+                last = _state.get("last_output_ts")
+                if last is None:
+                    continue
+                elapsed = time.monotonic() - last
+                if elapsed >= 10:
+                    msg = (
+                        f"[wizard] no subprocess output for {int(elapsed)}s "
+                        f"(python.exe still alive; check Task Manager CPU/I/O)"
+                    )
+                    on_line(msg)
+                    _state["last_output_ts"] = time.monotonic()  # debounce
+
         def run_in_worker() -> None:
             nsp = wizard_state["nsp_path"]
+            import time
+            _state["last_output_ts"] = time.monotonic()
+            # Open file log fresh per run; "w" truncates so each Retry
+            # gets a clean log instead of compounding across attempts.
+            try:
+                _state["log_file"] = open(extract_log_path, "w", encoding="utf-8")
+            except OSError as e:
+                _state["log_file"] = None
+                on_line(f"[wizard] could not open {extract_log_path}: {e}")
             status.text = f"Extracting from {nsp.name}..."
+            on_line(f"[wizard] === extract run start: {time.strftime('%Y-%m-%d %H:%M:%S')} ===")
+            on_line(f"[wizard] NSP: {nsp}")
             try:
                 # Use the user-picked hactool path if the wizard's prereq
                 # page persisted one; extractor falls back to PATH otherwise.
@@ -377,15 +482,27 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
                 hactool_override = (
                     Path(state["hactool_path"]) if state.get("hactool_path") else None
                 )
+                on_line(f"[wizard] hactool override: {hactool_override}")
+                on_line(f"[wizard] DEVKITPRO env: {os.environ.get('DEVKITPRO', '<unset>')}")
+                on_line(f"[wizard] PATH (first 200 chars): {os.environ.get('PATH', '')[:200]}")
+                # Start the heartbeat *after* we've laid down the header so
+                # the first few lines aren't drowned out by "no output" pings.
+                import threading as _threading
+                hb = _threading.Thread(target=_heartbeat, daemon=True)
+                _state["heartbeat_thread"] = hb
+                hb.start()
                 result = run_extract_maps(
                     nsp,
                     hactool_path=hactool_override,
                     on_line=on_line,
                 )
+                on_line(f"[wizard] subprocess exit code: {result.returncode}")
             except Exception as e:  # pragma: no cover
+                on_line(f"[wizard] EXCEPTION: {type(e).__name__}: {e}")
                 from kivy.clock import Clock as _Clock
                 _Clock.schedule_once(lambda dt: status.setter("text")(
                     status, f"Failed: {e}"))
+                _close_log()
                 return
             from kivy.clock import Clock as _Clock
             def finish(_dt):
@@ -397,13 +514,25 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
                     status.text = f"Extraction failed (exit {result.returncode})."
                     retry_btn.disabled = False
             _Clock.schedule_once(finish)
+            _close_log()
+
+        def _close_log() -> None:
+            f = _state.pop("log_file", None)
+            if f is not None:
+                try:
+                    f.close()
+                except Exception:
+                    pass
 
         def start_worker() -> None:
             log_lines.clear()
             log_box.text = ""
             next_btn.disabled = True
             retry_btn.disabled = True
-            threading.Thread(target=run_in_worker, daemon=True).start()
+            import threading as _threading
+            t = _threading.Thread(target=run_in_worker, daemon=True)
+            _state["worker_thread"] = t
+            t.start()
 
         retry_btn.bind(on_release=lambda _i: start_worker())
         s.bind(on_pre_enter=lambda _i: start_worker())
@@ -538,10 +667,11 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
         root.add_widget(_h1("Deploy target"))
         root.add_widget(_label("Where should we copy the compiled mod?"))
 
-        # Two radio rows.
+        # Three radio rows.
         sd_candidates = detect_sd_candidates()
         sd_default = str(sd_candidates[0]) if sd_candidates else ""
         wizard_state["sd_root"] = sd_default
+        wizard_state.setdefault("custom_root", "")
 
         # Ryujinx row
         ryu_row = BoxLayout(orientation="horizontal", size_hint_y=None,
@@ -567,6 +697,50 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
         sd_row.add_widget(sd_input)
         root.add_widget(sd_row)
 
+        # Custom-folder row — for users who want to manage the SD-card
+        # sync themselves (UMS later, DBI / Goldleaf transfer, staging on
+        # a network share, etc.). Writes the same atmosphere/contents/...
+        # subtree the SD-card deploy produces, just under the chosen
+        # folder root.
+        custom_row = BoxLayout(orientation="horizontal", size_hint_y=None,
+                               height=48, spacing=8)
+        custom_cb = CheckBox(group="target",
+                              active=(wizard_state["deploy_target"] == "custom"))
+        custom_row.add_widget(custom_cb)
+        custom_row.add_widget(_label("Custom folder:", size_hint_x=0.3))
+        custom_input = TextInput(
+            text=wizard_state["custom_root"] or "(click Browse to pick a folder)",
+            multiline=False,
+        )
+        custom_row.add_widget(custom_input)
+        browse_btn = Button(text="Browse...", size_hint_x=None, width=100)
+        custom_row.add_widget(browse_btn)
+        root.add_widget(custom_row)
+
+        def open_custom_picker(_i):
+            # Tk's askdirectory is the cleanest cross-platform folder
+            # picker — Kivy's FileChooserListView is file-oriented and
+            # awkward for picking dirs. Tk is stdlib so no extra dep.
+            try:
+                import tkinter
+                import tkinter.filedialog
+                tkroot = tkinter.Tk()
+                tkroot.withdraw()
+                # Always-on-top so it isn't hidden behind the Kivy window.
+                tkroot.attributes("-topmost", True)
+                chosen = tkinter.filedialog.askdirectory(
+                    title="Pick a custom deploy folder",
+                    parent=tkroot,
+                )
+                tkroot.destroy()
+                if chosen:
+                    custom_input.text = chosen
+                    custom_cb.active = True
+            except Exception as e:
+                wizard_log(f"custom-folder picker failed: {e!r}")
+                status.text = f"Folder picker failed: {e}"
+        browse_btn.bind(on_release=open_custom_picker)
+
         redetect = Button(text="Re-detect", size_hint_y=None, height=40)
         def do_redetect(_i):
             cands = detect_sd_candidates()
@@ -584,9 +758,11 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
         s.add_widget(root)
 
         def do_deploy_and_continue() -> None:
+            wizard_log("do_deploy_and_continue: entered")
             try:
                 outputs = collect_build_outputs()
             except FileNotFoundError as e:
+                wizard_log(f"do_deploy_and_continue: build outputs missing: {e}")
                 status.text = f"Build outputs missing: {e}"
                 return
             if ryu_cb.active:
@@ -594,6 +770,7 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
                 if not target.is_dir():
                     status.text = f"Ryujinx folder does not exist: {target}"
                     return
+                wizard_log(f"deploy_to_ryujinx target={target}")
                 result = deploy_to_ryujinx(target, outputs)
                 wizard_state["deploy_target"] = "ryujinx"
                 wizard_state["ryujinx_root"] = str(target)
@@ -602,12 +779,32 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
                 if not target.exists():
                     status.text = f"SD card path does not exist: {target}"
                     return
+                wizard_log(f"deploy_to_sd target={target}")
                 result = deploy_to_sd(target, outputs)
                 wizard_state["deploy_target"] = "sd"
                 wizard_state["sd_root"] = str(target)
+            elif custom_cb.active:
+                target = Path(custom_input.text.strip())
+                # Custom folder needn't already exist — we'll create it.
+                # But the parent must exist and be a directory; otherwise
+                # we'd silently create folder trees in surprising places.
+                if not target.parent.exists():
+                    status.text = (
+                        f"Custom folder parent does not exist: {target.parent}"
+                    )
+                    return
+                target.mkdir(parents=True, exist_ok=True)
+                wizard_log(f"deploy_to_custom_folder target={target}")
+                result = deploy_to_custom_folder(target, outputs)
+                wizard_state["deploy_target"] = "custom"
+                wizard_state["custom_root"] = str(target)
             else:
-                status.text = "Pick a deploy target (Ryujinx or SD)."
+                status.text = "Pick a deploy target (Ryujinx, SD card, or Custom folder)."
                 return
+            wizard_log(
+                f"deploy result ok={result.ok} target={result.target!r} "
+                f"files={len(result.files)} error={result.error!r}"
+            )
             if not result.ok:
                 status.text = f"Deploy failed: {result.error}"
                 return
@@ -615,8 +812,10 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
                 "deploy_target": wizard_state["deploy_target"],
                 "ryujinx_root": wizard_state["ryujinx_root"],
                 "sd_root": wizard_state["sd_root"],
+                "custom_root": wizard_state["custom_root"],
             })
             wizard_state["deploy_result"] = result
+            wizard_log("deploy succeeded; transitioning to 'done' page")
             goto("done")
 
         return s
@@ -627,7 +826,7 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
         root = BoxLayout(orientation="vertical", padding=20, spacing=12)
         root.add_widget(_h1("Setup complete"))
 
-        def populate(*_):
+        def _populate_inner() -> None:
             root.clear_widgets()
             root.add_widget(_h1("Setup complete"))
             result: DeployResult | None = wizard_state.get("deploy_result")
@@ -635,18 +834,30 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
                 summary = (
                     f"Copied {len(result.files)} files to {result.target}.\n\n"
                     "What to do next:\n"
-                    "  - For a real Switch: eject your SD card, plug it into "
-                    "the Switch, boot SMO. The mod loads automatically.\n"
+                    "  - For a real Switch (SD card deploy): eject your SD "
+                    "card, plug it into the Switch, boot SMO. The mod loads "
+                    "automatically.\n"
                     "  - For Ryujinx: boot SMO in Ryujinx; the mod is "
-                    "already in the mods directory.\n\n"
+                    "already in the mods directory.\n"
+                    "  - For Custom folder: the files are laid out under "
+                    "`atmosphere/contents/0100000000010000/{exefs,romfs}/` "
+                    "inside the folder you picked. Copy that whole subtree "
+                    "to your SD card's root (or onto the Switch however you "
+                    "prefer).\n\n"
                     "Re-run this wizard only if your bridge PC's LAN IP "
                     "changes (or you want to switch deploy targets). AP "
                     "server / slot changes don't need a rebuild — type "
                     "/connect or use the Connect bar in SMOClient."
                 )
-                root.add_widget(_label(summary))
+                # Multi-line summary needs explicit height proportional to
+                # content; the standard _label() helper hardcodes 32px which
+                # would clip everything past the first line. 240px fits the
+                # 12-line summary at default font size and gives us breathing
+                # room if a sentence reflows.
+                summary_lbl = _label(summary, height=240)
+                root.add_widget(summary_lbl)
             launch_row = BoxLayout(orientation="horizontal", size_hint_y=None, height=48)
-            if wizard_state["smoap"] is not None:
+            if wizard_state.get("smoap") is not None:
                 launch_btn = Button(text=f"Launch SMOClient as {wizard_state['smoap'].slot_name}")
                 launch_btn.bind(on_release=lambda _i: launch_smoclient_now())
                 launch_row.add_widget(launch_btn)
@@ -654,6 +865,33 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
             close_btn.bind(on_release=lambda _i: App.get_running_app().stop())
             launch_row.add_widget(close_btn)
             root.add_widget(launch_row)
+
+        def populate(*_):
+            """Done-page builder. Wrapped in try/except so a render error
+            becomes a visible "setup is done but the wizard couldn't
+            render the summary" page rather than a black screen with no
+            text (v0.1.8-alpha bug report). Either way, the user is
+            free to close the wizard — setup IS complete; this is just
+            the post-deploy UI."""
+            wizard_log(f"populating Done page; deploy_result={wizard_state.get('deploy_result')!r}")
+            try:
+                _populate_inner()
+            except Exception as e:
+                import traceback
+                tb = traceback.format_exc()
+                wizard_log(f"populate() crashed: {e!r}\n{tb}")
+                # Fallback minimal UI so the user sees text + can close.
+                root.clear_widgets()
+                root.add_widget(_h1("Setup complete (rendering issue)"))
+                root.add_widget(_label(
+                    f"Setup finished but the Done page failed to render: {e}\n\n"
+                    f"This does NOT mean setup failed — your build is deployed.\n"
+                    f"Full traceback at {_wizard_log_path()}.",
+                    height=120,
+                ))
+                close_btn = Button(text="Close", size_hint_y=None, height=48)
+                close_btn.bind(on_release=lambda _i: App.get_running_app().stop())
+                root.add_widget(close_btn)
 
         s.bind(on_pre_enter=populate)
         return s
