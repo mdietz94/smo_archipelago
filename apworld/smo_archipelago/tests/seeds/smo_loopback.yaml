@@ -13,13 +13,10 @@ Spicy Meatball Overdrive:
   # All category toggles default to on; we explicitly enable the big ones
   # so the seed has a meaningful number of locations regardless of upstream
   # apworld default-flips.
-  include_post_peace_moons: true   # master kill-switch for ALL per-kingdom Peace categories
   include_post_metro_moons: true
   capturesanity: true
 
-  # Per-kingdom Peace toggles (default true). Effective only when the master
-  # include_post_peace_moons is also true; otherwise master wins and all
-  # Peace moons are removed.
+  # Per-kingdom Peace toggles (default true).
   include_cap_peace_moons: true
   include_cascade_peace_moons: true
   include_sand_peace_moons: true

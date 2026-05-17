@@ -5,8 +5,8 @@ from ..Items import ManualItem
 
 
 # Peace categories gated by per-kingdom toggles. The kingdom toggle alone
-# would suffice via categories.json::yaml_option, but include_post_peace_moons
-# is preserved as a master override (backward compat with old yamls).
+# would suffice via categories.json::yaml_option, but the dispatcher below
+# uses the table to special-case SHARED_PEACE_CATEGORY (OR of two toggles).
 PEACE_CATEGORY_TO_OPTION = {
     "Cap Peace": "include_cap_peace_moons",
     "Cascade Peace": "include_cascade_peace_moons",
@@ -28,11 +28,6 @@ SHARED_PEACE_CATEGORY = "Snow/Seaside Peace"
 # Return True to enable the category, False to disable it, or None to use the default behavior
 def before_is_category_enabled(multiworld: MultiWorld, player: int, category_name: str) -> Optional[bool]:
     from ..Helpers import is_option_enabled
-
-    is_peace = category_name in PEACE_CATEGORY_TO_OPTION or category_name == SHARED_PEACE_CATEGORY
-    if is_peace and not is_option_enabled(multiworld, player, "include_post_peace_moons"):
-        # Master kill-switch: skip all Peace moons regardless of per-kingdom toggles.
-        return False
 
     if category_name == SHARED_PEACE_CATEGORY:
         # "Secret Path to Lake Lamode!" and "Secret Path to the Steam Gardens!"

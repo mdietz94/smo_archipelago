@@ -11,7 +11,7 @@
         "starting": true
     },
     "Sand Kingdom": {
-        "requires": "",
+        "requires": "{KingdomMoons(Cascade,5)}",
         "connects_to": [
             "Cap Kingdom",
             "Post-Sand"
@@ -20,12 +20,11 @@
     "Post-Sand": {
         "requires": "{SandPeace()}",
         "connects_to": [
-            "Lake Kingdom",
-            "Wooded Kingdom"
+            "Lake Kingdom"
         ]
     },
     "Lake Kingdom": {
-        "requires": "",
+        "requires": "{KingdomMoons(Sand,16)}",
         "connects_to": [
             "Post-Lake"
         ]
@@ -33,11 +32,11 @@
     "Post-Lake": {
         "requires": "{LakePeace()}",
         "connects_to": [
-            "Lost Kingdom"
+            "Wooded Kingdom"
         ]
     },
     "Wooded Kingdom": {
-        "requires": "",
+        "requires": "{KingdomMoons(Lake,8)}",
         "connects_to": [
             "Post-Wooded"
         ]
@@ -53,13 +52,13 @@
         "connects_to": []
     },
     "Lost Kingdom": {
-        "requires": "",
+        "requires": "{KingdomMoons(Wooded,16)}",
         "connects_to": [
             "Night Metro"
         ]
     },
     "Night Metro": {
-        "requires": "",
+        "requires": "{KingdomMoons(Lost,10)}",
         "connects_to": [
             "Cloud Kingdom",
             "Metro Kingdom"
@@ -74,12 +73,11 @@
     "Post-Metro": {
         "requires": "{MetroPeace()}",
         "connects_to": [
-            "Snow Kingdom",
-            "Seaside Kingdom"
+            "Snow Kingdom"
         ]
     },
     "Snow Kingdom": {
-        "requires": "",
+        "requires": "{KingdomMoons(Metro,20)}",
         "connects_to": [
             "Post-Snow"
         ]
@@ -87,11 +85,11 @@
     "Post-Snow": {
         "requires": "{SnowPeace()}",
         "connects_to": [
-            "Very Early Luncheon"
+            "Seaside Kingdom"
         ]
     },
     "Seaside Kingdom": {
-        "requires": "",
+        "requires": "{KingdomMoons(Snow,10)}",
         "connects_to": [
             "Post-Seaside"
         ]
@@ -109,13 +107,13 @@
         ]
     },
     "Luncheon Kingdom": {
-        "requires": "{PostEarlyLuncheon()}",
+        "requires": "{PostEarlyLuncheon()} and {KingdomMoons(Seaside,10)}",
         "connects_to": [
             "Ruined Kingdom"
         ]
     },
     "Ruined Kingdom": {
-        "requires": "{LuncheonPeace()}",
+        "requires": "{LuncheonPeace()} and {KingdomMoons(Luncheon,18)}",
         "connects_to": [
             "Pokino"
         ]
@@ -127,13 +125,13 @@
         ]
     },
     "Bowser's Kingdom": {
-        "requires": "",
+        "requires": "{KingdomMoons(Ruined,3)}",
         "connects_to": [
             "Moon Kingdom"
         ]
     },
     "Moon Kingdom": {
-        "requires": "{BowserPeace()}",
+        "requires": "{BowserPeace()} and {KingdomMoons(Bowser's,8)}",
         "connects_to": []
     }
 }

@@ -26,12 +26,6 @@ from ..Helpers import is_option_enabled, get_option_value
 # To add an option, use the before_options_defined hook below and something like this:
 #   options["total_characters_to_win_with"] = TotalCharactersToWinWith
 #
-class IncludePostPeaceMoons(DefaultOnToggle):
-    """Master toggle for all post-peace moons. Turning this off will remove every moon tagged with
-    any per-kingdom Peace category, overriding the per-kingdom include_<kingdom>_peace_moons toggles.
-    Leave on if you want per-kingdom control via the individual toggles."""
-    display_name = "Include Post-Peace Moons"
-
 class IncludeCapPeaceMoons(DefaultOnToggle):
     """Turn off to skip the small set of Cap Kingdom moons that are either only available after
     the kingdom's story is complete or are otherwise tedious to track down."""
@@ -139,7 +133,6 @@ class IncludePostMetroMoons(DefaultOnToggle):
 
 # This is called before any manual options are defined, in case you want to define your own with a clean slate or let Manual define over them
 def before_options_defined(options: dict) -> dict:
-    options["include_post_peace_moons"] = IncludePostPeaceMoons
     options["capturesanity"] = Capturesanity
     options["include_post_metro_moons"] = IncludePostMetroMoons
     # Per-kingdom Peace toggles

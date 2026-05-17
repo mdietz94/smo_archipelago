@@ -144,6 +144,66 @@ def BowserPeace(world: World, multiworld: MultiWorld, state: CollectionState, pl
         return "|Pokio|"
     return True
 
+def KingdomMoons(world: World, multiworld: MultiWorld, state: CollectionState, player: int, kingdom: str, n) -> str:
+    """N effective Power Moons FROM A SPECIFIC KINGDOM.
+
+    Models SMO's in-game Odyssey-power leave-threshold for that kingdom:
+    the player must have enough moons FROM THAT KINGDOM to advance the
+    Odyssey out of it. Generic moon-count isn't sufficient because (a)
+    there's no generic Power Moon item in the pool (the M6 cleanup
+    dropped it), and (b) the natural progression is that each kingdom
+    contributes its own moons to the Odyssey-power counter as the player
+    explores it.
+
+    Multi-Moon items count as 3 effective moons each. Power Moon items
+    count as 1. Returns an OR-chain over the valid (MM_count, PM_count)
+    combinations the player's pool can support, e.g.
+    `KingdomMoons(Sand, 16)` ->
+        (|Sand Kingdom Power Moon:16|
+         OR (|Sand Kingdom Multi-Moon| AND |Sand Kingdom Power Moon:13|)
+         OR (|Sand Kingdom Multi-Moon:2| AND |Sand Kingdom Power Moon:10|))
+
+    Used in regions.json to gate kingdom-entry transitions for the linear
+    chain Sand -> Lake -> Wooded -> Lost and Metro -> Snow -> Seaside ->
+    Luncheon. Each kingdom's `requires` calls `KingdomMoons(<previous>, N)`
+    where N is the vanilla Odyssey-power threshold to leave the previous
+    kingdom for the next (per the pre-rebase regions.json's per-kingdom
+    moon clauses).
+    """
+    kingdom = kingdom.strip()
+    try:
+        n = int(str(n).strip())
+    except (ValueError, TypeError):
+        return False
+    if n <= 0:
+        return True
+
+    items_counts = world.get_item_counts()
+    pm_name = f"{kingdom} Kingdom Power Moon"
+    mm_name = f"{kingdom} Kingdom Multi-Moon"
+    pm_pool = items_counts.get(pm_name, 0)
+    mm_pool = items_counts.get(mm_name, 0)
+
+    clauses = []
+    for mm in range(mm_pool + 1):
+        pm_needed = max(0, n - 3 * mm)
+        if pm_needed > pm_pool:
+            continue  # this combo can't satisfy N from the available pool
+        sub = []
+        if mm == 1:
+            sub.append(f"|{mm_name}|")
+        elif mm > 1:
+            sub.append(f"|{mm_name}:{mm}|")
+        if pm_needed > 0:
+            sub.append(f"|{pm_name}:{pm_needed}|")
+        if not sub:
+            return True  # 0-need: any state satisfies
+        clauses.append(sub[0] if len(sub) == 1 else "(" + " AND ".join(sub) + ")")
+
+    if not clauses:
+        return False  # pool too small to satisfy N from this kingdom alone
+    return clauses[0] if len(clauses) == 1 else "(" + " OR ".join(clauses) + ")"
+
 def RegionalCap(world: World, multiworld: MultiWorld, state: CollectionState, player: int):
     """can the player get regional coins in cap"""
     if is_option_enabled(multiworld, player, "capturesanity"):

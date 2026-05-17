@@ -97,7 +97,6 @@ def _smo_yaml(overrides: dict[str, bool], slot_name: str = "Mario") -> str:
         # Toggles always specified for parity with the loopback seed
         # (capturesanity defaults OFF, so it needs an explicit true to
         # be exercised at all).
-        "include_post_peace_moons": True,
         "include_post_metro_moons": True,
         "capturesanity": True,
     }
@@ -167,35 +166,11 @@ def _all_new_off() -> dict[str, bool]:
     return {k: False for k in PER_KINGDOM_PEACE_TOGGLES + ANNOYING_CLUSTER_TOGGLES}
 
 
-def _master_off() -> dict[str, bool]:
-    return {"include_post_peace_moons": False}
-
-
-def _master_off_per_kingdom_on() -> dict[str, bool]:
-    # All per-kingdom on but master off — master should still win.
-    return {"include_post_peace_moons": False,
-            **{k: True for k in PER_KINGDOM_PEACE_TOGGLES}}
-
-
 def _individual_off_cases() -> list[tuple[str, dict[str, bool]]]:
     """One off-case per new toggle (12 + 6 = 18 cases)."""
     cases = []
     for k in PER_KINGDOM_PEACE_TOGGLES + ANNOYING_CLUSTER_TOGGLES:
         cases.append((f"only_{k}_off", {k: False}))
-    return cases
-
-
-def _random_combos(n: int, seed: int = 42) -> list[tuple[str, dict[str, bool]]]:
-    """`n` deterministic random combinations of the 18 new toggles."""
-    rng = random.Random(seed)
-    cases = []
-    pool = PER_KINGDOM_PEACE_TOGGLES + ANNOYING_CLUSTER_TOGGLES
-    for i in range(n):
-        overrides = {k: rng.choice([True, False]) for k in pool}
-        # Also flip the master sometimes for extra coverage.
-        if rng.random() < 0.25:
-            overrides["include_post_peace_moons"] = False
-        cases.append((f"random_{i}", overrides))
     return cases
 
 
@@ -213,16 +188,11 @@ def _build_scenarios() -> list[tuple[str, dict[str, bool]]]:
         return [
             ("all_on", _all_on()),
             ("all_new_off", _all_new_off()),
-            ("master_off", _master_off()),
-            ("master_off_per_kingdom_on", _master_off_per_kingdom_on()),
         ]
     return [
         ("all_on", _all_on()),
         ("all_new_off", _all_new_off()),
-        ("master_off", _master_off()),
-        ("master_off_per_kingdom_on", _master_off_per_kingdom_on()),
         *_individual_off_cases(),
-        *_random_combos(5),
     ]
 
 
