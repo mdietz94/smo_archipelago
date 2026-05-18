@@ -5,9 +5,13 @@ Archipelago because the multiprocessing.Process child can't read its
 bundled `kivy/data/style.kv` out of library.zip).
 
 These tests intentionally import via `worlds.smo.*`, which requires
-Archipelago itself to be on sys.path. We add it here rather than in the
-package-wide conftest because the rest of the suite is deliberately
-Archipelago-free (see conftest.py's docstring).
+Archipelago itself to be on sys.path AND a built `smo.apworld` in
+`vendor/Archipelago/custom_worlds/` (run `scripts/install_apworld.py`).
+The conftest deliberately keeps `vendor/Archipelago` off `sys.path` for
+the rest of the suite (see conftest.py:7-17) — to avoid violating that
+during collection, the path mutation and `import worlds.smo` are deferred
+into the `smo_mod` fixture below. Module-scope only checks for the
+submodule's existence so a missing checkout still skips cleanly.
 """
 
 from __future__ import annotations
@@ -25,18 +29,32 @@ _AP_ROOT = _REPO_ROOT / "vendor" / "Archipelago"
 if not (_AP_ROOT / "Launcher.py").exists():
     pytest.skip("Archipelago submodule not initialized", allow_module_level=True)
 
-_AP_ROOT_STR = str(_AP_ROOT)
-if _AP_ROOT_STR not in sys.path:
-    sys.path.insert(0, _AP_ROOT_STR)
 
-import ModuleUpdate  # noqa: E402
-ModuleUpdate.update_ran = True
+@pytest.fixture
+def smo_mod():
+    """Load `worlds.smo` lazily.
 
-import worlds  # noqa: F401,E402  (triggers custom_worlds discovery)
-import worlds.smo as smo_mod  # noqa: E402
+    Done as a fixture (not at module scope) so pytest's collection phase
+    never triggers Archipelago's `worlds/__init__.py` discovery walk —
+    that walk pollutes `sys.modules` and `AutoWorldRegister` globally and
+    has caused cross-file "passes alone, fails in suite" flakes in this
+    test directory. Skips cleanly on worktrees where
+    `scripts/install_apworld.py` hasn't yet dropped `smo.apworld` into
+    `vendor/Archipelago/custom_worlds/`."""
+    if str(_AP_ROOT) not in sys.path:
+        sys.path.insert(0, str(_AP_ROOT))
+    try:
+        import ModuleUpdate  # type: ignore[import-not-found]
+        ModuleUpdate.update_ran = True
+    except ImportError:
+        pass
+    return pytest.importorskip(
+        "worlds.smo",
+        reason="smo.apworld not installed; run scripts/install_apworld.py first.",
+    )
 
 
-def test_launch_subprocess_not_imported() -> None:
+def test_launch_subprocess_not_imported(smo_mod) -> None:
     """`launch_subprocess` (multiprocessing.Process variant) must not be
     importable on `worlds.smo` — its presence on the namespace tempts
     future contributors to call it directly, reintroducing the frozen-Kivy
@@ -54,7 +72,7 @@ def test_launch_subprocess_not_imported() -> None:
 
 
 @pytest.fixture
-def spy() -> list:
+def spy(smo_mod) -> list:
     """Replace `launch_or_subprocess` with a recorder. The bare
     `launch_subprocess` import was removed in the .apmanual cleanup
     (v0.1.x) — `test_launch_subprocess_not_imported` is the regression
@@ -104,7 +122,7 @@ def _write_smoap(tmp_path: Path) -> Path:
     return p
 
 
-def test_pre_setup_click_routes_via_launch(spy, setup_state, tmp_path) -> None:
+def test_pre_setup_click_routes_via_launch(spy, setup_state, tmp_path, smo_mod) -> None:
     """When the user double-clicks a .smoap and setup hasn't run yet, the
     wizard must dispatch through `launch_or_subprocess` (which inlines
     when Kivy isn't already running). The bare `launch_subprocess` route
@@ -121,7 +139,7 @@ def test_pre_setup_click_routes_via_launch(spy, setup_state, tmp_path) -> None:
     assert args == (str(smoap),)
 
 
-def test_post_setup_click_routes_via_launch(spy, setup_state, tmp_path) -> None:
+def test_post_setup_click_routes_via_launch(spy, setup_state, tmp_path, smo_mod) -> None:
     """Once setup is complete, the same double-click should still go
     through `launch_or_subprocess` — with the .smoap expanded to SMOClient
     CLI args."""
@@ -139,7 +157,7 @@ def test_post_setup_click_routes_via_launch(spy, setup_state, tmp_path) -> None:
 
 
 def test_wizard_done_launch_button_handoff_runs_after_kivy_shutdown(
-    spy, setup_state, tmp_path,
+    spy, setup_state, tmp_path, smo_mod,
 ) -> None:
     """The wizard's "Launch SMOClient" button must NOT spawn from inside
     its own Kivy app — instead, `run_setup_wizard` returns True and the
