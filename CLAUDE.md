@@ -554,6 +554,16 @@ works end-to-end before committing to a UI choice.
   item must grep both files for the bare name and update all
   `requires` strings.** Today this is a manual discipline; a CI lint
   would catch it.
+- **2D moons aren't recolored by item type yet.** The
+  `ShineAppearanceHook` inline-patches 4 BL sites inside `Shine::init`
+  (3D moon actor) — the 2D moon variant collected in side-scrolling
+  mural rooms goes through a different actor class and bypasses every
+  patched offset, so those shines show vanilla yellow regardless of AP
+  classification. Symmetric inline patches on the 2D shine init path
+  would close the gap; resolve the 2D shine class via OdysseyDecomp
+  (`Shine2D` / `Shine2DMap` / similar) and find its
+  `rs::setStageShineAnimFrame` call sites the same way Kgamer77 found
+  the 3D ones.
 
 ## What's definitely NOT done
 
