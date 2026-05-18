@@ -136,17 +136,23 @@ class SmoManager(GameManager):
         # Mirrors LADX's "Open Tracker" button placement — the top bar is
         # where AP users expect to see connection state for ALL the wires
         # the client manages, not just AP.
+        # Width auto-fits the text (texture_size[0] + a small pad) so the
+        # pill can't overflow the top bar at narrow window widths — the
+        # connect_layout's text input absorbs whatever's left over.
         self._switch_pill = Label(
-            text="Switch: idle",
+            text="Off",
             markup=True,
             size_hint_x=None,
             size_hint_y=None,
-            width=dp(140),
+            width=dp(60),
             height=self.connect_layout.height,
             halign="center",
             valign="middle",
+            padding=(dp(6), 0),
         )
-        self._switch_pill.bind(size=self._switch_pill.setter("text_size"))
+        self._switch_pill.bind(
+            texture_size=lambda lbl, sz: setattr(lbl, "width", sz[0] + dp(12)),
+        )
         self.connect_layout.add_widget(self._switch_pill)
 
         Clock.schedule_interval(self._refresh_panels, _REFRESH_INTERVAL)
@@ -169,17 +175,20 @@ class SmoManager(GameManager):
 def _format_switch_pill(ctx: "SMOContext") -> str:
     """One-line Switch status for the top-bar pill, with markup color.
 
+    Kept terse — the pill auto-sizes to texture width and shares the top
+    bar with the AP server input + Connect button, so verbose text used
+    to overflow at narrow window widths. Color carries the state, the
+    word is just a hint.
+
     Uses plain ASCII glyphs because Kivy's default Roboto subset doesn't
     include the geometric-shapes block (U+25CF / U+25CB rendered as tofu).
-    Color already differentiates connected from listening.
     """
     sw = ctx.switch
     if sw is None:
-        return "[color=#888888]Switch: idle[/color]"
-    port = getattr(sw, "_port", "?")
+        return "[color=#888888]Off[/color]"
     if sw.is_connected():
-        return f"[color=#4caf50]Switch connected :{port}[/color]"
-    return f"[color=#ff9800]Switch listening :{port}[/color]"
+        return "[color=#4caf50]Switch OK[/color]"
+    return "[color=#ff9800]Waiting[/color]"
 
 
 def _format_odyssey(ctx: "SMOContext") -> str:
