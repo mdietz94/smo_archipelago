@@ -255,15 +255,20 @@ The flow:
 python C:\Users\maxwe\Documents\smo_archipelago\scripts\sync_capture_table.py
 
 # 1. Build (~10s)
+# NOTE: -DRYU_PATH is OPT-IN. Adding it enables the post-build hook that
+# copies subsdk9 into %APPDATA%/Ryujinx/mods — which clobbers whatever the
+# user (or a parallel agent) is currently running. Only pass it when you
+# explicitly want to deploy to Ryujinx this build.
 cd C:\Users\maxwe\Documents\smo_archipelago\switch-mod
 $env:DEVKITPRO = "C:/devkitPro"
 & "C:/Program Files/CMake/bin/cmake.exe" -S . -B build -G Ninja `
     -DCMAKE_TOOLCHAIN_FILE=lunakit-vendor/cmake/toolchain.cmake `
-    -DBRIDGE_HOST=192.168.1.187 `
-    -DRYU_PATH=C:/Users/maxwe/AppData/Roaming/Ryujinx
+    -DBRIDGE_HOST=192.168.1.187
 & "C:/Program Files/CMake/bin/cmake.exe" --build build
-# Post-build hook auto-deploys subsdk9+npdm+ap_config.json into
-# %APPDATA%/Ryujinx/mods/contents/0100000000010000/smo-archipelago/
+# To deploy to Ryujinx this build, add this line to the configure above:
+#     -DRYU_PATH=C:/Users/maxwe/AppData/Roaming/Ryujinx
+# That enables the post-build hook that copies subsdk9+npdm+ap_config.json
+# into %APPDATA%/Ryujinx/mods/contents/0100000000010000/smo-archipelago/.
 #
 # Note: if Ninja isn't installed, swap `-G Ninja` for
 #   `-G "Unix Makefiles" -DCMAKE_MAKE_PROGRAM=C:/devkitPro/msys2/usr/bin/make.exe`
