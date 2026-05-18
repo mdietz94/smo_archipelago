@@ -152,6 +152,7 @@ class SmoManager(GameManager):
         )
         self._switch_pill.bind(
             texture_size=lambda lbl, sz: setattr(lbl, "width", sz[0] + dp(12)),
+            size=lambda lbl, sz: setattr(lbl, "text_size", sz),
         )
         self.connect_layout.add_widget(self._switch_pill)
 
