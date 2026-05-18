@@ -160,10 +160,6 @@ def _all_on() -> dict[str, bool]:
     return {}  # all defaults are already on
 
 
-def _all_new_off() -> dict[str, bool]:
-    return {k: False for k in PER_KINGDOM_PEACE_TOGGLES + ANNOYING_CLUSTER_TOGGLES}
-
-
 def _individual_off_cases() -> list[tuple[str, dict[str, bool]]]:
     """One off-case per new toggle (12 + 6 = 18 cases)."""
     cases = []
@@ -172,47 +168,25 @@ def _individual_off_cases() -> list[tuple[str, dict[str, bool]]]:
     return cases
 
 
-# Scenarios known to be mathematically infeasible: skipping enough moons leaves
-# fewer locations than the apworld's required progression items (Power Moons
-# and captures), so AP's Fill stage raises FillError. These are tracked as
-# xfail(strict=True) so any future apworld change that auto-shrinks the
-# item pool below the location count will surface as an xpass.
-INFEASIBLE_SCENARIOS = {"all_new_off"}
-
-
+# "all-new-off" (every per-kingdom Peace toggle + every annoying-cluster
+# toggle set to false) is intentionally NOT enumerated -- the resulting
+# location count drops below the apworld's progression item count and AP's
+# Fill stage raises FillError. It's a known-bad config we warn users against,
+# not a scenario we're trying to support.
 def _build_scenarios() -> list[tuple[str, dict[str, bool]]]:
     fast = os.environ.get("SMOAP_GEN_TEST_FAST") == "1"
     if fast:
-        return [
-            ("all_on", _all_on()),
-            ("all_new_off", _all_new_off()),
-        ]
+        return [("all_on", _all_on())]
     return [
         ("all_on", _all_on()),
-        ("all_new_off", _all_new_off()),
         *_individual_off_cases(),
     ]
-
-
-def _params(scenarios: list[tuple[str, dict[str, bool]]]) -> list:
-    """Wrap each scenario in pytest.param with xfail markers as needed."""
-    params = []
-    for name, overrides in scenarios:
-        marks = []
-        if name in INFEASIBLE_SCENARIOS:
-            marks.append(pytest.mark.xfail(
-                strict=True,
-                reason="too many locations skipped to fit the apworld's "
-                       "progression item pool (FillError)",
-            ))
-        params.append(pytest.param(name, overrides, id=name, marks=marks))
-    return params
 
 
 SCENARIOS = _build_scenarios()
 
 
-@pytest.mark.parametrize("scenario_name,overrides", _params(SCENARIOS))
+@pytest.mark.parametrize("scenario_name,overrides", SCENARIOS)
 def test_smo_generation_solo(_apworld_zip_built, scenario_name, overrides):
     """SMO alone — confirm each option combination yields a generatable seed."""
     with tempfile.TemporaryDirectory(prefix=f"smo_gen_{scenario_name}_") as td:
@@ -222,7 +196,7 @@ def test_smo_generation_solo(_apworld_zip_built, scenario_name, overrides):
         _assert_gen_ok(result, f"solo/{scenario_name}")
 
 
-@pytest.mark.parametrize("scenario_name,overrides", _params(SCENARIOS))
+@pytest.mark.parametrize("scenario_name,overrides", SCENARIOS)
 def test_smo_generation_with_random_partner(_apworld_zip_built, scenario_name, overrides):
     """SMO + one randomly chosen partner world — confirms multi-world fill works."""
     # Deterministic partner per-scenario so failures reproduce.
