@@ -216,6 +216,17 @@ public:
     std::atomic<void*> pending_kill_keeper{nullptr};
     std::atomic<std::int64_t> pending_kill_at_ms{0};
 
+    // Set by SaveLoadHook around Orig(initializeData) so the dictionary-
+    // write filter (AddHackDictionaryHook) lets SMO rehydrate the
+    // HackDictionary from save unconditionally. Without this, every
+    // capture the player legitimately owned at save time would be
+    // blocked by the filter (captures_unlocked is reset to all-zero
+    // at the top of the SaveLoadHook callback, before bridge rehello)
+    // and the dictionary would be silently truncated. Set/cleared on
+    // the frame thread; read on the frame thread; atomic for the
+    // release/acquire visibility guarantee.
+    std::atomic<bool> save_load_passthrough{false};
+
     // M6 phase A — AP-credit counters surfaced via shine-counter hooks.
     // These are NOT shine flag flips: collecting a moon locally still drives
     // SMO's own shine table; AP-granted moons accumulate here and the

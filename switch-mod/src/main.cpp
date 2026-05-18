@@ -70,6 +70,12 @@ void installWorldMapSelectHook();
 void tickPendingUncapture();
 }  // namespace smoap::hooks
 
+namespace smoap::hooks {
+// M7-A2 (Capture List parity): filter addHackDictionary writes so the
+// in-game Capture List only shows AP-unlocked captures.
+void installAddHackDictionaryHook();
+}  // namespace smoap::hooks
+
 namespace smoap::game {
 // M6 phase B: resolve addHackDictionary + isExistInHackDictionary once.
 void installCaptureGrantSymbols();
@@ -207,6 +213,9 @@ extern "C" void exl_main(void* /*x0*/, void* /*x1*/) {
 
     SMOAP_LOG_INFO("resolving M6-phase-B capture-grant symbols");
     smoap::game::installCaptureGrantSymbols();
+
+    SMOAP_LOG_INFO("installing AddHackDictionaryHook (Capture List AP gate)");
+    smoap::hooks::installAddHackDictionaryHook();
 
     SMOAP_LOG_INFO("resolving M6-phase-D current-kingdom lookup");
     smoap::game::installDepositKingdomLookupSymbol();

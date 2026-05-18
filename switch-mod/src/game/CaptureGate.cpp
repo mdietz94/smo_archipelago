@@ -114,6 +114,11 @@ void grantCapture(const char* cap_name, const char* hack_name) {
         return;
     }
     GameDataHolderWriter w{gdh};
+    // Log before the call so the trampoline's `[m7-dict] FIRE` line
+    // appears immediately after; standalone FIRE lines (no preceding
+    // grantCapture firing line) are SMO's organic capture path.
+    SMOAP_LOG_INFO("[m6-capture] grantCapture firing cap='%s' hack='%s'",
+                   cap_name ? cap_name : "", hack_name);
     s_addHackDictionary(w, hack_name);
     SMOAP_LOG_INFO("[m6-capture] addHackDictionary OK cap='%s' hack='%s'",
                    cap_name ? cap_name : "", hack_name);
