@@ -94,18 +94,21 @@ void ApState::applyOnFrame() {
 
         switch (item.kind) {
             case ItemKind::Moon: {
+                // Per-kingdom counter is driven by OutstandingMsg from the
+                // bridge (M6 phase D). The ItemMsg path is observation-only
+                // for moons — mutating ap_moons_kingdom[] here would
+                // double-count every grant since OutstandingMsg already
+                // applies the authoritative balance for this kingdom on
+                // the worker thread before this frame-thread drain runs.
                 const int amount = moonGrantAmount(item);
                 const std::uint8_t bit = item.kingdom[0]
                     ? smoap::game::kingdomBitFor(item.kingdom)
                     : 0xFFu;
                 if (bit < 17) {
-                    const int prev = ap_moons_kingdom[bit].fetch_add(amount,
-                        std::memory_order_relaxed);
                     SMOAP_LOG_INFO(
-                        "[m6-moon] credit kingdom=%s(bit=%u) +%d "
-                        "(was %d, now %d) shine_id='%s' from=%s",
-                        item.kingdom, bit, amount, prev,
-                        prev + amount, item.shine_id, item.from);
+                        "[m6-moon] grant observed kingdom=%s(bit=%u) +%d "
+                        "shine_id='%s' from=%s (counter driven by OutstandingMsg)",
+                        item.kingdom, bit, amount, item.shine_id, item.from);
                 } else {
                     SMOAP_LOG_WARN(
                         "[m6-moon] DROPPED moon item: kingdom='%s' (bit=%u) "

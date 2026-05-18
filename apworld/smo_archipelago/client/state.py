@@ -54,6 +54,14 @@ class BridgeState:
         # (on DepositMsg from Switch). Persisted out-of-band by context.py
         # via Set on the AP server.
         self.outstanding_by_kingdom: dict[str, int] = {}
+        # M6 phase D — high-water mark of how many items in the AP server's
+        # items_received list have had their bridge-side side effects
+        # applied (apply_grant for moons, send_item to Switch). Persisted
+        # alongside outstanding_by_kingdom so a bridge restart can skip
+        # re-processing the historical ReceivedItems(index=0) replay and
+        # double-counting outstanding. Local mirror; AP data store value is
+        # the source of truth (rehydrated via context.py).
+        self.received_items_index: int = 0
         # Session-scoped seq dedup. Reset on each Switch HELLO via
         # reset_deposit_session. Re-sent deposits with seq <= the high-water
         # mark are skipped (idempotent re-ack only). Bridge-process-restart
@@ -172,6 +180,17 @@ class BridgeState:
         """
         with self._lock:
             self.outstanding_by_kingdom = dict(entries)
+
+    def set_received_items_index(self, n: int) -> None:
+        """Set the high-water mark for items_received that have had their
+        bridge-side side effects applied. Used by context.py during
+        hydration and after each ReceivedItems batch is processed."""
+        with self._lock:
+            self.received_items_index = max(0, int(n))
+
+    def get_received_items_index(self) -> int:
+        with self._lock:
+            return self.received_items_index
 
     def get_outstanding(self) -> dict[str, int]:
         """Return a defensive copy of the current outstanding map."""

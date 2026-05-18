@@ -123,3 +123,31 @@ def test_reset_deposit_session_lets_fresh_seqs_apply_again():
     s.reset_deposit_session()
     assert not s.should_skip_deposit(1)
     assert not s.should_skip_deposit(2)
+
+
+# ---------- received_items_index (cross-restart dedup) ----------
+
+def test_received_items_index_defaults_to_zero():
+    s = BridgeState()
+    assert s.get_received_items_index() == 0
+
+
+def test_set_received_items_index_clamps_negative_to_zero():
+    """Defensive: a corrupt AP data store value or arithmetic mistake
+    should not poison the high-water mark into a negative state."""
+    s = BridgeState()
+    s.set_received_items_index(5)
+    assert s.get_received_items_index() == 5
+    s.set_received_items_index(-3)
+    assert s.get_received_items_index() == 0
+
+
+def test_set_received_items_index_accepts_increases_and_decreases():
+    """The setter doesn't enforce monotonicity — the *caller* (context.py)
+    uses max(old, new) when advancing. The setter just stores what it's
+    given so hydration from AP store can also pull down a value if some
+    out-of-band reset happened."""
+    s = BridgeState()
+    s.set_received_items_index(10)
+    s.set_received_items_index(3)
+    assert s.get_received_items_index() == 3
