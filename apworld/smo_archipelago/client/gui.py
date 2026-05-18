@@ -108,7 +108,7 @@ class SmoManager(GameManager):
         # where AP users expect to see connection state for ALL the wires
         # the client manages, not just AP.
         self._switch_pill = Label(
-            text="Switch: —",
+            text="Switch: idle",
             markup=True,
             size_hint_x=None,
             size_hint_y=None,
@@ -139,14 +139,19 @@ class SmoManager(GameManager):
 
 
 def _format_switch_pill(ctx: "SMOContext") -> str:
-    """One-line Switch status for the top-bar pill, with markup color."""
+    """One-line Switch status for the top-bar pill, with markup color.
+
+    Uses plain ASCII glyphs because Kivy's default Roboto subset doesn't
+    include the geometric-shapes block (U+25CF / U+25CB rendered as tofu).
+    Color already differentiates connected from listening.
+    """
     sw = ctx.switch
     if sw is None:
-        return "[color=#888888]Switch: —[/color]"
+        return "[color=#888888]Switch: idle[/color]"
     port = getattr(sw, "_port", "?")
     if sw.is_connected():
-        return f"[color=#4caf50]Switch ● {port}[/color]"
-    return f"[color=#ff9800]Switch ○ {port}[/color]"
+        return f"[color=#4caf50]Switch connected :{port}[/color]"
+    return f"[color=#ff9800]Switch listening :{port}[/color]"
 
 
 def _format_odyssey(ctx: "SMOContext") -> str:
