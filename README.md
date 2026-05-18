@@ -93,6 +93,21 @@ A few behaviors only make sense once you know what the mod is doing. The
 short version: **moons and captures aren't yours until AP gives them to
 you**, and the in-game UI is your honest indicator of what AP has sent.
 
+### How do I know it is working?
+
+The earliest in-game signal is **Cappy himself**. Shortly after you
+acquire him in the Cap Kingdom intro, Cappy should pop a speech bubble
+that reads *"Connected to Archipelago"* — that's the mod confirming the
+Switch ↔ SMOClient ↔ AP-server chain is live. From that point on Cappy
+will narrate item arrivals from other players (e.g. *"Got Frog from
+P3!"*), and will also announce *"Disconnected from Archipelago"* if the
+bridge drops, replaying anything you collected during the gap once it
+reconnects.
+
+If you never see the "Connected" bubble after Cappy joins you, check
+SMOClient's Tracker tab and the AP-server log — the bridge isn't
+reaching the Switch.
+
 ### Your Capture List is the source of truth for what you can capture
 
 Cappy's in-game Capture List (the menu showing every hat-throw target
@@ -104,18 +119,9 @@ You can still *try* to capture anything — see below.
 
 ### Captures you don't own snap back after ~4 seconds
 
-Hat-toss onto a locked target and you'll briefly play as the creature
-(Frog, Bullet Bill, T-Rex, ...) — then Mario gets yanked back out and
-the enemy may despawn. This is intentional:
-
-- The first touch sends the location check to AP, so AP knows to issue
-  you the capture item.
-- The 4 s grace is long enough to enjoy the cinematic captures (T-Rex,
-  Glydon) and to confirm the check went through.
-- Once AP routes the capture item back to you, the next capture sticks.
-
-T-Rex despawning on uncapture is a known visual rough edge; the gating
-itself is working correctly.
+Hat-toss onto a capture you have not unlocked and you'll briefly play
+as the creature (Frog, Bullet Bill, T-Rex, ...) — then Mario gets yanked
+back out and the enemy may despawn.
 
 ### Linear kingdom order is enforced at the two world-map forks
 
@@ -158,19 +164,6 @@ around the deposit cycle, and it's **working correctly** — the
 underlying balance is unchanged. Watch the moon-get cutscene's label:
 it shows you exactly where the moon went (e.g. "Sent Snow Kingdom Power
 Moon -> P3").
-
-### Items can arrive at any time, including outside cutscenes
-
-When another player finds something for you, **Cappy pops up a speech
-bubble in-game** with the item name and sender (e.g. *"Got Frog from
-P3!"*) — no need to alt-tab to SMOClient. The same surface announces AP
-connection state changes ("Connected to Archipelago" / "Disconnected")
-and replays any moons or captures you picked up while the bridge was
-offline once it reconnects.
-
-Self-grants and bulk replays are suppressed so the bubble doesn't spam
-during reconnects. The Tracker tab in SMOClient and the AP-server log
-remain the canonical full-history views.
 
 ### Changing AP server or slot after setup
 
