@@ -35,6 +35,7 @@
 #include "../game/CaptureGate.hpp"
 #include "../game/KingdomUnlock.hpp"  // kingdomBitFor (M6 phase D OutstandingMsg apply)
 #include "../game/MoonApply.hpp"
+#include "../ui/CappyMessenger.hpp"
 #include "../util/Log.hpp"
 
 namespace smoap::ap {
@@ -51,6 +52,17 @@ constexpr std::size_t kWorkerStackSize = 64 * 1024;
 
 // Exponential backoff caps (ms): 1s, 2s, 5s, 10s, 30s.
 constexpr std::uint32_t kBackoffCapMs = 30 * 1000;
+
+// Last AP-side connection state we observed from the bridge. Drives the Cappy
+// "Connected to Archipelago" / "Disconnected from Archipelago" speech bubbles
+// on ready <-> not-ready transitions. Two writers, both on the worker thread:
+//   - ap_state message dispatch (graceful: bridge told us AP state changed)
+//   - disconnect() (ungraceful: bridge TCP socket died — covers SMOClient
+//     being killed / crashing without sending a final ap_state).
+// Default "disconnected" so the first ap_state("ready") push (HELLO replay or
+// live Connected) fires the Connected bubble when bridge was already up at
+// SMO boot. Worker-thread exclusive; no atomic needed.
+char s_last_ap_state[24] = "disconnected";
 
 // Stack must be page-aligned; size must be a multiple of page size. nn::os
 // CreateThread takes the BASE address + size (svcCreateThread takes top).
@@ -369,6 +381,17 @@ void ApClient::disconnect() {
     // pending_deposits ring + unacked tracking; they'll replay after
     // reconnect.
     st.bridge_connected.store(false, std::memory_order_relaxed);
+    // Fire the Cappy "Disconnected" bubble if the bridge died while we
+    // believed AP was ready. Covers SMOClient being killed / crashing
+    // without sending a graceful ap_state("disconnected") first (the
+    // graceful path is handled by the ap_state dispatch branch). Reset
+    // s_last_ap_state so the next reconnect's ap_state replay fires
+    // the "Connected" bubble cleanly.
+    if (std::strcmp(s_last_ap_state, "ready") == 0) {
+        smoap::ui::CappyMessenger::instance()
+            .enqueueSystem("Disconnected from Archipelago");
+    }
+    std::strcpy(s_last_ap_state, "disconnected");
 }
 
 void ApClient::sendHello() {
@@ -691,7 +714,29 @@ void ApClient::handleLine(char* line, std::size_t line_len) {
     } else if (eq(m.t, "item")) {
         ApState::instance().inbound.push(m.item);
     } else if (eq(m.t, "ap_state")) {
-        // UI hint only.
+        // Cappy bubble on ready <-> disconnected transitions. Intermediate
+        // states (waiting_for_switch / connecting / authed) stay silent so
+        // reconnect flaps don't spam the queue. The s_last_ap_state tracker
+        // lives at file scope so the bridge-TCP-disconnect path (disconnect())
+        // can also publish the bubble + reset the tracker — covers the case
+        // where SMOClient dies without sending a graceful ap_state.
+        const bool was_ready = (std::strcmp(s_last_ap_state, "ready") == 0);
+        const bool now_ready = (std::strcmp(m.ap_state.conn, "ready") == 0);
+        const bool now_disconnected =
+            (std::strcmp(m.ap_state.conn, "disconnected") == 0);
+        if (!was_ready && now_ready) {
+            smoap::ui::CappyMessenger::instance()
+                .enqueueSystem("Connected to Archipelago");
+        } else if (was_ready && now_disconnected) {
+            smoap::ui::CappyMessenger::instance()
+                .enqueueSystem("Disconnected from Archipelago");
+        }
+        std::size_t i = 0;
+        while (i + 1 < sizeof(s_last_ap_state) && m.ap_state.conn[i] != '\0') {
+            s_last_ap_state[i] = m.ap_state.conn[i];
+            ++i;
+        }
+        s_last_ap_state[i] = '\0';
     } else if (eq(m.t, "print")) {
         SMOAP_LOG_INFO("[bridge] %s", m.print.text);
     } else if (eq(m.t, "pong")) {

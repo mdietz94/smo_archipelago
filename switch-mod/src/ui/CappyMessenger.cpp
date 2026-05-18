@@ -78,6 +78,29 @@ void CappyMessenger::enqueue(const smoap::ap::Item& item,
                    e.text, static_cast<unsigned>(live_count_));
 }
 
+void CappyMessenger::enqueueSystem(const char* text) {
+    if (!text || text[0] == '\0') return;
+    if (live_count_ >= kQueueCap) {
+        SMOAP_LOG_WARN("[cappy] queue full (cap=%u) — dropping system msg='%s'",
+                       static_cast<unsigned>(kQueueCap), text);
+        return;
+    }
+    Entry& e = queue_[tail_];
+    // Verbatim copy — no "Got X from Y!" wrapping for system messages. Same
+    // fixed-buffer pattern as Entry::text initialization; no allocator path.
+    std::size_t i = 0;
+    while (i + 1 < sizeof(e.text) && text[i] != '\0') {
+        e.text[i] = text[i];
+        ++i;
+    }
+    e.text[i] = '\0';
+    e.live = true;
+    tail_ = (tail_ + 1) % kQueueCap;
+    ++live_count_;
+    SMOAP_LOG_INFO("[cappy] enqueued system text='%s' (queue=%u)",
+                   e.text, static_cast<unsigned>(live_count_));
+}
+
 void CappyMessenger::tryPump(const void* scene) {
     // Scene-stability bookkeeping. We tick this even when there's nothing
     // queued so the settle counter is warm by the time an item arrives.

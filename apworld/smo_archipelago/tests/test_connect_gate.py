@@ -200,6 +200,66 @@ async def test_disconnect_clears_pending(monkeypatch):
     assert super_calls == []
 
 
+@pytest.mark.asyncio
+async def test_disconnect_from_ready_pushes_ap_state_to_switch(monkeypatch):
+    """Disconnect while AP was 'ready' broadcasts 'disconnected' to the
+    Switch so the CappyMessenger fires a 'Disconnected from Archipelago'
+    bubble on the ready -> disconnected transition."""
+    ctx, state, sw = _make_ctx(switch_connected=True)
+    monkeypatch.setattr(
+        CommonContext,
+        "disconnect",
+        lambda self, allow_autoreconnect=False: _record_bool([], allow_autoreconnect),
+    )
+
+    # Simulate a live AP session — bypass the actual Connected handler.
+    state.set_ap_conn("ready")
+    sw.ap_states.clear()
+
+    await ctx.disconnect()
+
+    assert state.ap_conn == "disconnected"
+    assert sw.ap_states == ["disconnected"]
+
+
+@pytest.mark.asyncio
+async def test_disconnect_when_already_disconnected_is_silent(monkeypatch):
+    """A no-op disconnect (already in the 'disconnected' state) must not
+    push another ap_state to the Switch — keeps reconnect-loop churn from
+    spamming the bubble queue."""
+    ctx, state, sw = _make_ctx(switch_connected=True)
+    monkeypatch.setattr(
+        CommonContext,
+        "disconnect",
+        lambda self, allow_autoreconnect=False: _record_bool([], allow_autoreconnect),
+    )
+
+    assert state.ap_conn == "disconnected"  # default
+    sw.ap_states.clear()
+
+    await ctx.disconnect()
+    await ctx.disconnect()
+
+    assert sw.ap_states == []  # idempotency: zero pushes
+
+
+@pytest.mark.asyncio
+async def test_disconnect_without_switch_does_not_explode(monkeypatch):
+    """No Switch attached -> ap_conn still mutates but no send_ap_state."""
+    ctx, state, _sw = _make_ctx(switch_connected=False)
+    ctx.switch = None
+    monkeypatch.setattr(
+        CommonContext,
+        "disconnect",
+        lambda self, allow_autoreconnect=False: _record_bool([], allow_autoreconnect),
+    )
+    state.set_ap_conn("ready")
+
+    await ctx.disconnect()
+
+    assert state.ap_conn == "disconnected"
+
+
 # ---- async lambda helpers (monkeypatch needs a coroutine factory) -----
 
 

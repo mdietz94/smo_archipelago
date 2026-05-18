@@ -428,6 +428,56 @@ TEST(enqueue_overflow_drops_new) {
 }
 
 // --------------------------------------------------------------------------
+// CappyMessenger::enqueueSystem: bypasses filter, verbatim text
+// --------------------------------------------------------------------------
+
+TEST(enqueue_system_accepts_verbatim_text) {
+    auto& m = CappyMessenger::instance();
+    m.resetForTest();
+    m.enqueueSystem("Connected to Archipelago");
+    EXPECT_EQ_I(m.pendingCount(), 1);
+}
+
+TEST(enqueue_system_null_text_is_noop) {
+    auto& m = CappyMessenger::instance();
+    m.resetForTest();
+    m.enqueueSystem(nullptr);
+    EXPECT_EQ_I(m.pendingCount(), 0);
+}
+
+TEST(enqueue_system_empty_text_is_noop) {
+    auto& m = CappyMessenger::instance();
+    m.resetForTest();
+    m.enqueueSystem("");
+    EXPECT_EQ_I(m.pendingCount(), 0);
+}
+
+TEST(enqueue_system_respects_queue_cap) {
+    auto& m = CappyMessenger::instance();
+    m.resetForTest();
+    for (std::size_t i = 0; i < CappyMessenger::kQueueCap; ++i) {
+        m.enqueueSystem("Connected to Archipelago");
+    }
+    EXPECT_EQ_I(m.pendingCount(), CappyMessenger::kQueueCap);
+    // Overflow drops, doesn't displace.
+    m.enqueueSystem("Disconnected from Archipelago");
+    EXPECT_EQ_I(m.pendingCount(), CappyMessenger::kQueueCap);
+}
+
+TEST(enqueue_system_truncates_oversize_text) {
+    auto& m = CappyMessenger::instance();
+    m.resetForTest();
+    // Entry::text is char[128]; 200 chars guarantees truncation with no
+    // overrun + NUL-terminated output. The user-facing UX consequence is
+    // the bubble shows a truncated line, but we only ever call this with
+    // short fixed strings ("Connected to Archipelago" = 24 chars), so the
+    // truncation path is defense-in-depth.
+    std::string huge(200, 'X');
+    m.enqueueSystem(huge.c_str());
+    EXPECT_EQ_I(m.pendingCount(), 1);
+}
+
+// --------------------------------------------------------------------------
 // main
 // --------------------------------------------------------------------------
 
