@@ -217,8 +217,13 @@ def _format_odyssey(ctx: "SMOContext") -> str:
     else:
         parts.append("[i](nothing yet)[/i]")
     parts.append("")
-    parts.append("[b]Captures unlocked[/b]")
-    parts.append(", ".join(caps) if caps else "[i](none yet)[/i]")
-    parts.append("")
+    # Capturesanity OFF: every capture is unlocked from the start, so
+    # listing 50 of them is noise. Show a one-liner instead of the full
+    # list (which would otherwise fill up with synthetic unlocks the
+    # bridge pushes at Connected time).
+    if ctx.capturesanity_enabled:
+        parts.append("[b]Captures unlocked[/b]")
+        parts.append(", ".join(caps) if caps else "[i](none yet)[/i]")
+        parts.append("")
     parts.append("[b]DeathLink[/b]: " + ("ENABLED" if ctx.deathlink_enabled else "disabled"))
     return "\n".join(parts)

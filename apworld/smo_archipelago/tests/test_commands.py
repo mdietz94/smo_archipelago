@@ -181,6 +181,9 @@ async def test_connected_handler_pushes_capturesanity_off_to_switch():
     sw = _StubSwitch()
     ctx.switch = sw  # type: ignore[assignment]
 
+    # Default before Connected: True (fail-safe = current behavior).
+    assert ctx.capturesanity_enabled is True
+
     await ctx._handle_ap_package("Connected", {
         "slot_data": {"capturesanity": 0},
         # Other Connected fields the handler tolerates being absent —
@@ -192,6 +195,10 @@ async def test_connected_handler_pushes_capturesanity_off_to_switch():
     assert sw.capturesanity_calls == [False]
     assert sw.push_capturesanity_calls == 1
     assert sw.ap_states == ["ready"]
+    # ctx mirror gets flipped too — used by gui.py to hide the
+    # "Captures unlocked" section (which would otherwise list 50
+    # synthetic unlocks).
+    assert ctx.capturesanity_enabled is False
 
 
 @pytest.mark.asyncio
@@ -217,6 +224,7 @@ async def test_connected_handler_pushes_capturesanity_on_to_switch():
 
     assert sw.capturesanity_calls == [True]
     assert sw.push_capturesanity_calls == 1
+    assert ctx.capturesanity_enabled is True
 
 
 @pytest.mark.asyncio

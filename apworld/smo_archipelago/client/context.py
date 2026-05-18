@@ -206,6 +206,11 @@ class SMOContext(CommonContext):
         self.shine_map = shine_map
         self.capture_map = capture_map
         self.deathlink_enabled = deathlink_enabled
+        # Default True (= captures are AP-gated, current behavior) until
+        # the AP Connected handler flips it from slot_data. UI uses this
+        # to hide the "Captures unlocked" section when capturesanity is
+        # off — listing all 50 synthetic unlocks is noise, not signal.
+        self.capturesanity_enabled = True
         self.display_enabled = display_enabled
         # M-color: AP-classification -> palette index for in-world moon
         # coloring. Defaults give each non-filler classification a unique
@@ -807,6 +812,7 @@ class SMOContext(CommonContext):
                 # Connected args dict.
                 slot_data = args.get("slot_data") or {}
                 capturesanity = bool(slot_data.get("capturesanity", 0))
+                self.capturesanity_enabled = capturesanity
                 self.switch.set_capturesanity_enabled(capturesanity)
                 # Flush synthetic unlocks NOW for an already-running
                 # Switch — the SNI-style two-stage gate means the Switch
