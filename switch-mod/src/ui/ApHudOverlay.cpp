@@ -43,10 +43,15 @@ void drawHudFrame() {
 
     static std::uint32_t s_frame = 0;
     if ((++s_frame % kHeartbeatInterval) == 0) {
-        SMOAP_LOG_INFO("AP heartbeat: conn=%s checked=%u captures=%u",
-                       connStateName(st.conn.load()),
-                       static_cast<unsigned>(st.locations_checked.size()),
-                       static_cast<unsigned>(st.captures_unlocked.count()));
+        // DEBUG-level so it stays in svcOutputDebugString + smo_ap.txt
+        // (local-only diagnostic) but does NOT cross the wire to the PC
+        // client's Odyssey-tab log. The 1Hz cadence was drowning out the
+        // event-driven INFO lines in that pane — heartbeat is useful for
+        // post-mortem from the SD dump, noisy for live observation.
+        SMOAP_LOG_DEBUG("AP heartbeat: conn=%s checked=%u captures=%u",
+                        connStateName(st.conn.load()),
+                        static_cast<unsigned>(st.locations_checked.size()),
+                        static_cast<unsigned>(st.captures_unlocked.count()));
     }
 }
 

@@ -24,11 +24,21 @@
 
 #include "lib/nx/nx.h"
 
+#include "../ap/ApFrameBridge.hpp"
+
 #ifdef SMOAP_DEBUG_SD_LOG
 #  include <atomic>
 #  include "nn/fs/fs_mount.hpp"
 #  include "nn/fs/fs_files.hpp"
 #  include "nn/fs/fs_types.hpp"
+#endif
+
+// Compile-time threshold: only INFO+ get mirrored to the PC client by default.
+// DEBUG forwarding would flood the wire (some per-frame hook paths log at
+// DEBUG). Override at build time with -DSMOAP_LOG_FORWARD_MIN_LEVEL=0 for DEBUG.
+// 0=Debug, 1=Info, 2=Warn, 3=Error.
+#ifndef SMOAP_LOG_FORWARD_MIN_LEVEL
+#  define SMOAP_LOG_FORWARD_MIN_LEVEL 1
 #endif
 
 namespace smoap::util {
@@ -44,6 +54,29 @@ const char* prefix(LogLevel lvl) {
     }
     return "[smoap ?] ";
 }
+
+const char* wireLevelName(LogLevel lvl) {
+    switch (lvl) {
+        case LogLevel::Debug: return "debug";
+        case LogLevel::Info:  return "info";
+        case LogLevel::Warn:  return "warn";
+        case LogLevel::Error: return "error";
+    }
+    return "info";
+}
+
+// Why no thread_local re-entry guard: subsdk9 has no thread-local memory
+// allocator registered (it's a custom exlaunch runtime, not a full
+// nnSdk-app environment). Any `thread_local` variable in this TU causes
+// nnSdk's `SetMemoryAllocatorForThreadLocal` to Abort at module load,
+// 0x24 bytes into exl_main, before any of our code runs. Crash signature:
+// Result 0xCA8, User Break, stack ends at SetMemoryAllocatorForThreadLocal.
+//
+// enqueueRemoteLog() and ApClient::pumpOnce's drain block both contain
+// zero SMOAP_LOG_* calls, so no recursion path exists today. If a future
+// edit adds logging inside the forward path, prefer a `static
+// std::atomic<int> g_recursion_depth` with a thread-id check, NOT
+// thread_local — same module-load abort applies.
 
 #ifdef SMOAP_DEBUG_SD_LOG
 
@@ -127,6 +160,20 @@ void log(LogLevel lvl, const char* fmt, ...) {
 
     std::size_t total = pfx_len + static_cast<std::size_t>(n);
     if (total >= sizeof(buf) - 1) total = sizeof(buf) - 2;
+
+    // Forward to the bridge BEFORE appending '\n' so the message text the PC
+    // tab sees doesn't include a trailing newline (the Python logger adds its
+    // own per-record line break). enqueueRemoteLog itself is no-op when the
+    // bridge isn't connected, so this is cheap on the disconnect path too.
+    if (static_cast<int>(lvl) >= SMOAP_LOG_FORWARD_MIN_LEVEL) {
+        // Send body without the "[smoap xxx] " prefix — the level is a
+        // structured field on the wire, and the PC tab is already labelled.
+        const char saved = buf[total];
+        buf[total] = '\0';
+        smoap::ap::enqueueRemoteLog(wireLevelName(lvl), buf + pfx_len);
+        buf[total] = saved;
+    }
+
     buf[total++] = '\n';
 
     svcOutputDebugString(buf, total);

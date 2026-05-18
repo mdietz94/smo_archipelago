@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 
 import pytest
 
 from client import protocol
-from client.protocol import HelloMsg, ItemMsg, ItemRef, ItemKind
+from client.protocol import HelloMsg, ItemMsg, ItemRef, ItemKind, LogMsg
 from client.state import BridgeState, ItemEvent, CheckEvent
 from client.switch_server import SwitchServer
 
@@ -201,6 +202,84 @@ async def test_unknown_message_yields_err():
         assert "err" in kinds
         err = next(m for m in msgs if m["t"] == "err")
         assert err["code"] == "unknown_kind"
+    finally:
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+        await sw.stop()
+
+
+@pytest.mark.asyncio
+async def test_log_message_routes_to_switch_logger_and_state(caplog):
+    """Switch-forwarded log lines must land in (a) BridgeState.last_messages
+    (the snapshot feed the web tracker mirrors) and (b) the 'SMO' logger
+    (the Kivy 'Switch' tab's underlying Python logging channel).
+    """
+    state = BridgeState()
+
+    async def on_check(_): ...
+    async def on_goal(): ...
+
+    sw = SwitchServer("127.0.0.1", 0, state, on_check, on_goal)
+    server = await asyncio.start_server(sw._handle_client, "127.0.0.1", 0)
+    sw._server = server
+    port = server.sockets[0].getsockname()[1]
+
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        writer.write(protocol.encode(HelloMsg()))
+        await writer.drain()
+        await _drain_messages(reader, n=3, timeout=2.0)
+
+        with caplog.at_level(logging.DEBUG, logger="SMO"):
+            writer.write(protocol.encode(LogMsg(
+                level="warn",
+                msg="[moon_label] no LayoutActor at self+0x20; dropping",
+            )))
+            writer.write(protocol.encode(LogMsg(
+                level="info",
+                msg="[hook] installed ShineGet trampoline",
+            )))
+            writer.write(protocol.encode(LogMsg(
+                level="error",
+                msg="bad thing happened",
+            )))
+            # Unknown level should fall back to INFO without erroring.
+            writer.write(protocol.encode(LogMsg(level="exotic", msg="oddball")))
+            await writer.drain()
+            await asyncio.sleep(0.1)
+
+        # (a) snapshot-feed assertion — pre-existing prefix format.
+        assert any(
+            "[switch:warn] [moon_label] no LayoutActor" in line
+            for line in state.last_messages
+        )
+        assert any(
+            "[switch:info] [hook] installed" in line for line in state.last_messages
+        )
+        assert any(
+            "[switch:error] bad thing happened" in line for line in state.last_messages
+        )
+        assert any("[switch:exotic] oddball" in line for line in state.last_messages)
+
+        # (b) caplog assertion — Python logging channel got the records.
+        switch_records = [r for r in caplog.records if r.name == "SMO"]
+        # All forwarded records carry the [switch:LEVEL] prefix so a reader
+        # can tell them apart from PC-side SMO diagnostics in the tab.
+        formatted = [r.getMessage() for r in switch_records]
+        assert any("[switch:warn] [moon_label]" in m for m in formatted)
+        assert any("[switch:info] [hook] installed" in m for m in formatted)
+        assert any("[switch:error] bad thing happened" in m for m in formatted)
+        # Level mapping: warn -> WARNING, info -> INFO, error -> ERROR, and
+        # "exotic" (unknown) falls back to INFO.
+        levels_seen = {r.levelno for r in switch_records}
+        assert logging.WARNING in levels_seen
+        assert logging.INFO in levels_seen
+        assert logging.ERROR in levels_seen
+        info_msgs = [r.getMessage() for r in switch_records if r.levelno == logging.INFO]
+        assert any("[switch:exotic] oddball" in m for m in info_msgs)
     finally:
         writer.close()
         try:

@@ -178,6 +178,14 @@ public:
     // frame -> socket
     SpscRing<Check, 256> outbound_checks;
     SpscRing<StatusEvent, 16> outbound_status;
+    // any-thread -> socket. Mirror of every smoap::util::log() call above
+    // SMOAP_LOG_FORWARD_MIN_LEVEL — surfaced in the PC client's "Switch" tab
+    // so we can diagnose retail-Switch behaviour without `lm` capture.
+    // SpscRing is single-producer; enqueueRemoteLog serialises producers
+    // with its own atomic_flag spinlock since log() can be called from any
+    // thread (frame, worker, hook callbacks).
+    SpscRing<Log, 256> outbound_logs;
+    std::atomic<std::uint32_t> log_drops{0};  // ring-full counter
 
     // socket -> frame. Pre-collection moon color: bridge sends
     // ShineScoutsMsg(s) once per AP connect after LocationScouts, then again

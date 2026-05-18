@@ -122,9 +122,17 @@ struct Ping {
     std::int64_t ts_ms = 0;
 };
 
+// Forwarded log line — every smoap::util::log() call above the configured
+// threshold is mirrored into the bridge's "Switch" tab. Fixed buffers
+// because the producer can be ANY thread (frame, worker, hook callbacks)
+// and libstdc++'s std::string allocator NULL-derefs on the worker once heap
+// state has drifted — same M6.1 rationale as Check.
+inline constexpr std::size_t kLogLevelCap = 8;   // "debug", "info", "warn", "error"
+inline constexpr std::size_t kLogMsgCap   = 256; // truncates longer messages
+
 struct Log {
-    std::string level = "info";
-    std::string msg;
+    char level[kLogLevelCap] = {};
+    char msg[kLogMsgCap] = {};
 };
 
 // State snapshot. Sent by the Switch on every (re)connect right after HELLO,

@@ -521,6 +521,36 @@ void ApClient::pumpOnce() {
         st.outbound_status.popDiscard();
     }
 
+    // Drain outbound_logs: every smoap::util::log() call above the configured
+    // threshold landed here from any thread (frame, worker, hooks). Best-
+    // effort delivery — if a Send fails we leave the entry queued for the
+    // next pump cycle, identical to outbound_checks. We do NOT log around
+    // the send loop itself (would re-enter into the same ring; the re-entry
+    // guard in Log.cpp covers it but logging here adds zero diagnostic
+    // value). Drains run BEFORE the deposit loop so a log-storm doesn't
+    // starve deposits if the consumer side is slow.
+    if (const std::uint32_t drops = st.log_drops.exchange(0, std::memory_order_relaxed); drops > 0) {
+        // Surface the drop count as a one-shot WARN line so the gap is
+        // visible in the tab. Built directly (not via SMOAP_LOG_*) so we
+        // don't pump the synthesized line back into our own ring.
+        Log marker;
+        copyFixedField(marker.level, "warn");
+        std::snprintf(marker.msg, kLogMsgCap,
+                      "[log_forward] %u log line(s) dropped (ring full)", drops);
+        encodeLog(line, marker);
+        if (nn::socket::Send(socket_fd_, line.data(), line.size(), 0) < 0) {
+            // Re-arm so the next pump retries. Fold back into the counter.
+            st.log_drops.fetch_add(drops, std::memory_order_relaxed);
+            return;
+        }
+    }
+    Log lg;
+    while (st.outbound_logs.peek(lg)) {
+        encodeLog(line, lg);
+        if (nn::socket::Send(socket_fd_, line.data(), line.size(), 0) < 0) return;
+        st.outbound_logs.popDiscard();
+    }
+
     // M6 phase D — drain pending_deposits: copy into worker-local unacked
     // array, then transmit to bridge. The unacked array survives across
     // reconnects (a save-load-driven re-HELLO would clear it via

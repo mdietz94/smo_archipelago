@@ -149,9 +149,50 @@ TEST(encode_ping) {
 }
 
 TEST(encode_log) {
-    Log lg{.level="info", .msg="hook installed for ShineGet at 0x..."};
+    Log lg{};
+    copyFixedField(lg.level, "info");
+    copyFixedField(lg.msg,   "hook installed for ShineGet at 0x...");
     EXPECT_EQ_S(wire([&](auto& b){ encodeLog(b, lg); }),
         R"({"t":"log","level":"info","msg":"hook installed for ShineGet at 0x..."})" "\n");
+}
+
+TEST(encode_log_all_levels) {
+    const char* levels[] = {"debug", "info", "warn", "error"};
+    for (const char* lvl : levels) {
+        Log lg{};
+        copyFixedField(lg.level, lvl);
+        copyFixedField(lg.msg,   "x");
+        const std::string out = wire([&](auto& b){ encodeLog(b, lg); });
+        const std::string expected = std::string(R"({"t":"log","level":")") + lvl +
+                                     R"(","msg":"x"})" "\n";
+        EXPECT_EQ_S(out, expected);
+    }
+}
+
+TEST(encode_log_msg_truncates_at_cap) {
+    // Source longer than kLogMsgCap should be truncated to kLogMsgCap - 1
+    // chars (leaving room for the null terminator) by copyFixedField.
+    std::string src(kLogMsgCap + 50, 'A');  // 306 'A's
+    Log lg{};
+    copyFixedField(lg.level, "warn");
+    copyFixedField(lg.msg, src.c_str());
+    EXPECT_EQ_I(std::strlen(lg.msg), kLogMsgCap - 1);
+    const std::string out = wire([&](auto& b){ encodeLog(b, lg); });
+    const std::string expected_msg(kLogMsgCap - 1, 'A');
+    const std::string expected = std::string(R"({"t":"log","level":"warn","msg":")") +
+                                 expected_msg + R"("})" "\n";
+    EXPECT_EQ_S(out, expected);
+}
+
+TEST(encode_log_level_truncates_at_cap) {
+    // Levels are short ("debug" is 5 chars + null = 6, fits in
+    // kLogLevelCap=8). Validate truncation contract for the buffer all the
+    // same — a forwarder bug elsewhere shouldn't crash the encoder.
+    Log lg{};
+    copyFixedField(lg.level, "criticalalert");  // 13 chars, exceeds 8
+    copyFixedField(lg.msg,   "x");
+    EXPECT_EQ_I(std::strlen(lg.level), kLogLevelCap - 1);  // truncated to 7
+    EXPECT_EQ_S(std::string(lg.level), "critica");
 }
 
 // --------------------------------------------------------------------------

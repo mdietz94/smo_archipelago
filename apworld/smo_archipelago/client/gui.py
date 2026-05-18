@@ -8,30 +8,38 @@ client/main.py inside the Launcher subprocess.
 Subclasses CommonClient's GameManager, which provides:
   - top bar: server-address input + Connect button + thin progress bar
     bound to checked/missing AP locations
-  - log tabs: "All" (combined) + one tab per logging_pairs entry
+  - log tab: "Archipelago" (AP/Client-side logger output)
   - "Hints" tab (built-in)
   - bottom bar: Command: button + command prompt
 
-We add ONE custom tab ("Odyssey" — SMO-specific game-progress info that
-has no native home in the AP framework) and ONE top-bar widget (a Switch
-status pill next to the AP Connect button). Earlier iterations shipped a
-"Connections" tab and a fatter "Tracker" tab; those were carried over
-from the deleted Flask web tracker and duplicated info the baseline UI
-already shows.
+We add ONE custom tab ("Odyssey") split 50/50 horizontally:
+  * left  — at-a-glance SMO state (kingdoms unlocked, captures, moons by
+            kingdom, DeathLink)
+  * right — UILog tailing logger "SMO", which catches PC-side SMO
+            diagnostics AND Switch-forwarded log lines (routed by
+            switch_server.py for the "log" wire message type)
+
+…plus ONE top-bar widget (a Switch status pill next to the AP Connect
+button). Earlier iterations shipped a "Connections" tab and a fatter
+"Tracker" tab; those were dropped because they duplicated info the
+baseline UI already shows. A separate "Switch" log tab was also
+dropped — its content lives in the right half of the Odyssey tab now.
 """
 
 from __future__ import annotations
 
+import logging
 import typing
 
 # IMPORTANT: kvui MUST be imported before any kivy.* module. kvui asserts
 # `"kivy" not in sys.modules` at module top (for frozen-build compatibility),
 # so any prior `from kivy.X import Y` here would trip the assert and prevent
 # the GUI from starting. Same reason Wargroove imports kvui first.
-from kvui import GameManager
+from kvui import GameManager, UILog
 
 from kivy.clock import Clock
 from kivy.metrics import dp
+from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
 
@@ -71,18 +79,24 @@ class _LiveLabel(Label):
 class SmoManager(GameManager):
     """Window for the SMOClient.
 
-    Two log streams (Archipelago + Switch) — the second pair gives users
-    a separate tab for SMO/hook noise so the AP log stays readable. One
-    custom tab ("Odyssey") for game-progress that the baseline doesn't
-    show. One top-bar Switch-status pill next to the AP Connect button.
+    One AP-side log tab ("Archipelago") plus one custom tab ("Odyssey")
+    that's a 50/50 horizontal split: at-a-glance SMO state on the left,
+    live SMO + Switch-forwarded log tail on the right. The Switch-side
+    log used to be its own tab but the left half of Odyssey was sparse
+    and tab-hopping while debugging was annoying — co-locating them
+    keeps state and diagnostics in one eye-line. One top-bar
+    Switch-status pill next to the AP Connect button.
     """
 
     logging_pairs = [
         ("Client", "Archipelago"),
-        # Logger NAME stays "SMO" so existing logging.getLogger("SMO") call
-        # sites don't churn. Display name is "Switch" because the tab is
-        # mostly Switch/hook events, which is what users grep for.
-        ("SMO", "Switch"),
+        # SMO logger ("SMO") is intentionally NOT a logging_pairs entry.
+        # It's rendered in the right half of the Odyssey tab via a
+        # manually-managed UILog (see build()). switch_server.py routes
+        # every "log" wire message from the Switch into this same logger
+        # with a "[switch:LEVEL] " prefix, so PC-side and device-side
+        # diagnostics appear together — exactly what you want while
+        # debugging a hardware-only behaviour.
     ]
     base_title = "Archipelago SMO Client"
 
@@ -90,17 +104,32 @@ class SmoManager(GameManager):
         super().__init__(ctx)
         self._odyssey_label: _LiveLabel | None = None
         self._switch_pill: Label | None = None
+        self._smo_log: UILog | None = None
 
     def build(self):
         container = super().build()
-        # Odyssey tab: SMO-specific at-a-glance state (kingdoms, captures,
-        # per-kingdom moon progress, DeathLink). The baseline UI already
-        # shows AP item flow + AP progress + connection status, so we don't
-        # duplicate those here.
-        odyssey_scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
+        # Odyssey tab: horizontal 50/50 split.
+        #   Left  — at-a-glance SMO state (kingdoms, captures, per-kingdom
+        #           moon progress, DeathLink). Refreshed every 1.5s.
+        #   Right — UILog tailing logger "SMO". Catches BOTH PC-side SMO
+        #           diagnostics AND Switch-forwarded log lines (routed by
+        #           switch_server.py for the "log" wire message type).
+        #           UILog instantiation attaches a LogtoUI handler to the
+        #           passed logger; records auto-tail and are capped at the
+        #           kvui `messages` count (default 1000, client.kv).
+        odyssey_split = BoxLayout(orientation="horizontal", spacing=dp(4))
+
+        left_scroll = ScrollView(do_scroll_x=False, do_scroll_y=True,
+                                 size_hint_x=0.5)
         self._odyssey_label = _LiveLabel(text="(connecting…)")
-        odyssey_scroll.add_widget(self._odyssey_label)
-        self.add_client_tab("Odyssey", odyssey_scroll)
+        left_scroll.add_widget(self._odyssey_label)
+        odyssey_split.add_widget(left_scroll)
+
+        self._smo_log = UILog(logging.getLogger("SMO"))
+        self._smo_log.size_hint_x = 0.5
+        odyssey_split.add_widget(self._smo_log)
+
+        self.add_client_tab("Odyssey", odyssey_split)
 
         # Switch status pill, appended to the top connect_layout (which
         # already contains the AP server-address input + Connect button).
@@ -134,7 +163,6 @@ class SmoManager(GameManager):
         except Exception:
             # Don't let a transient render error kill the scheduled refresh;
             # Clock.schedule_interval cancels on exception.
-            import logging
             logging.getLogger("SMO").exception("panel refresh failed")
 
 

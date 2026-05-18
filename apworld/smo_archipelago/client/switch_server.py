@@ -36,6 +36,21 @@ _SCOUT_CHUNK_SIZE = 200
 
 log = logging.getLogger(__name__)
 
+# Dedicated logger for forwarded Switch-side log lines. Surfaces in the
+# Kivy "Switch" tab (gui.py logging_pairs already routes the "SMO" name
+# there). Kept distinct from `log` above so the SMOClient's PC-side
+# diagnostics (logger "client.switch_server") stay scoped to the
+# "Archipelago" tab while Switch-forwarded noise lands where the user
+# expects it.
+_switch_log = logging.getLogger("SMO")
+
+_SWITCH_LEVEL_MAP = {
+    "debug": logging.DEBUG,
+    "info":  logging.INFO,
+    "warn":  logging.WARNING,
+    "error": logging.ERROR,
+}
+
 
 CheckHandler = Callable[[dict], Awaitable["int | None"]]  # returns AP loc_id or None
 GoalHandler = Callable[[], Awaitable[None]]
@@ -239,7 +254,18 @@ class SwitchServer:
         elif t == "ping":
             await self._send(PongMsg(ts_ms=msg.get("ts_ms", int(time.time() * 1000))))
         elif t == "log":
-            self._state.add_log(f"[switch:{msg.get('level', 'info')}] {msg.get('msg', '')}")
+            level = str(msg.get("level", "info"))
+            text = str(msg.get("msg", ""))
+            # Snapshot feed (web-tracker `recent_messages`) — pre-existing.
+            self._state.add_log(f"[switch:{level}] {text}")
+            # Surface in the Kivy "Switch" tab via Archipelago's LogtoUI
+            # handler attached to logger "SMO". Prefix the message so a
+            # reader can tell forwarded Switch lines apart from PC-side
+            # SMO diagnostics in the same tab.
+            _switch_log.log(
+                _SWITCH_LEVEL_MAP.get(level, logging.INFO),
+                "[switch:%s] %s", level, text,
+            )
         elif t == "state_begin":
             self._state.begin_snapshot(save_slot=msg.get("save_slot"))
             log.info("snapshot begin: mod_ver=%s save_slot=%s",

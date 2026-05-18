@@ -7,10 +7,23 @@
 
 #include "ApFrameBridge.hpp"
 
+#include <atomic>
+#include <cstdio>
+
 #include "ApProtocol.hpp"
 #include "ApState.hpp"
 
 namespace smoap::ap {
+
+namespace {
+
+// outbound_logs producer-side spinlock. SpscRing is single-producer only,
+// but enqueueRemoteLog can be called from ANY thread (frame, worker, hook
+// callbacks). A short spin around the push() keeps the ring invariant
+// honest. Lock-free atomic_flag — no allocator path.
+std::atomic_flag g_logs_push_lock = ATOMIC_FLAG_INIT;
+
+}  // namespace
 
 static void enqueueCheck(const Check& c) {
     auto& st = ApState::instance();
@@ -70,6 +83,28 @@ void reportDeath() {
     // would need a syscall here). 0 means "stamp at send time".
     StatusEvent e{.goal = false, .death = true, .ts_ms = 0};
     st.outbound_status.push(e);
+}
+
+void enqueueRemoteLog(const char* level, const char* msg) {
+    auto& st = ApState::instance();
+    // Don't bother enqueuing if no one is listening — the line still went out
+    // via svcOutputDebugString. This also prevents an infinite backlog when
+    // the bridge has never connected.
+    if (st.conn.load(std::memory_order_relaxed) == ConnState::Disconnected) return;
+    Log lg;
+    copyFixedField(lg.level, level);
+    copyFixedField(lg.msg,   msg);
+    // SpscRing is single-producer; many threads call log(). Spin the producer
+    // side; the consumer (ApClient::pumpOnce) is the sole tail mover and is
+    // unaffected. Push is short (memcpy + two atomic stores).
+    while (g_logs_push_lock.test_and_set(std::memory_order_acquire)) {
+        // spin
+    }
+    const bool ok = st.outbound_logs.push(lg);
+    g_logs_push_lock.clear(std::memory_order_release);
+    if (!ok) {
+        st.log_drops.fetch_add(1, std::memory_order_relaxed);
+    }
 }
 
 }  // namespace smoap::ap
