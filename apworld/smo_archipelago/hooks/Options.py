@@ -137,7 +137,7 @@ class Capturesanity(Toggle):
     display_name = "Capturesanity"
 
 class IncludePostMetroMoons(DefaultOnToggle):
-    """Turning this off will remove every location and item that isn't relevant before Metro Kingdom. Mostly for the Festival goal.
+    """Turning this off will remove every location and item that isn't relevant before Metro Kingdom.
     This removes roughly 200 locations, depending on your settings.
     WARNING: this is by far the largest single reduction in the moon pool. Combining it with multiple
     other 'include_...' toggles set to false can drop the location count below what's needed to place

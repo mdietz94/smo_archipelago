@@ -92,7 +92,6 @@ def _smo_yaml(overrides: dict[str, bool], slot_name: str = "Mario") -> str:
     """Render an SMO player yaml. Only set keys that differ from default-on."""
     base = {
         "accessibility": "minimal",
-        "goal": "World Peace",
         "death_link": False,
         # Toggles always specified for parity with the loopback seed
         # (capturesanity defaults OFF, so it needs an explicit true to

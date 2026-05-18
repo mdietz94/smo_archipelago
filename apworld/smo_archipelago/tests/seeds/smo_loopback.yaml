@@ -7,7 +7,6 @@ Spicy Meatball Overdrive:
   # side-chain rules are too strict for full accessibility.
   # Minimal accessibility lets generation succeed for loopback testing.
   accessibility: minimal
-  goal: World Peace
   death_link: false
 
   # All category toggles default to on; we explicitly enable the big ones

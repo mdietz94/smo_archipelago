@@ -2079,15 +2079,6 @@
         "requires": "{PostTrumpeter()}"
     },
     {
-        "name": "Complete the Festival",
-        "category": [
-            "Metro Kingdom"
-        ],
-        "region": "Metro Kingdom",
-        "victory": true,
-        "requires": "{MetroPeace()}"
-    },
-    {
         "name": "Snow: The Icicle Barrier",
         "category": [
             "Snow Kingdom",
@@ -4235,14 +4226,5 @@
         ],
         "region": "Moon Kingdom",
         "requires": "{ParabonesSkip()} and {OptOne(Banzai Bill)}"
-    },
-    {
-        "name": "World Peace",
-        "category": [
-            "Moon Kingdom"
-        ],
-        "region": "Moon Kingdom",
-        "victory": true,
-        "requires": "{OptAll(|Banzai Bill| and |Bowser|)} and {ParabonesSkip()} and {SandPeace()} and {LakePeace()} and {WoodedPeace()} and {MetroPeace()} and {SnowPeace()} and {SeasidePeace()} and {SnowSeasidePeace()} and {LuncheonPeace()} and {BowserPeace()}"
     }
 ]
