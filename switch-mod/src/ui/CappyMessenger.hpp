@@ -99,6 +99,15 @@ public:
                  const char* local_slot,
                  bool suppress);
 
+    // Enqueue a verbatim system message — bypasses shouldShowCappyMsg (system
+    // messages have no sender/kind) and skips formatCappyMsg's "Got X from Y!"
+    // wrapping. Text is copied verbatim into the Entry buffer. Caller is
+    // responsible for keeping the displayed string within the Cappy bubble's
+    // ~60-char comfortable width. Used by ApClient for AP connection-state
+    // transition bubbles ("Connected to Archipelago" / "Disconnected from
+    // Archipelago"). Null or empty text is a no-op.
+    void enqueueSystem(const char* text);
+
     // Per-frame driver. Called from DrawMainHook AFTER applyOnFrame. Tries
     // to dispatch the head item via rs::tryShowCapMessagePriorityLow.
     // scene == nullptr -> no-op (boot scene, scene transition).

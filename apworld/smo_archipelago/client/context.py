@@ -296,11 +296,21 @@ class SMOContext(CommonContext):
         Without this clear, a /disconnect issued while waiting for the
         Switch would leave the pending address armed — the next Switch
         HELLO would then fire an AP dial the user thought they cancelled.
+
+        Also broadcasts the "disconnected" state to the Switch so the
+        in-game CappyMessenger fires a "Disconnected from Archipelago"
+        bubble on the ready -> disconnected transition. Idempotency-guarded:
+        a no-op disconnect (already in "disconnected") does NOT re-emit,
+        keeping reconnect-loop churn off the bubble queue.
         """
         if self._pending_ap_address is not None:
             log.info("cancelling pending AP connect (was waiting for Switch)")
             self._pending_ap_address = None
+        prev_ap_conn = self.state.ap_conn
+        if prev_ap_conn != "disconnected":
             self.state.set_ap_conn("disconnected")
+            if self.switch is not None:
+                await self.switch.send_ap_state("disconnected")
         await super().disconnect(allow_autoreconnect=allow_autoreconnect)
 
     async def _on_switch_ready(self) -> None:
