@@ -260,6 +260,15 @@ void ApClient::threadMain() {
     // Monotonic ms when current connection was established; 0 = not
     // connected. Drives the quick-bounce / stability gates below.
     std::int64_t connected_at_ms = 0;
+    // Snapshot gate has two halves: save_was_loaded (SaveLoadHook latch) and
+    // scene_cache != nullptr (HakoniwaSequence has a live curScene, i.e. the
+    // player is in an actual stage rather than on the file-select screen).
+    // sendHello fires unconditionally on connect; if either half is missing
+    // at that point the snapshot is deferred and re-checked from the loop
+    // body below on each iteration. Cleared after a successful sendSnapshot
+    // and re-evaluated on every (re)connect. Worker-thread-local — both gate
+    // signals are atomics so no extra locking.
+    bool snapshot_pending = false;
 
     while (running_) {
         // Fire deferred "Disconnected from Archipelago" bubble if the grace
@@ -326,20 +335,43 @@ void ApClient::threadMain() {
             // backoff every iteration; the deferred reset means a sustained
             // rejection cycle keeps backoff escalating.
             sendHello();
-            // Skip snapshot until a save has been loaded. SMO populates
-            // GameDataHolder from the last-used save file at the title
-            // screen for the file-select previews; enumerating before
-            // SaveLoadHook fires would faithfully report the previous
-            // save's moons/captures and the bridge would forward them as
-            // fresh LocationChecks (AP credits them, ships items back —
-            // observed 2026-05-18). SaveLoadHook latches save_was_loaded
-            // then calls requestRehello, which closes the socket and
-            // brings us back through this branch with the flag set.
-            if (ApState::instance().save_was_loaded.load(std::memory_order_acquire)) {
-                sendSnapshot();
-            } else {
-                SMOAP_LOG_INFO("[conn] save not yet loaded; deferring snapshot "
-                               "until SaveLoadHook re-HELLO");
+            // Two-part gate (see snapshot_pending declaration above):
+            //   1. save_was_loaded — SaveLoadHook fired at least once.
+            //   2. scene_cache != nullptr — HakoniwaSequence has a live
+            //      curScene (player is in a stage), NOT on the file-select
+            //      screen.
+            // Why both: SaveLoadHook fires not just on user-initiated Load
+            // Save / New Game, but also for every file-select preview render
+            // on the title screen. On real Switch, SMO boots → file-select
+            // renders all save previews → SaveLoadHook latches save_was_loaded
+            // long before the user clicks anything; if we only gated on (1),
+            // the snapshot would faithfully report the previous save's
+            // moons/captures the moment the bridge connected, and AP would
+            // credit them as fresh LocationChecks (observed 2026-05-18 with
+            // 10 moons forwarded from a never-loaded save). curScene is null
+            // at the file-select screen and becomes non-null once a real
+            // stage instantiates, so requiring both filters out preview-fires
+            // without needing to teach SaveLoadHook to distinguish them.
+            //
+            // If the gate is closed at connect time, the loop body's drain
+            // block below polls scene_cache each iteration (~200 ms) and
+            // sends the snapshot once both conditions are true. No extra
+            // requestRehello round-trip needed — the existing socket is fine.
+            {
+                auto& s = ApState::instance();
+                const bool save_ok = s.save_was_loaded.load(std::memory_order_acquire);
+                const bool scene_ok = s.scene_cache.load(std::memory_order_relaxed) != nullptr;
+                if (save_ok && scene_ok) {
+                    sendSnapshot();
+                    snapshot_pending = false;
+                } else {
+                    SMOAP_LOG_INFO("[conn] snapshot deferred (save_was_loaded=%d "
+                                   "scene_loaded=%d); will retry from worker loop "
+                                   "once both are true",
+                                   static_cast<int>(save_ok),
+                                   static_cast<int>(scene_ok));
+                    snapshot_pending = true;
+                }
             }
             ApState::instance().conn.store(ConnState::Hello);
 
@@ -422,6 +454,25 @@ void ApClient::threadMain() {
         std::size_t line_len = 0;
         while (popLine(line_buf, line_len)) {
             handleLine(line_buf, line_len);
+        }
+
+        // Late-arriving snapshot send: at HELLO time the gate may have been
+        // closed because the player was still on the file-select screen
+        // (scene_cache null). Poll scene_cache here — the frame-thread main
+        // loop updates it each frame — and send the snapshot the first time
+        // both halves of the gate are true. Polling cadence is recv_timeout_ms
+        // (default 200 ms), which the user won't perceive between entering a
+        // stage and the snapshot landing on the bridge.
+        if (snapshot_pending && socket_fd_ >= 0) {
+            auto& s = ApState::instance();
+            const bool save_ok = s.save_was_loaded.load(std::memory_order_acquire);
+            const bool scene_ok = s.scene_cache.load(std::memory_order_relaxed) != nullptr;
+            if (save_ok && scene_ok) {
+                SMOAP_LOG_INFO("[conn] snapshot gate now open "
+                               "(save_was_loaded=1 scene_loaded=1); sending");
+                sendSnapshot();
+                snapshot_pending = false;
+            }
         }
 
         pumpOnce();
