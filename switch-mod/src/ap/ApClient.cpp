@@ -263,7 +263,21 @@ void ApClient::threadMain() {
             }
             backoff_ms = target_.retry_ms;  // reset on success
             sendHello();
-            sendSnapshot();
+            // Skip snapshot until a save has been loaded. SMO populates
+            // GameDataHolder from the last-used save file at the title
+            // screen for the file-select previews; enumerating before
+            // SaveLoadHook fires would faithfully report the previous
+            // save's moons/captures and the bridge would forward them as
+            // fresh LocationChecks (AP credits them, ships items back —
+            // observed 2026-05-18). SaveLoadHook latches save_was_loaded
+            // then calls requestRehello, which closes the socket and
+            // brings us back through this branch with the flag set.
+            if (ApState::instance().save_was_loaded.load(std::memory_order_acquire)) {
+                sendSnapshot();
+            } else {
+                SMOAP_LOG_INFO("[conn] save not yet loaded; deferring snapshot "
+                               "until SaveLoadHook re-HELLO");
+            }
             ApState::instance().conn.store(ConnState::Hello);
 
             // M6 phase D — replay every unacked deposit so a reconnect-blip

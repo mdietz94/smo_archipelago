@@ -136,6 +136,14 @@ HOOK_DEFINE_TRAMPOLINE(SaveLoadHook) {
                            "(bridge re-HELLO will re-send them)",
                            drained);
         }
+        // Latch save_was_loaded so the upcoming re-HELLO's sendSnapshot
+        // enumerates against actually-loaded GameDataHolder state instead of
+        // whatever the title screen had cached for save-preview rendering.
+        // Release ordering pairs with the worker thread's acquire load in
+        // threadMain before sendSnapshot. Once set, stays set for the rest
+        // of the process — a subsequent New Game / Load Save still triggers
+        // re-HELLO via the requestRehello call below.
+        st.save_was_loaded.store(true, std::memory_order_release);
         // Tell the socket worker to close-and-reopen so the bridge's HELLO
         // replay re-syncs both sides. The actual socket close happens on the
         // worker thread; we just set the atomic here.

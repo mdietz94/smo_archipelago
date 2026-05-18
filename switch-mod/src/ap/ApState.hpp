@@ -235,6 +235,19 @@ public:
     // release/acquire visibility guarantee.
     std::atomic<bool> save_load_passthrough{false};
 
+    // Latched true the first time SaveLoadHook runs. Gates ApClient's
+    // post-HELLO sendSnapshot so we don't enumerate GameDataHolder before
+    // any save has been loaded — SMO's title screen populates GDH from
+    // the last-used save file for the file-select previews, so a snapshot
+    // taken at boot reports the previous save's moons/captures even if
+    // the player is about to click "New Game". Bridge then forwards those
+    // as fresh LocationChecks and AP credits them. SaveLoadHook fires for
+    // both New Game and Load Save (both call GameDataFile::initializeData),
+    // so the post-load re-HELLO ships the correct snapshot in either case.
+    // Written on frame thread (SaveLoadHook); read on worker thread
+    // (ApClient::threadMain) — atomic with release/acquire ordering.
+    std::atomic<bool> save_was_loaded{false};
+
     // Cap name queued alongside the keeper. tickPendingUncapture re-reads
     // PlayerHackKeeper::getCurrentHackName(keeper) at deadline and compares
     // against this string. Mismatch (or empty) means SMO already released the
