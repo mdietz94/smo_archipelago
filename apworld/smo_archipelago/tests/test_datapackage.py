@@ -80,3 +80,28 @@ def test_split_kingdom_prefix():
     k, sid = dp._split_kingdom_prefix("PlainName")
     assert k is None
     assert sid == "PlainName"
+
+
+def test_moon_pool_counts_by_kingdom_empty_until_ap_lands():
+    """Pre-Connected the AP datapackage hasn't populated item_id_to_name yet,
+    so the count map is empty (Odyssey tab shows the apworld-side checked/
+    received numbers and just elides the / pool denominator)."""
+    dp = DataPackage()  # no apworld data, no AP datapackage
+    assert dp.moon_pool_counts_by_kingdom() == {}
+
+
+def test_moon_pool_counts_by_kingdom_counts_single_and_multi():
+    """Multi-Moon items weight 3 to mirror the Switch's moon-credit grant."""
+    dp = DataPackage()
+    # Simulate the AP server's DataPackage update.
+    dp.item_id_to_name = {
+        1: "Cascade Kingdom Power Moon",
+        2: "Cascade Kingdom Power Moon",
+        3: "Cascade Kingdom Multi-Moon",
+        4: "Cap Kingdom Power Moon",
+        5: "Goomba",  # capture — should be ignored
+        6: "Not a moon at all",  # untyped — should be ignored
+    }
+    counts = dp.moon_pool_counts_by_kingdom()
+    # Cascade: 2 PM (+2) + 1 MM (+3) = 5; Cap: 1 PM (+1) = 1.
+    assert counts == {"Cascade": 5, "Cap": 1}

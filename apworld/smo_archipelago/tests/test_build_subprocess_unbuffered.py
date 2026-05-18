@@ -134,9 +134,14 @@ def test_run_extract_maps_preserves_existing_env(monkeypatch, tmp_path) -> None:
 def test_python_invoker_uses_sys_executable_when_real_python(monkeypatch) -> None:
     """Dev / source checkout: sys.executable is a real Python interp;
     don't fall through to the `py` launcher, just use it directly so the
-    script runs under the developer's venv."""
-    monkeypatch.setattr(build.sys, "executable", r"C:\Users\me\.venv\Scripts\python.exe")
-    assert build._python_invoker() == [r"C:\Users\me\.venv\Scripts\python.exe"]
+    script runs under the developer's venv.
+
+    Path uses forward slashes (still a valid Windows path) so PosixPath
+    on CI also parses it correctly — backslash separators would only be
+    recognized by WindowsPath, but pathlib picks the local-OS flavor.
+    """
+    monkeypatch.setattr(build.sys, "executable", "C:/Users/me/.venv/Scripts/python.exe")
+    assert build._python_invoker() == ["C:/Users/me/.venv/Scripts/python.exe"]
 
 
 def test_python_invoker_uses_py_launcher_when_sys_executable_is_frozen_launcher(
@@ -175,9 +180,13 @@ def test_python_invoker_falls_through_to_python312_when_no_py_launcher(
 
 def test_python_invoker_handles_pythonw(monkeypatch) -> None:
     """pythonw.exe (Windows no-console Python) is a real Python interp;
-    must be recognized as such even though its name isn't 'python'."""
-    monkeypatch.setattr(build.sys, "executable", r"C:\Python313\pythonw.exe")
-    assert build._python_invoker() == [r"C:\Python313\pythonw.exe"]
+    must be recognized as such even though its name isn't 'python'.
+
+    Forward slashes so PosixPath on CI parses it correctly (see sibling
+    test above for the cross-platform note).
+    """
+    monkeypatch.setattr(build.sys, "executable", "C:/Python313/pythonw.exe")
+    assert build._python_invoker() == ["C:/Python313/pythonw.exe"]
 
 
 def test_run_sync_capture_table_threads_explicit_paths(tmp_path) -> None:

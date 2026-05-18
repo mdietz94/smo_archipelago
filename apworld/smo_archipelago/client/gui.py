@@ -5,17 +5,23 @@ apworld load time — generation hosts may not have a display server. Only
 SMOContext.run_gui() reaches it, and run_gui is only called from
 client/main.py inside the Launcher subprocess.
 
-Subclasses CommonClient's GameManager, which sets up the Kivy window,
-log surfaces, and the input box wired into ClientCommandProcessor.
+Subclasses CommonClient's GameManager, which provides:
+  - top bar: server-address input + Connect button + thin progress bar
+    bound to checked/missing AP locations
+  - log tabs: "All" (combined) + one tab per logging_pairs entry
+  - "Hints" tab (built-in)
+  - bottom bar: Command: button + command prompt
 
-Replaces the Flask web tracker (deleted in this phase): the snapshot
-info that used to live at http://localhost:8000/ is now a "Tracker"
-tab; AP / Switch connection info is a "Connections" tab.
+We add ONE custom tab ("Odyssey" — SMO-specific game-progress info that
+has no native home in the AP framework) and ONE top-bar widget (a Switch
+status pill next to the AP Connect button). Earlier iterations shipped a
+"Connections" tab and a fatter "Tracker" tab; those were carried over
+from the deleted Flask web tracker and duplicated info the baseline UI
+already shows.
 """
 
 from __future__ import annotations
 
-import time
 import typing
 
 # IMPORTANT: kvui MUST be imported before any kivy.* module. kvui asserts
@@ -33,8 +39,8 @@ if typing.TYPE_CHECKING:  # pragma: no cover
     from .context import SMOContext
 
 
-# Polling interval for tracker + connections refresh. State changes drive
-# at human speed (moon collects, item arrivals, save loads) so 1.5s mirrors
+# Polling interval for tab + Switch-pill refresh. State changes drive at
+# human speed (moon collects, item arrivals, save loads) so 1.5s mirrors
 # the old web tracker's setInterval and keeps Kivy's frame budget free.
 _REFRESH_INTERVAL = 1.5
 
@@ -65,38 +71,54 @@ class _LiveLabel(Label):
 class SmoManager(GameManager):
     """Window for the SMOClient.
 
-    Two extra log streams (Archipelago + SMO) and two custom tabs
-    (Tracker + Connections) on top of the GameManager baseline.
+    Two log streams (Archipelago + Switch) — the second pair gives users
+    a separate tab for SMO/hook noise so the AP log stays readable. One
+    custom tab ("Odyssey") for game-progress that the baseline doesn't
+    show. One top-bar Switch-status pill next to the AP Connect button.
     """
 
     logging_pairs = [
         ("Client", "Archipelago"),
-        ("SMO", "SMO"),
+        # Logger NAME stays "SMO" so existing logging.getLogger("SMO") call
+        # sites don't churn. Display name is "Switch" because the tab is
+        # mostly Switch/hook events, which is what users grep for.
+        ("SMO", "Switch"),
     ]
     base_title = "Archipelago SMO Client"
 
     def __init__(self, ctx: "SMOContext"):
         super().__init__(ctx)
-        self._tracker_label: _LiveLabel | None = None
-        self._connections_label: _LiveLabel | None = None
+        self._odyssey_label: _LiveLabel | None = None
+        self._switch_pill: Label | None = None
 
     def build(self):
         container = super().build()
-        # Tracker tab: live snapshot mirror of received items + checked
-        # locations grouped by kingdom (was the Flask web tracker).
-        tracker_scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
-        self._tracker_label = _LiveLabel(text="(connecting…)")
-        tracker_scroll.add_widget(self._tracker_label)
-        self.add_client_tab("Tracker", tracker_scroll)
+        # Odyssey tab: SMO-specific at-a-glance state (kingdoms, captures,
+        # per-kingdom moon progress, DeathLink). The baseline UI already
+        # shows AP item flow + AP progress + connection status, so we don't
+        # duplicate those here.
+        odyssey_scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
+        self._odyssey_label = _LiveLabel(text="(connecting…)")
+        odyssey_scroll.add_widget(self._odyssey_label)
+        self.add_client_tab("Odyssey", odyssey_scroll)
 
-        # Connections tab: AP/Switch endpoint summary + datapackage state.
-        # (Replaces the debug `POST /api/test/inject-deathlink` button —
-        # use `/inject_deathlink` in the command bar instead, landing in
-        # Phase 5.)
-        conn_scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
-        self._connections_label = _LiveLabel(text="(connecting…)")
-        conn_scroll.add_widget(self._connections_label)
-        self.add_client_tab("Connections", conn_scroll)
+        # Switch status pill, appended to the top connect_layout (which
+        # already contains the AP server-address input + Connect button).
+        # Mirrors LADX's "Open Tracker" button placement — the top bar is
+        # where AP users expect to see connection state for ALL the wires
+        # the client manages, not just AP.
+        self._switch_pill = Label(
+            text="Switch: —",
+            markup=True,
+            size_hint_x=None,
+            size_hint_y=None,
+            width=dp(140),
+            height=self.connect_layout.height,
+            halign="center",
+            valign="middle",
+        )
+        self._switch_pill.bind(size=self._switch_pill.setter("text_size"))
+        self.connect_layout.add_widget(self._switch_pill)
 
         Clock.schedule_interval(self._refresh_panels, _REFRESH_INTERVAL)
         return container
@@ -105,10 +127,10 @@ class SmoManager(GameManager):
 
     def _refresh_panels(self, _dt) -> None:
         try:
-            if self._tracker_label is not None:
-                self._tracker_label.text = _format_tracker(self.ctx)
-            if self._connections_label is not None:
-                self._connections_label.text = _format_connections(self.ctx)
+            if self._odyssey_label is not None:
+                self._odyssey_label.text = _format_odyssey(self.ctx)
+            if self._switch_pill is not None:
+                self._switch_pill.text = _format_switch_pill(self.ctx)
         except Exception:
             # Don't let a transient render error kill the scheduled refresh;
             # Clock.schedule_interval cancels on exception.
@@ -116,79 +138,54 @@ class SmoManager(GameManager):
             logging.getLogger("SMO").exception("panel refresh failed")
 
 
-def _format_tracker(ctx: "SMOContext") -> str:
-    """Tracker tab body — Kivy BBCode markup string."""
+def _format_switch_pill(ctx: "SMOContext") -> str:
+    """One-line Switch status for the top-bar pill, with markup color."""
+    sw = ctx.switch
+    if sw is None:
+        return "[color=#888888]Switch: —[/color]"
+    port = getattr(sw, "_port", "?")
+    if sw.is_connected():
+        return f"[color=#4caf50]Switch ● {port}[/color]"
+    return f"[color=#ff9800]Switch ○ {port}[/color]"
+
+
+def _format_odyssey(ctx: "SMOContext") -> str:
+    """Odyssey tab body — at-a-glance SMO progress, Kivy BBCode markup.
+
+    Intentionally SKIPS:
+      * slot / seed / items / checks / deaths — already in the window
+        title (slot/seed on connect) and the top progress bar (checks).
+      * recent items list — AP logs received items into the Archipelago
+        tab with player + item names; duplicating was a hold-over from
+        when the Flask web page was the only UI.
+      * data-package / scout-cache debug counts — moved to /smo_status.
+    """
     snap = ctx.state.snapshot()
     caps = snap.get("captures_unlocked") or []
     kingdoms = snap.get("kingdoms_unlocked") or []
-    moons_recv = snap.get("moons_received_by_kingdom") or {}
     moons_chk = snap.get("moons_checked_by_kingdom") or {}
-    recent = snap.get("recent_items") or []
+    moons_recv = snap.get("moons_received_by_kingdom") or {}
+    pool_totals = ctx.dp.moon_pool_counts_by_kingdom()
+    outstanding = ctx.state.get_outstanding()
 
     parts: list[str] = []
-    parts.append(
-        f"[b]Slot[/b] {snap.get('slot') or '—'}    "
-        f"[b]Seed[/b] {snap.get('seed') or '—'}    "
-        f"[b]Items[/b] {snap.get('received_count', 0)}    "
-        f"[b]Checks[/b] {snap.get('checked_count', 0)}    "
-        f"[b]Deaths[/b] {snap.get('death_count', 0)}"
-    )
-    parts.append("")
     parts.append("[b]Kingdoms unlocked[/b]")
     parts.append(", ".join(kingdoms) if kingdoms else "[i](none yet)[/i]")
+    parts.append("")
+    parts.append("[b]Moons by kingdom[/b]    [i]collected / received / pool — outstanding[/i]")
+    all_k = sorted(set(moons_chk) | set(moons_recv) | set(pool_totals))
+    if all_k:
+        for k in all_k:
+            chk = moons_chk.get(k, 0)
+            recv = moons_recv.get(k, 0)
+            pool = pool_totals.get(k, 0)
+            out = outstanding.get(k, 0)
+            parts.append(f"  {k}:    {chk} / {recv} / {pool}    ([b]{out}[/b] unspent)")
+    else:
+        parts.append("[i](nothing yet)[/i]")
     parts.append("")
     parts.append("[b]Captures unlocked[/b]")
     parts.append(", ".join(caps) if caps else "[i](none yet)[/i]")
     parts.append("")
-    parts.append("[b]Moons by kingdom (checked / received)[/b]")
-    all_k = sorted(set(moons_recv) | set(moons_chk))
-    if all_k:
-        for k in all_k:
-            parts.append(f"  {k}:    {moons_chk.get(k, 0)} / {moons_recv.get(k, 0)}")
-    else:
-        parts.append("[i](nothing yet)[/i]")
-    parts.append("")
-    parts.append("[b]Recent items[/b]")
-    if recent:
-        # Reverse so newest is first, like the old web tracker.
-        for it in reversed(recent[-20:]):
-            label = it.get("name") or it.get("shine_id") or it.get("cap") or it.get("kingdom") or it.get("kind")
-            sender = it.get("from") or "?"
-            parts.append(f"  {label} [i]from[/i] {sender}")
-    else:
-        parts.append("[i](none yet)[/i]")
-    return "\n".join(parts)
-
-
-def _format_connections(ctx: "SMOContext") -> str:
-    """Connections tab body — Kivy BBCode markup string."""
-    snap = ctx.state.snapshot()
-    parts: list[str] = []
-    parts.append("[b]Archipelago[/b]")
-    parts.append(f"  Status: {snap.get('ap_conn', 'disconnected')}")
-    parts.append(f"  Slot:   {snap.get('slot') or '—'}")
-    parts.append(f"  Seed:   {snap.get('seed') or '—'}")
-    server_addr = getattr(ctx, "server_address", None) or "—"
-    parts.append(f"  Server: {server_addr}")
-    parts.append(f"  Items received: {snap.get('received_count', 0)}")
-    parts.append("")
-    parts.append("[b]Switch[/b]")
-    parts.append(f"  Status: {snap.get('switch_conn', 'disconnected')}")
-    if ctx.switch is not None:
-        host = getattr(ctx.switch, "_host", "?")
-        port = getattr(ctx.switch, "_port", "?")
-        parts.append(f"  Listen: {host}:{port}")
-    else:
-        parts.append("  Listen: (server not started)")
-    parts.append(f"  Checks forwarded: {snap.get('checked_count', 0)}")
-    parts.append(f"  Deaths observed: {snap.get('death_count', 0)}")
-    parts.append("")
-    parts.append("[b]Data package[/b]")
-    parts.append(f"  Items known:     {len(ctx.dp.item_id_to_name)}")
-    parts.append(f"  Locations known: {len(ctx.dp.location_id_to_name)}")
-    parts.append(f"  Scout cache:     {len(ctx.scout_cache)} entries")
-    parts.append("")
     parts.append("[b]DeathLink[/b]: " + ("ENABLED" if ctx.deathlink_enabled else "disabled"))
-    parts.append("")
-    parts.append(f"[i]refreshed {time.strftime('%H:%M:%S')}[/i]")
     return "\n".join(parts)

@@ -170,6 +170,29 @@ class DataPackage:
             return ClassifiedItem(ItemKind.KINGDOM, name, kingdom=self._strip_prefix(name, ("Kingdom: ", "Unlock: ")))
         return ClassifiedItem(ItemKind.OTHER, name)
 
+    def moon_pool_counts_by_kingdom(self) -> dict[str, int]:
+        """Return per-kingdom totals for moon items in the AP pool.
+
+        Counts every item in `item_id_to_name` whose name matches the
+        `<Kingdom> Kingdom {Power Moon,Multi-Moon}` form, weighting
+        Multi-Moon entries by 3 to reflect the moon-credit grant the
+        Switch applies. Returns {} until AP datapackage lands (Connected).
+
+        Used by the Odyssey tab as the "/ pool" denominator next to the
+        collected/received counters. Recomputed on every refresh — cheap
+        (datapackage is dict-of-int, ~70 entries for SMO) and dodges
+        cache-invalidation when the apworld pool changes between runs.
+        """
+        counts: dict[str, int] = {}
+        for name in self.item_id_to_name.values():
+            m = _ITEM_MOON_KINGDOM_RE.match(name)
+            if not m:
+                continue
+            kingdom = m.group(1).strip()
+            weight = 3 if m.group(2) == "Multi-Moon" else 1
+            counts[kingdom] = counts.get(kingdom, 0) + weight
+        return counts
+
     def classify_location(self, name: str) -> ClassifiedItem:
         # Locations have category tags like "Cap Kingdom", "Cascade Kingdom",
         # "Capture", etc. We classify by the prefix on the location name (e.g.

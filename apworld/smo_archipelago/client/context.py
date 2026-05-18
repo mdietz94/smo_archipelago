@@ -93,10 +93,36 @@ class SMOClientCommandProcessor(ClientCommandProcessor):
         return True
 
     def _cmd_smo_status(self) -> bool:
-        """Show SMOClient tracker state (items received, checks, captures)."""
+        """Show SMOClient tracker state + connection / datapackage debug info.
+
+        Tracker state (received items, checks, captures, kingdoms, last
+        item) comes from the pure `parse_command("status")` for unit-test
+        coverage. The extra connection / data-package / scout-cache lines
+        replace what used to live in the "Connections" tab — they're
+        debug info that doesn't deserve a permanent UI surface but is
+        still useful to dump on demand.
+        """
         ctx: SMOContext = self.ctx  # type: ignore[assignment]
         result = parse_command("status", ctx.state)
         self._result_to_output(result)
+        # Connection + infra summary (formerly the Connections tab).
+        snap = ctx.state.snapshot()
+        self.output(f"ap_conn={snap.get('ap_conn', '?')} server={ctx.server_address or '—'}")
+        if ctx.switch is not None:
+            sw_state = "connected" if ctx.switch.is_connected() else "listening"
+            self.output(
+                f"switch={sw_state} host={getattr(ctx.switch, '_host', '?')}:"
+                f"{getattr(ctx.switch, '_port', '?')}"
+            )
+        else:
+            self.output("switch=not_started")
+        self.output(
+            f"datapackage: items={len(ctx.dp.item_id_to_name)} "
+            f"locations={len(ctx.dp.location_id_to_name)} "
+            f"scout_cache={len(ctx.scout_cache)} entries"
+        )
+        self.output(f"deathlink={'on' if ctx.deathlink_enabled else 'off'} "
+                    f"deaths_observed={snap.get('death_count', 0)}")
         return True
 
     def _cmd_inject_deathlink(self, source: str = "TestRig", cause: str = "manual injection") -> bool:
