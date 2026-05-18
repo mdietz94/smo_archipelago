@@ -120,7 +120,7 @@ async def test_ap_received_item_carries_name_for_moon():
     """Regression: AP-issued moons must reach the Switch with their name.
 
     The bug: `ClassifiedItem.to_ref()` used to zero `name` for non-OTHER
-    kinds, so MOON/CAPTURE/KINGDOM items arrived on the Switch with no
+    kinds, so MOON/CAPTURE items arrived on the Switch with no
     `name` field (stripped by `_strip_none`) and rendered as `?` in-game.
     """
     import asyncio
@@ -262,7 +262,6 @@ def test_to_ref_preserves_name_for_all_kinds():
     for kind, kwargs in [
         (ItemKind.MOON, {"kingdom": "Cascade", "shine_id": "Power Moon"}),
         (ItemKind.CAPTURE, {"cap": "Goomba"}),
-        (ItemKind.KINGDOM, {"kingdom": "Sand"}),
         (ItemKind.OTHER, {}),
     ]:
         ci = ClassifiedItem(kind=kind, name=f"test-{kind.value}", **kwargs)

@@ -43,7 +43,6 @@ const char* toWire(ItemKind k) {
     switch (k) {
         case ItemKind::Moon:    return "moon";
         case ItemKind::Capture: return "capture";
-        case ItemKind::Kingdom: return "kingdom";
         case ItemKind::Other:   return "other";
     }
     return "other";
@@ -53,7 +52,6 @@ ItemKind fromWire(const char* s) {
     if (!s) return ItemKind::Other;
     if (std::strcmp(s, "moon")    == 0) return ItemKind::Moon;
     if (std::strcmp(s, "capture") == 0) return ItemKind::Capture;
-    if (std::strcmp(s, "kingdom") == 0) return ItemKind::Kingdom;
     return ItemKind::Other;
 }
 

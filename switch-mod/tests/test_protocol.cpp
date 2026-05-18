@@ -85,18 +85,17 @@ std::string wire(F&& f) {
 TEST(itemkind_to_wire) {
     EXPECT_EQ_S(toWire(ItemKind::Moon),    "moon");
     EXPECT_EQ_S(toWire(ItemKind::Capture), "capture");
-    EXPECT_EQ_S(toWire(ItemKind::Kingdom), "kingdom");
     EXPECT_EQ_S(toWire(ItemKind::Other),   "other");
 }
 
 TEST(itemkind_from_wire) {
     EXPECT(fromWire("moon")    == ItemKind::Moon);
     EXPECT(fromWire("capture") == ItemKind::Capture);
-    EXPECT(fromWire("kingdom") == ItemKind::Kingdom);
     EXPECT(fromWire("other")   == ItemKind::Other);
     EXPECT(fromWire("garbage") == ItemKind::Other);
     EXPECT(fromWire("")        == ItemKind::Other);
-    EXPECT(fromWire("shop")    == ItemKind::Other);  // retired kind
+    EXPECT(fromWire("shop")    == ItemKind::Other);   // retired kind
+    EXPECT(fromWire("kingdom") == ItemKind::Other);   // retired kind
 }
 
 // --------------------------------------------------------------------------

@@ -13,8 +13,7 @@ Subclasses CommonClient's GameManager, which provides:
   - bottom bar: Command: button + command prompt
 
 We add ONE custom tab ("Odyssey") split 50/50 horizontally:
-  * left  — at-a-glance SMO state (kingdoms unlocked, captures, moons by
-            kingdom, DeathLink)
+  * left  — at-a-glance SMO state (moons by kingdom, captures, DeathLink)
   * right — UILog tailing logger "SMO", which catches PC-side SMO
             diagnostics AND Switch-forwarded log lines (routed by
             switch_server.py for the "log" wire message type)
@@ -138,8 +137,8 @@ class SmoManager(GameManager):
     def build(self):
         container = super().build()
         # Odyssey tab: horizontal 50/50 split.
-        #   Left  — at-a-glance SMO state (kingdoms, captures, per-kingdom
-        #           moon progress, DeathLink). Refreshed every 1.5s.
+        #   Left  — at-a-glance SMO state (per-kingdom moon progress,
+        #           captures, DeathLink). Refreshed every 1.5s.
         #   Right — UILog tailing logger "SMO". Catches BOTH PC-side SMO
         #           diagnostics AND Switch-forwarded log lines (routed by
         #           switch_server.py for the "log" wire message type).
@@ -236,15 +235,11 @@ def _format_odyssey(ctx: "SMOContext") -> str:
     """
     snap = ctx.state.snapshot()
     caps = snap.get("captures_unlocked") or []
-    kingdoms = snap.get("kingdoms_unlocked") or []
     moons_recv = snap.get("moons_received_by_kingdom") or {}
     exit_thresholds = ctx.dp.kingdom_exit_thresholds()
     outstanding = ctx.state.get_outstanding()
 
     parts: list[str] = []
-    parts.append("[b]Kingdoms unlocked[/b]")
-    parts.append(", ".join(kingdoms) if kingdoms else "[i](none yet)[/i]")
-    parts.append("")
     parts.append("[b]Moons by kingdom[/b]    [i]earned / needed to exit[/i]")
     all_k = sorted(set(moons_recv) | set(exit_thresholds))
     if all_k:

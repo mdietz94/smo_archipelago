@@ -1,7 +1,11 @@
-// Kingdom-unlock bit assignment.
+// Kingdom name ↔ bit-index ↔ SMO worldId mapping table.
 //
-// 17 kingdoms (Cap..Darker Side); we use the first 17 bits of
-// ApState::received_kingdom_mask.
+// 17 kingdoms (Cap..Darker Side); the canonical ordering used by the apworld
+// (kKingdoms[] in the cpp). Consumers: M6 phase D deposit kingdom resolution
+// (ap_moons_kingdom[bit], kingdomBitForWorldId), M7 Path A kingdom-order gate
+// (kingdomShortFromHomeStage, kingdomShortFromWorldId, worldIdFromKingdomShort),
+// and the per-kingdom shine-counter hooks. Despite the legacy filename, this
+// file is NOT about AP-driven kingdom unlocks — that plumbing was removed.
 
 #pragma once
 

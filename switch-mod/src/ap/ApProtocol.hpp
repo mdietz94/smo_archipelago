@@ -19,7 +19,6 @@ inline constexpr std::size_t kMaxLineBytes = 8 * 1024;
 enum class ItemKind : std::uint8_t {
     Moon = 0,
     Capture = 1,
-    Kingdom = 2,
     Other = 4,
 };
 

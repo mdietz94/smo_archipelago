@@ -44,7 +44,6 @@ class BridgeState:
         self.received_items: list[ItemEvent] = []
         self.checked_locations: list[CheckEvent] = []
         self.captures_unlocked: set[str] = set()
-        self.kingdoms_unlocked: set[str] = set()
         self.moons_received_by_kingdom: dict[str, int] = {}
         self.moons_checked_by_kingdom: dict[str, int] = {}
         # M6 phase D — per-kingdom AP-credit balance (`grants - deposits`).
@@ -103,8 +102,6 @@ class BridgeState:
             self.received_items.append(evt)
             if evt.item.kind == "capture" and evt.item.cap:
                 self.captures_unlocked.add(evt.item.cap)
-            elif evt.item.kind == "kingdom" and evt.item.kingdom:
-                self.kingdoms_unlocked.add(evt.item.kingdom)
             elif evt.item.kind == "moon" and evt.item.kingdom:
                 self.moons_received_by_kingdom[evt.item.kingdom] = (
                     self.moons_received_by_kingdom.get(evt.item.kingdom, 0) + 1
@@ -250,7 +247,6 @@ class BridgeState:
                 "checked_count": len(self.checked_locations),
                 "death_count": self.death_count,
                 "captures_unlocked": sorted(self.captures_unlocked),
-                "kingdoms_unlocked": sorted(self.kingdoms_unlocked),
                 "moons_received_by_kingdom": dict(self.moons_received_by_kingdom),
                 "moons_checked_by_kingdom": dict(self.moons_checked_by_kingdom),
                 "recent_items": [

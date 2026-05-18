@@ -180,16 +180,6 @@ void ApState::applyOnFrame() {
                     }
                 }
                 break;
-            case ItemKind::Kingdom:
-                if (item.kingdom[0] != '\0') {
-                    const std::uint8_t bit = smoap::game::kingdomBitFor(item.kingdom);
-                    if (bit < 32) received_kingdom_mask |= (1u << bit);
-                    SMOAP_LOG_INFO("[m6-kingdom] local-bit only (phase C "
-                                   "lands unlockWorld write): kingdom='%s' "
-                                   "bit=%u from=%s",
-                                   item.kingdom, bit, item.from);
-                }
-                break;
             case ItemKind::Other:
                 SMOAP_LOG_DEBUG("[m6-other] item kind=%u name='%s' from=%s "
                                 "(no in-game effect)",

@@ -95,12 +95,6 @@ def test_format_capture_routed_to_other():
     assert text == "Sent Goomba -> Slot2"
 
 
-def test_format_kingdom_unlock_to_me():
-    item = ClassifiedItem(ItemKind.KINGDOM, "Sand Kingdom", kingdom="Sand")
-    text = format_moon_label(item, recipient_slot="Mario", me_slot="Mario")
-    assert text == "Got Sand Kingdom!"
-
-
 def test_format_long_kingdom_long_recipient_still_fits():
     item = _moon("Darker Side Kingdom Power Moon", "Darker Side", "Power Moon")
     text = format_moon_label(item, recipient_slot="VeryLongPlayerNameHere", me_slot="me")

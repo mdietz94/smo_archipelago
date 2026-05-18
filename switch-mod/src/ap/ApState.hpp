@@ -197,7 +197,6 @@ public:
 
     std::bitset<128> captures_unlocked;     // 43 used; index from capture_table.h
     FlatHashSet<4096> locations_checked;    // session dedupe (hash of message body)
-    std::uint32_t received_kingdom_mask = 0;
     bool goal_sent = false;
     bool synthetic_grant_this_frame = false;
 

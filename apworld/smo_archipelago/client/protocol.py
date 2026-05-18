@@ -22,7 +22,6 @@ MAX_LINE_BYTES = 8 * 1024
 class ItemKind(str, Enum):
     MOON = "moon"
     CAPTURE = "capture"
-    KINGDOM = "kingdom"
     OTHER = "other"
 
 

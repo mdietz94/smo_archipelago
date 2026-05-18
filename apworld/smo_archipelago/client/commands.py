@@ -74,7 +74,6 @@ def parse_command(line: str, state: BridgeState | None = None) -> ParseResult:
         n_items = len(state.received_items)
         n_checks = len(state.checked_locations)
         n_caps = len(state.captures_unlocked)
-        n_kings = len(state.kingdoms_unlocked)
         moons_by_k = ", ".join(
             f"{k}={v}" for k, v in sorted(state.moons_received_by_kingdom.items())
         ) or "(none)"
@@ -87,7 +86,7 @@ def parse_command(line: str, state: BridgeState | None = None) -> ParseResult:
         return ParseResult(info=(
             f"received_items={n_items} (by kingdom: {moons_by_k})\n"
             f"checked_locations={n_checks}\n"
-            f"captures_unlocked={n_caps}, kingdoms_unlocked={n_kings}\n"
+            f"captures_unlocked={n_caps}\n"
             + last
         ))
 

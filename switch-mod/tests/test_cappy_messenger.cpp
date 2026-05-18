@@ -110,10 +110,6 @@ TEST(filter_null_local_slot_safe) {
     EXPECT(shouldShowCappyMsg(ItemKind::Capture, "Alice", nullptr, false));
 }
 
-TEST(filter_kingdom_shows) {
-    EXPECT(shouldShowCappyMsg(ItemKind::Kingdom, "Alice", "Bob", false));
-}
-
 TEST(filter_moon_shows) {
     EXPECT(shouldShowCappyMsg(ItemKind::Moon, "Alice", "Bob", false));
 }

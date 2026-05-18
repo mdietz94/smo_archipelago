@@ -85,7 +85,6 @@ is a no-op.
 // already set; capture bit is set unconditionally).
 {"t":"item","kind":"moon","kingdom":"Sand","shine_id":"PoolUnderwater","from":"Bob"}
 {"t":"item","kind":"capture","cap":"Yoshi","from":"self"}
-{"t":"item","kind":"kingdom","kingdom":"Lake","from":"Alice"}
 {"t":"item","kind":"other","name":"Power Moon (Generic)","from":"Bob"}
 
 // AP chat / hint / item-find broadcasts, surfaced for the in-game log window.

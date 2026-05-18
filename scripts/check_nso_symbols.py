@@ -34,9 +34,6 @@ SYMBOLS = [
     # M6: capture grant + idempotency.
     "_ZN16GameDataFunction17addHackDictionaryE20GameDataHolderWriterPKc",
     "_ZN16GameDataFunction23isExistInHackDictionaryE22GameDataHolderAccessorPKc",
-    # M6: kingdom unlock + idempotency.
-    "_ZN16GameDataFunction11unlockWorldE20GameDataHolderWriteri",
-    "_ZN16GameDataFunction15isUnlockedWorldE22GameDataHolderAccessori",
     # M6: snapshot enumerate support.
     "_ZN16GameDataFunction10isGotShineE22GameDataHolderAccessorPK9ShineInfo",
     "_ZN16GameDataFunction15getGameDataFileE20GameDataHolderWriter",

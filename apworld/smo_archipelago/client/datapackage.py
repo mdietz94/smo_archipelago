@@ -202,9 +202,6 @@ class DataPackage:
                 return ClassifiedItem(ItemKind.MOON, name,
                                       kingdom=m.group(1).strip(),
                                       shine_id=m.group(2))
-            return ClassifiedItem(ItemKind.OTHER, name)
-        if "kingdom" in cats or "kingdom unlock" in cats:
-            return ClassifiedItem(ItemKind.KINGDOM, name, kingdom=self._strip_prefix(name, ("Kingdom: ", "Unlock: ")))
         return ClassifiedItem(ItemKind.OTHER, name)
 
     def kingdom_exit_thresholds(self) -> dict[str, int]:
@@ -238,10 +235,3 @@ class DataPackage:
         if m:
             return m.group(1).strip(), m.group(2).strip()
         return None, name
-
-    @staticmethod
-    def _strip_prefix(name: str, prefixes: tuple[str, ...]) -> str:
-        for p in prefixes:
-            if name.startswith(p):
-                return name[len(p):].strip()
-        return name

@@ -99,7 +99,6 @@ def _shorten_item_name(item: ClassifiedItem) -> str:
       ClassifiedItem(MOON, "Power Moon", kingdom=None, shine_id="Power Moon")
                                                 → "Power Moon"
       ClassifiedItem(CAPTURE, "Goomba", cap="Goomba")  → "Goomba"
-      ClassifiedItem(KINGDOM, "Sand Kingdom", kingdom="Sand")  → "Sand Kingdom"
       ClassifiedItem(OTHER, "Sphynx's Treasure Vault")          → name as-is
 
     Falls back to `item.name` for anything unrecognized.
@@ -112,9 +111,6 @@ def _shorten_item_name(item: ClassifiedItem) -> str:
         return body
     if item.kind == ItemKind.CAPTURE:
         return item.cap or item.name
-    if item.kind == ItemKind.KINGDOM:
-        k = _short_kingdom(item.kingdom) or item.name
-        return f"{k} Kingdom"
     return item.name
 
 

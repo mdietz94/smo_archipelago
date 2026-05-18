@@ -112,7 +112,6 @@ HOOK_DEFINE_TRAMPOLINE(SaveLoadHook) {
         // the frame thread so no lock is needed.
         st.locations_checked.reset();
         st.captures_unlocked.reset();
-        st.received_kingdom_mask = 0;
         st.goal_sent = false;
         st.death_pending_send.store(false, std::memory_order_release);
         // Drain any pending capture-grant retries left over from before this
