@@ -130,6 +130,11 @@ HOOK_DEFINE_TRAMPOLINE(DrawMainHook) {
             s_first = false;
             SMOAP_LOG_INFO(">>> drawMain hook FIRED (first frame)");
         }
+        // One-shot dump of the log ring buffer to sd:/smo_ap.txt at
+        // ~5 seconds into drawMain. Compile-time gated on
+        // SMOAP_DEBUG_SD_LOG — no-op (single atomic-load early return)
+        // when the flag is off, which is the default.
+        smoap::util::drainPendingToFile();
         Orig(self);
         // M6 phase B: cache GameDataHolder* for grantCapture / future M6
         // GameDataFunction calls. HakoniwaSequence::mGameDataHolder lives at

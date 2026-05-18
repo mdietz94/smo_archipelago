@@ -42,6 +42,13 @@ set(BRIDGE_RETRY_MS        3000            CACHE STRING "Reconnect backoff seed 
 set(BRIDGE_RECV_TIMEOUT_MS 200             CACHE STRING "Per-iteration recv timeout (ms)")
 set(BRIDGE_LOG_LEVEL       "info"          CACHE STRING "Module log level")
 
+# -DSMOAP_DEBUG_SD_LOG=ON  enables a one-shot dump of the first ~5 seconds
+# of SMOAP_LOG_* output to sd:/smo_ap.txt (frame 300 of drawMain). Useful
+# for debugging boot-time issues when neither lm nor svcOutputDebugString
+# is visible on the user's setup. OFF by default — costs an 8 KiB ring
+# buffer + nn::fs link deps when on.
+option(SMOAP_DEBUG_SD_LOG "Dump SMOAP_LOG_* output to sd:/smo_ap.txt at ~5s" OFF)
+
 # ---------------------------------------------------------------------------
 # exlaunch / module compile defs (mirrors lunakit's defines)
 # ---------------------------------------------------------------------------
@@ -58,6 +65,10 @@ add_compile_definitions(
     BRIDGE_RETRY_MS_VALUE=${BRIDGE_RETRY_MS}
     BRIDGE_RECV_TIMEOUT_MS_VALUE=${BRIDGE_RECV_TIMEOUT_MS}
 )
+
+if (SMOAP_DEBUG_SD_LOG)
+    add_compile_definitions(SMOAP_DEBUG_SD_LOG)
+endif ()
 
 # ---------------------------------------------------------------------------
 # Vendored module templates (NPDM + linker spec + linker script)

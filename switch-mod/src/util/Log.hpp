@@ -1,9 +1,17 @@
 // Lightweight logging.
 //
-// Writes to:
-//   - SMO's debug output where available (sead::print)
-//   - LunaKit's log buffer if loaded (so messages appear in its log window)
-//   - sd:/atmosphere/contents/<TID>/logs/ap_<datetime>.log on init failure (M8)
+// Each SMOAP_LOG_* writes to svcOutputDebugString (Ryujinx-visible; on real
+// Switch goes to lm where binlog visibility is spotty).
+//
+// Optional: configure with -DSMOAP_DEBUG_SD_LOG=ON to additionally dump
+// the first ~5 seconds of log output as a one-shot file write to
+// sd:/smo_ap.txt at drawMain frame 300. This is purely a boot-time
+// diagnostic for cases where lm + svcOutputDebugString are both invisible
+// (e.g. real Switch with no PC monitor). Off by default; see
+// switch-mod/CMakeLists.txt SMOAP_DEBUG_SD_LOG option.
+//
+// log() is safe to call from any thread (init, worker, frame, hooks);
+// allocator-free, atomic_flag spinlock + memcpy when the ring is enabled.
 
 #pragma once
 
@@ -33,13 +41,15 @@ void log(LogLevel lvl, const char* fmt, ...);
 #endif
 
 namespace smoap::util {
-// Mark FS as available. Call AFTER nn::fs::MountSdCardForDebug("sd") (done
-// in GameSystemInit hook / DrawMain fallback). All log() calls before this
-// are kept in the ring buffer and flushed on the next drainPendingToFile().
+// No-op stub kept for source compat with older call sites.
 void markFsReady();
 
-// Flush the ring buffer to sd:/atmosphere/contents/<TID>/smoap.log. MUST be
-// called from a thread nn::fs accepts (frame thread). Call once per frame
-// from inside drawMain — cheap when ring is empty.
+// Compile-time-gated diagnostic: when SMOAP_DEBUG_SD_LOG is defined, drains
+// the ring buffer to sd:/smo_ap.txt exactly once per session at drawMain
+// frame ~300 (~5s in). When the flag is undefined, this is a no-op.
+//
+// Call once per frame from DrawMainHook. Cheap atomic-load early returns
+// on every call except the single drain. Must run on the frame thread
+// when active — the worker thread isn't safe for nn::fs.
 void drainPendingToFile();
 }  // namespace smoap::util
