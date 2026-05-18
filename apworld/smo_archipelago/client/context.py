@@ -798,6 +798,23 @@ class SMOContext(CommonContext):
             self.state.set_ap_conn("ready")
             self.state.slot = self.auth or ""
             if self.switch is not None:
+                # Push the capturesanity flag BEFORE send_ap_state — the
+                # next Switch HELLO will use it to decide whether to
+                # synthesize all-captures-unlocked ItemMsgs (default for
+                # capturesanity OFF; otherwise AP-granted captures only).
+                # slot_data is populated by CommonContext's default
+                # handler before our on_package runs, same as stored_data
+                # below.
+                capturesanity = bool((self.slot_data or {}).get("capturesanity", 0))
+                self.switch.set_capturesanity_enabled(capturesanity)
+                # Flush synthetic unlocks NOW for an already-running
+                # Switch — the SNI-style two-stage gate means the Switch
+                # HELLO usually fires BEFORE this Connected handler, so
+                # its initial replay ran with the default (locked) flag
+                # and missed the unlocks. push_capturesanity_replay is a
+                # no-op when capturesanity is on or no Switch is
+                # connected.
+                await self.switch.push_capturesanity_replay()
                 await self.switch.send_ap_state("ready")
             # M6 phase D — subscribe to the outstanding-moon-balance key in
             # the AP data store. `set_notify` sends Get + SetNotify in one

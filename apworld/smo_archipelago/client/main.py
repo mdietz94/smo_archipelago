@@ -243,6 +243,12 @@ async def main(args: argparse.Namespace) -> None:
         # ap_moons_kingdom[] is authoritative the moment it reconnects.
         on_deposit=ctx.apply_deposit_from_switch,
         get_outstanding_entries=ctx._outstanding_entries_for_switch,
+        # Capturesanity replay: when slot_data.capturesanity == 0 the AP
+        # server never sends Capture items, so SwitchServer synthesizes
+        # one per known cap at HELLO time to unlock the bitset. Default
+        # capturesanity_enabled=True keeps current behavior until
+        # SMOContext flips it via set_capturesanity_enabled() on Connected.
+        get_all_captures=capture_map.iter_all,
     )
     ctx.switch = sw
     # M-color: ApClient → SwitchServer palette callback. Wired post-

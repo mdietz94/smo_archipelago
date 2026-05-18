@@ -65,6 +65,11 @@ DepositHandler = Callable[..., Awaitable[bool]]
 # M6 phase D — OutstandingProvider() -> list[OutstandingEntry]. Used at HELLO
 # time to snapshot the current per-kingdom balance for the Switch.
 OutstandingProvider = Callable[[], "list"]
+# Capturesanity-OFF replay — returns every known (cap_name, hack_name) pair so
+# the bridge can synthesize per-capture ItemMsgs that set every bit of the
+# Switch's captures_unlocked bitset. Without this, CaptureStartHook would
+# block every capture for the entire seed (no AP Capture items will arrive).
+AllCapturesProvider = Callable[[], list]
 
 
 class SwitchServer:
@@ -81,6 +86,8 @@ class SwitchServer:
         on_switch_ready: SwitchReadyHandler | None = None,
         on_deposit: DepositHandler | None = None,
         get_outstanding_entries: OutstandingProvider | None = None,
+        capturesanity_enabled: bool = True,
+        get_all_captures: AllCapturesProvider | None = None,
     ):
         self._host = host
         self._port = port
@@ -93,9 +100,48 @@ class SwitchServer:
         self._on_switch_ready = on_switch_ready
         self._on_deposit = on_deposit
         self._get_outstanding = get_outstanding_entries
+        # Default True (fail-safe = current behavior, AP-granted captures
+        # only). SMOContext flips this from slot_data on AP Connected.
+        self._capturesanity_enabled = capturesanity_enabled
+        self._get_all_captures = get_all_captures
         self._writer: asyncio.StreamWriter | None = None
         self._writer_lock = asyncio.Lock()
         self._server: asyncio.AbstractServer | None = None
+
+    def set_capturesanity_enabled(self, enabled: bool) -> None:
+        """Update the capturesanity gate. Called by SMOContext after AP
+        Connected delivers slot_data. Takes effect on the NEXT HELLO
+        replay (SaveLoadHook forces a re-HELLO, so save-loads pick up
+        the latest value automatically). For an already-running Switch,
+        the caller should also call push_capturesanity_replay() to
+        flush the unlocks without waiting for a save-load."""
+        self._capturesanity_enabled = bool(enabled)
+
+    async def push_capturesanity_replay(self) -> None:
+        """Synthesize all-captures-unlocked ItemMsgs for the connected
+        Switch. No-op if capturesanity is enabled (AP-granted captures
+        only) or if no captures provider is wired. Idempotent — the
+        Switch's bit.set() is a no-op on already-set bits, so re-runs
+        across reconnects don't break anything.
+
+        Called from two paths: (1) the tail of HELLO replay, so a fresh
+        Switch session lands with bits set; (2) SMOContext on AP
+        Connected, so a Switch that already HELLO'd before slot_data
+        arrived (the SNI-style two-stage gate makes this the common
+        case for the first connect) gets unlocked without waiting for
+        the next save-load to force a re-HELLO."""
+        if self._capturesanity_enabled or self._get_all_captures is None:
+            return
+        for cap_name, hack_name in self._get_all_captures():
+            await self._send(ItemMsg(
+                kind="capture",
+                cap=cap_name,
+                hack_name=hack_name,
+                # Empty from_ suppresses the Cappy bubble — these are
+                # synthetic unlocks, not real AP grants from another
+                # player.
+                from_="",
+            ))
 
     def is_connected(self) -> bool:
         """True iff a Switch is currently attached and the socket is open.
@@ -426,6 +472,14 @@ class SwitchServer:
                 hack_name=evt.item.hack_name,
                 classification=evt.item.classification,
             ))
+
+        # Capturesanity OFF: no Capture items will ever arrive from AP, so
+        # the Switch's captures_unlocked bitset would stay all-zero and
+        # CaptureStartHook would block every capture for the entire seed.
+        # Push synthetic unlocks. No-op when capturesanity is on, or when
+        # AP Connected hasn't flipped the flag yet (in which case SMOContext
+        # calls this again from its Connected handler).
+        await self.push_capturesanity_replay()
 
         # Replay the shine-palette scout map so a Switch reconnect after the
         # bridge has already received LocationInfo doesn't lose colors.

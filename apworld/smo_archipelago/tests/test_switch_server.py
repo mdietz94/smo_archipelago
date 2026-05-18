@@ -706,6 +706,244 @@ async def test_deposit_msg_invalid_yields_err():
         await sw.stop()
 
 
+# ---------------------------------------------------------------------------
+# Capturesanity OFF — synthetic all-captures-unlocked replay
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_hello_replay_synthesizes_captures_when_capturesanity_off():
+    """When capturesanity is OFF the AP server never sends Capture items,
+    so the Switch's captures_unlocked bitset would stay all-zero and
+    CaptureStartHook would block every capture. The bridge must
+    synthesize one ItemMsg per known cap during HELLO replay so the
+    Switch sets every bit."""
+    state = BridgeState()
+
+    async def on_check(_): return None
+    async def on_goal(): ...
+
+    fake_caps = [("Frog", "Frog"), ("Goomba", "Kuribo"), ("TRex", "TRex")]
+    sw = SwitchServer(
+        "127.0.0.1", 0, state, on_check, on_goal,
+        capturesanity_enabled=False,
+        get_all_captures=lambda: fake_caps,
+    )
+    server = await asyncio.start_server(sw._handle_client, "127.0.0.1", 0)
+    sw._server = server
+    port = server.sockets[0].getsockname()[1]
+
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        writer.write(protocol.encode(HelloMsg()))
+        await writer.drain()
+        # hello_ack + checked_replay + 3 synthetic items + ap_state
+        msgs = await _drain_messages(reader, n=6, timeout=2.0)
+        kinds = [m["t"] for m in msgs]
+        assert kinds == ["hello_ack", "checked_replay",
+                         "item", "item", "item", "ap_state"]
+        items = [m for m in msgs if m["t"] == "item"]
+        by_cap = {m["cap"]: m for m in items}
+        assert set(by_cap.keys()) == {"Frog", "Goomba", "TRex"}
+        for m in items:
+            assert m["kind"] == "capture"
+            # Empty from_ -> Switch's Cappy filter skips the bubble. The
+            # encoder strips empty/None fields, so the "from" key may be
+            # absent entirely; either form must be treated as silent.
+            assert m.get("from", "") == ""
+        # hack_name carries through (Goomba's SMO-internal name is Kuribo).
+        assert by_cap["Goomba"]["hack_name"] == "Kuribo"
+    finally:
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+        await sw.stop()
+
+
+@pytest.mark.asyncio
+async def test_hello_replay_does_not_synthesize_captures_when_capturesanity_on():
+    """With capturesanity ON, AP delivers real Capture items via the
+    normal grant path; the synthetic block must be a no-op so we don't
+    pre-unlock every capture and break the lock."""
+    state = BridgeState()
+
+    async def on_check(_): return None
+    async def on_goal(): ...
+
+    fake_caps = [("Frog", "Frog"), ("Goomba", "Kuribo")]
+    sw = SwitchServer(
+        "127.0.0.1", 0, state, on_check, on_goal,
+        capturesanity_enabled=True,
+        get_all_captures=lambda: fake_caps,
+    )
+    server = await asyncio.start_server(sw._handle_client, "127.0.0.1", 0)
+    sw._server = server
+    port = server.sockets[0].getsockname()[1]
+
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        writer.write(protocol.encode(HelloMsg()))
+        await writer.drain()
+        # hello_ack + checked_replay + ap_state — no synthetic items.
+        msgs = await _drain_messages(reader, n=3, timeout=2.0)
+        kinds = [m["t"] for m in msgs]
+        assert kinds == ["hello_ack", "checked_replay", "ap_state"]
+        assert not any(m["t"] == "item" for m in msgs)
+    finally:
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+        await sw.stop()
+
+
+@pytest.mark.asyncio
+async def test_set_capturesanity_enabled_flips_replay_on_next_hello():
+    """If a Switch reconnects (SaveLoadHook → re-HELLO), the latest
+    set_capturesanity_enabled() value must take effect — proving the
+    same code path covers save-load reconciliation."""
+    state = BridgeState()
+
+    async def on_check(_): return None
+    async def on_goal(): ...
+
+    fake_caps = [("Frog", "Frog")]
+    # Start with capturesanity ON, then flip OFF before a reconnect.
+    sw = SwitchServer(
+        "127.0.0.1", 0, state, on_check, on_goal,
+        capturesanity_enabled=True,
+        get_all_captures=lambda: fake_caps,
+    )
+    server = await asyncio.start_server(sw._handle_client, "127.0.0.1", 0)
+    sw._server = server
+    port = server.sockets[0].getsockname()[1]
+
+    # First HELLO: ON -> no synthetic items.
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        writer.write(protocol.encode(HelloMsg()))
+        await writer.drain()
+        msgs = await _drain_messages(reader, n=3, timeout=2.0)
+        assert [m["t"] for m in msgs] == ["hello_ack", "checked_replay", "ap_state"]
+    finally:
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+
+    # Flip the gate and reconnect.
+    sw.set_capturesanity_enabled(False)
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        writer.write(protocol.encode(HelloMsg()))
+        await writer.drain()
+        # hello_ack + checked_replay + 1 synthetic item + ap_state.
+        msgs = await _drain_messages(reader, n=4, timeout=2.0)
+        kinds = [m["t"] for m in msgs]
+        assert kinds == ["hello_ack", "checked_replay", "item", "ap_state"]
+        assert msgs[2]["cap"] == "Frog"
+    finally:
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+        await sw.stop()
+
+
+@pytest.mark.asyncio
+async def test_push_capturesanity_replay_can_run_standalone():
+    """SMOContext calls push_capturesanity_replay() from its AP Connected
+    handler so a Switch that already HELLO'd before slot_data arrived
+    (the SNI-style two-stage gate makes this the common case) gets
+    unlocked without waiting for a save-load."""
+    state = BridgeState()
+
+    async def on_check(_): return None
+    async def on_goal(): ...
+
+    fake_caps = [("Frog", "Frog"), ("Goomba", "Kuribo")]
+    sw = SwitchServer(
+        "127.0.0.1", 0, state, on_check, on_goal,
+        capturesanity_enabled=True,  # initial default
+        get_all_captures=lambda: fake_caps,
+    )
+    server = await asyncio.start_server(sw._handle_client, "127.0.0.1", 0)
+    sw._server = server
+    port = server.sockets[0].getsockname()[1]
+
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        # Drive the initial HELLO with the default (ON) — no synthetics.
+        writer.write(protocol.encode(HelloMsg()))
+        await writer.drain()
+        await _drain_messages(reader, n=3, timeout=2.0)
+
+        # Simulate the Connected handler: flip the flag and push.
+        sw.set_capturesanity_enabled(False)
+        await sw.push_capturesanity_replay()
+        msgs = await _drain_messages(reader, n=2, timeout=2.0)
+        assert [m["t"] for m in msgs] == ["item", "item"]
+        assert {m["cap"] for m in msgs} == {"Frog", "Goomba"}
+
+        # Calling it a second time is also fine (idempotent on Switch
+        # side); the bridge re-sends.
+        await sw.push_capturesanity_replay()
+        msgs = await _drain_messages(reader, n=2, timeout=2.0)
+        assert {m["cap"] for m in msgs} == {"Frog", "Goomba"}
+    finally:
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+        await sw.stop()
+
+
+@pytest.mark.asyncio
+async def test_push_capturesanity_replay_noop_when_enabled():
+    """No synthetic items emitted when capturesanity is on — even if
+    push_capturesanity_replay is called directly."""
+    state = BridgeState()
+
+    async def on_check(_): return None
+    async def on_goal(): ...
+
+    sw = SwitchServer(
+        "127.0.0.1", 0, state, on_check, on_goal,
+        capturesanity_enabled=True,
+        get_all_captures=lambda: [("Frog", "Frog")],
+    )
+    server = await asyncio.start_server(sw._handle_client, "127.0.0.1", 0)
+    sw._server = server
+    port = server.sockets[0].getsockname()[1]
+
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        writer.write(protocol.encode(HelloMsg()))
+        await writer.drain()
+        await _drain_messages(reader, n=3, timeout=2.0)
+
+        await sw.push_capturesanity_replay()
+        # Send a ping so the reader has SOMETHING to pull; if a synthetic
+        # ItemMsg snuck out it'd arrive before the pong.
+        writer.write(protocol.encode(protocol.PingMsg(ts_ms=7)))
+        await writer.drain()
+        msgs = await _drain_messages(reader, n=1, timeout=1.0)
+        assert msgs[0]["t"] == "pong"
+    finally:
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+        await sw.stop()
+
+
 async def _drain_messages(reader: asyncio.StreamReader, n: int, timeout: float) -> list[dict]:
     """Read until we've parsed n full JSON lines or timeout expires."""
     buf = bytearray()

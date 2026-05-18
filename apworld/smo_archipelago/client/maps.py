@@ -197,3 +197,13 @@ class CaptureMap:
         if not cap:
             return None
         return self._reverse.get(cap, cap)
+
+    def iter_all(self) -> list[tuple[str, str]]:
+        """Return every (cap, hack_name) pair in deterministic order.
+
+        Used by the capturesanity-OFF replay path in switch_server.py:
+        when the AP option is disabled, the bridge synthesizes one
+        ItemMsg per pair so the Switch's captures_unlocked bitset gets
+        every bit set (otherwise CaptureStartHook blocks every capture).
+        """
+        return sorted(self._reverse.items())
