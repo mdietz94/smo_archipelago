@@ -157,6 +157,39 @@ class SwitchServer:
         # ItemMsg so the player learns what they got offline.
         self._reconcile_cappy_pending: set[int] = set()
 
+    def set_deathlink_enabled(self, enabled: bool) -> None:
+        """Update the bridge-side DeathLink gate. Called by SMOContext after
+        AP Connected delivers slot_data so the YAML's `death_link` setting
+        wins over launch-time config (host.yaml `deathlink_default`, TOML,
+        `--deathlink`). Takes effect on the NEXT HELLO replay; the caller
+        should also `await push_deathlink_helloack()` so a Switch that has
+        already HELLO'd reacts without waiting for a save-load."""
+        self._deathlink_enabled = bool(enabled)
+
+    async def push_deathlink_helloack(self) -> None:
+        """Re-send HelloAckMsg with the current `_deathlink_enabled`.
+
+        The Switch's `hello_ack` handler is idempotent for the other fields
+        (local_slot, conn=Ready, bridge_connected=true), so a second ack
+        mid-session just updates `ApState::deathlink_enabled`. Without this,
+        a YAML toggle wouldn't reach the Switch until the next save-load
+        forces a fresh HELLO — and inbound kills would keep being dropped
+        by ApState::maybeApplyInboundKill (`if (!deathlink_enabled)` gate).
+
+        No-op when no Switch is attached.
+        """
+        if self._writer is None or self._writer.is_closing():
+            return
+        await self._send(HelloAckMsg(
+            ok=True,
+            seed=self._state.seed,
+            slot=self._state.slot,
+            # cap_table_hash is only used by the Switch's HELLO log line;
+            # the handler doesn't act on it. Empty is fine for the re-push.
+            cap_table_hash="",
+            deathlink_enabled=self._deathlink_enabled,
+        ))
+
     def set_capturesanity_enabled(self, enabled: bool) -> None:
         """Update the capturesanity gate. Called by SMOContext after AP
         Connected delivers slot_data. Takes effect on the NEXT HELLO

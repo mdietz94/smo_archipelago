@@ -824,6 +824,40 @@ class SMOContext(CommonContext):
                 capturesanity = bool(slot_data.get("capturesanity", 0))
                 self.capturesanity_enabled = capturesanity
                 self.switch.set_capturesanity_enabled(capturesanity)
+                # DeathLink is per-slot: each player opts in via their own
+                # YAML `death_link` setting, and the AP server only bounces
+                # deaths among slots tagged "DeathLink". In a five-player
+                # seed where three opt in, those three share deaths and the
+                # other two are inert in both directions. slot_data carries
+                # this player's YAML choice, so it's the canonical value —
+                # the launch-time knobs (host.yaml deathlink_default /
+                # --deathlink / TOML, set in main.py before Connected) are
+                # legacy/dev overrides that get superseded the moment the
+                # server tells us what this slot actually opted into.
+                # Absent key (older apworld build that didn't ship
+                # death_link in slot_data) → leave whatever launch picked.
+                dl_from_slot = slot_data.get("death_link")
+                if dl_from_slot is not None:
+                    dl_enabled = bool(dl_from_slot)
+                    if dl_enabled != self.deathlink_enabled:
+                        log.info("DeathLink: %s (per slot_data)",
+                                 "ENABLED" if dl_enabled else "disabled")
+                    self.deathlink_enabled = dl_enabled
+                    # update_death_link toggles "DeathLink" in self.tags and
+                    # sends ConnectUpdate if we're already authed — without
+                    # that, the AP server wouldn't bounce DeathLinks to us
+                    # even after we flipped our local flag. Conversely,
+                    # removing the tag stops the server from sending us
+                    # other slots' deaths (which we'd otherwise apply even
+                    # though our YAML opted out).
+                    await self.update_death_link(dl_enabled)
+                    # Mirror to SwitchServer so its HelloAck reflects the new
+                    # value on the next HELLO, and push immediately so the
+                    # currently-attached Switch doesn't keep dropping inbound
+                    # kills (ApState::maybeApplyInboundKill gates on the
+                    # value set by hello_ack).
+                    self.switch.set_deathlink_enabled(dl_enabled)
+                    await self.switch.push_deathlink_helloack()
                 # Flush synthetic unlocks NOW for an already-running
                 # Switch — the SNI-style two-stage gate means the Switch
                 # HELLO usually fires BEFORE this Connected handler, so

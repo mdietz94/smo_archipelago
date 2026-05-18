@@ -65,6 +65,8 @@ class _StubSwitch:
         self.ap_states: list[str] = []
         self.capturesanity_calls: list[bool] = []
         self.push_capturesanity_calls: int = 0
+        self.deathlink_calls: list[bool] = []
+        self.push_deathlink_calls: int = 0
 
     async def send_item(self, item: ItemMsg) -> None:
         self.items.append(item)
@@ -90,6 +92,12 @@ class _StubSwitch:
 
     async def push_capturesanity_replay(self) -> None:
         self.push_capturesanity_calls += 1
+
+    def set_deathlink_enabled(self, enabled: bool) -> None:
+        self.deathlink_calls.append(bool(enabled))
+
+    async def push_deathlink_helloack(self) -> None:
+        self.push_deathlink_calls += 1
 
 
 @pytest.mark.asyncio
@@ -252,6 +260,132 @@ async def test_connected_handler_tolerates_missing_slot_data():
     sw.capturesanity_calls.clear()
     await ctx._handle_ap_package("Connected", {"slot_data": None})
     assert sw.capturesanity_calls == [False]
+
+
+@pytest.mark.asyncio
+async def test_connected_handler_honors_slot_data_death_link_on():
+    """`death_link: true` in the player YAML lands in slot_data and the
+    Connected handler must flip the bridge into DeathLink mode — set the
+    local mirror, update the AP "DeathLink" tag, and propagate to the
+    Switch (set the flag + push a fresh HelloAck so the Switch stops
+    dropping inbound kills in ApState::maybeApplyInboundKill).
+
+    Regression: pre-fix, slot_data["death_link"] was ignored entirely and
+    the user had to enable DeathLink via host.yaml / --deathlink / TOML
+    config, contradicting the standard AP convention."""
+    ctx = SMOContext(
+        server_address=None, password=None,
+        state=BridgeState(),
+        datapackage=DataPackage(),
+        shine_map=ShineMap(),
+        capture_map=CaptureMap(),
+    )
+    ctx.auth = "Mario"
+    sw = _StubSwitch()
+    ctx.switch = sw  # type: ignore[assignment]
+
+    # Stub out update_death_link so we don't need a live server connection
+    # to observe the call (the real method tries to send_msgs over a
+    # non-existent socket otherwise).
+    tag_updates: list[bool] = []
+    async def _fake_update_death_link(enabled: bool) -> None:
+        tag_updates.append(enabled)
+        if enabled:
+            ctx.tags.add("DeathLink")
+        else:
+            ctx.tags.discard("DeathLink")
+    ctx.update_death_link = _fake_update_death_link  # type: ignore[assignment]
+
+    assert ctx.deathlink_enabled is False
+
+    await ctx._handle_ap_package("Connected", {
+        "slot_data": {"capturesanity": 0, "death_link": 1},
+    })
+
+    assert ctx.deathlink_enabled is True
+    assert "DeathLink" in ctx.tags
+    assert tag_updates == [True]
+    assert sw.deathlink_calls == [True]
+    assert sw.push_deathlink_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_connected_handler_honors_slot_data_death_link_off():
+    """Symmetric case: a slot whose YAML explicitly says `death_link: 0`
+    forces the bridge off even if it launched with `--deathlink`.
+
+    DeathLink is per-slot (each player opts in via their own YAML; an N-
+    player seed can have any subset participating), and slot_data carries
+    this player's authoritative choice for this seed. The launch-time
+    --deathlink override is legacy/dev — slot_data wins, which also drops
+    the "DeathLink" server tag so the player stops receiving deaths from
+    the opted-in subset they explicitly opted out of."""
+    ctx = SMOContext(
+        server_address=None, password=None,
+        state=BridgeState(),
+        datapackage=DataPackage(),
+        shine_map=ShineMap(),
+        capture_map=CaptureMap(),
+        deathlink_enabled=True,  # simulate --deathlink at launch
+    )
+    ctx.auth = "Mario"
+    sw = _StubSwitch()
+    ctx.switch = sw  # type: ignore[assignment]
+
+    tag_updates: list[bool] = []
+    async def _fake_update_death_link(enabled: bool) -> None:
+        tag_updates.append(enabled)
+        if enabled:
+            ctx.tags.add("DeathLink")
+        else:
+            ctx.tags.discard("DeathLink")
+    ctx.update_death_link = _fake_update_death_link  # type: ignore[assignment]
+
+    assert ctx.deathlink_enabled is True
+
+    await ctx._handle_ap_package("Connected", {
+        "slot_data": {"capturesanity": 0, "death_link": 0},
+    })
+
+    assert ctx.deathlink_enabled is False
+    assert "DeathLink" not in ctx.tags
+    assert tag_updates == [False]
+    assert sw.deathlink_calls == [False]
+    assert sw.push_deathlink_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_connected_handler_leaves_deathlink_alone_when_slot_data_absent():
+    """Missing `death_link` key (older apworld build) must NOT clobber the
+    launch-time setting — silently flipping it would surprise users on an
+    old seed mid-session."""
+    ctx = SMOContext(
+        server_address=None, password=None,
+        state=BridgeState(),
+        datapackage=DataPackage(),
+        shine_map=ShineMap(),
+        capture_map=CaptureMap(),
+        deathlink_enabled=True,
+    )
+    ctx.auth = "Mario"
+    sw = _StubSwitch()
+    ctx.switch = sw  # type: ignore[assignment]
+
+    update_calls: list[bool] = []
+    async def _fake_update_death_link(enabled: bool) -> None:
+        update_calls.append(enabled)
+    ctx.update_death_link = _fake_update_death_link  # type: ignore[assignment]
+
+    # slot_data present but no death_link key — launch state preserved,
+    # no tag update, no push to Switch.
+    await ctx._handle_ap_package("Connected", {
+        "slot_data": {"capturesanity": 0},
+    })
+
+    assert ctx.deathlink_enabled is True
+    assert update_calls == []
+    assert sw.deathlink_calls == []
+    assert sw.push_deathlink_calls == 0
 
 
 def test_to_ref_preserves_name_for_all_kinds():
