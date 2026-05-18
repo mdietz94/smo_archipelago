@@ -10,7 +10,7 @@ from pathlib import Path
 
 @dataclass
 class ApConfig:
-    host: str = "archipelago.gg"
+    host: str = ""
     port: int = 38281
     slot: str = ""
     password: str = ""

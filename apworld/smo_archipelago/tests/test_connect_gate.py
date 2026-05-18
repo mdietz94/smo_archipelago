@@ -203,3 +203,42 @@ async def _record(sink, address):
 
 async def _record_bool(sink, val):
     sink.append(val)
+
+
+# ---- last-server prefill -----------------------------------------------
+#
+# CommonClient persists `last_server_address` to ~/.archipelago/
+# _persistent_storage.yaml on every successful Connected, and
+# CommonContext.suggested_address falls back to it when ctx.server_address
+# is empty. SMOClient used to shadow that fallback by always passing
+# `archipelago.gg:38281` (the old ApConfig default) into SMOContext at
+# launch; with the default cleared, fresh-launch ctx.server_address is
+# empty and the fallback kicks in. These tests pin that behavior.
+
+
+@pytest.mark.asyncio
+async def test_suggested_address_falls_back_to_persistent_store(monkeypatch):
+    import Utils  # type: ignore[import-not-found]
+    monkeypatch.setattr(
+        Utils,
+        "persistent_load",
+        lambda: {"client": {"last_server_address": "example.com:1234"}},
+    )
+
+    ctx, _state, _sw = _make_ctx(switch_connected=False)
+    assert ctx.server_address in ("", None)
+    assert ctx.suggested_address == "example.com:1234"
+
+
+@pytest.mark.asyncio
+async def test_suggested_address_prefers_explicit_server_address(monkeypatch):
+    import Utils  # type: ignore[import-not-found]
+    monkeypatch.setattr(
+        Utils,
+        "persistent_load",
+        lambda: {"client": {"last_server_address": "stored.example.com:1234"}},
+    )
+
+    ctx, _state, _sw = _make_ctx(switch_connected=False)
+    ctx.server_address = "explicit.host:5678"
+    assert ctx.suggested_address == "explicit.host:5678"

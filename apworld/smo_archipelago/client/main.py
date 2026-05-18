@@ -192,12 +192,16 @@ async def main(args: argparse.Namespace) -> None:
 
     # ----- Context
     # `server_addr` is the prefill for the GUI's Connect bar (via
-    # CommonContext.suggested_address → kvui's connect_layout). We do NOT
-    # use it to auto-dial on launch — that's gated below on an explicit
-    # `--connect`. Without that gate, every launch hammers the configured
-    # default (archipelago.gg:38281 unless TOML overrides it) before the
-    # user has touched anything, which surfaces as "Connection refused"
-    # for anyone testing against a server that isn't actually running.
+    # CommonContext.suggested_address → kvui's connect_layout). When
+    # cfg.ap.host is empty (no TOML, no --connect), we pass None so
+    # suggested_address falls through to CommonClient's persistent
+    # `last_server_address` — i.e. the bar pre-fills with the last server
+    # the user successfully connected to, matching every other AP client.
+    # We do NOT use it to auto-dial on launch — that's gated below on an
+    # explicit `--connect`. Without that gate, every launch would hammer
+    # whatever default the user has configured before they've touched
+    # anything, which surfaces as "Connection refused" against any server
+    # that isn't actually up.
     server_addr = f"{cfg.ap.host}:{cfg.ap.port}" if cfg.ap.host else None
     ctx = SMOContext(
         server_addr,
