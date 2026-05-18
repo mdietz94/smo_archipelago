@@ -36,10 +36,12 @@ import typing
 # the GUI from starting. Same reason Wargroove imports kvui first.
 from kvui import GameManager, UILog
 
+import os.path
+
+from kivy import kivy_data_dir
 from kivy.clock import Clock
 from kivy.core.text import LabelBase
 from kivy.metrics import dp
-from kivy.resources import resource_find
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
@@ -56,11 +58,19 @@ _REFRESH_INTERVAL = 1.5
 
 # Register Kivy's bundled monospace font under a short alias so the
 # Odyssey tab can use [font=RobotoMono] markup to line up the per-kingdom
-# moon-count table. Kivy ships RobotoMono-Regular.ttf in its data dir and
-# resource_find resolves it via the font dirs auto-added at Kivy init.
-# If resolution fails (custom Kivy build), markup falls back to default.
-_MONO_FONT_PATH = resource_find("RobotoMono-Regular.ttf")
-if _MONO_FONT_PATH:
+# moon-count table. We resolve the .ttf via kivy_data_dir directly
+# rather than kivy.resources.resource_find — the font search path is
+# populated by LabelBase.get_system_fonts_dir which only runs the first
+# time a Label is instantiated, so at module-import time resource_find
+# returns None and the alias never gets registered. When the markup
+# tag later tries to resolve "RobotoMono" Kivy falls back to
+# "RobotoMono.ttf" (per its endswith('.ttf') fallback) and raises
+# OSError, killing the UI thread. _MONO_OK gates the [font=...] markup
+# so a custom Kivy build that strips the bundled fonts degrades to
+# the proportional default instead of crashing.
+_MONO_FONT_PATH = os.path.join(kivy_data_dir, "fonts", "RobotoMono-Regular.ttf")
+_MONO_OK = os.path.isfile(_MONO_FONT_PATH)
+if _MONO_OK:
     LabelBase.register(name="RobotoMono", fn_regular=_MONO_FONT_PATH)
 
 
@@ -283,7 +293,8 @@ def _format_odyssey(ctx: "SMOContext") -> str:
                 rows.append(f"  {label} {recv:>{recv_w}} / {need:>{need_w}}")
             else:
                 rows.append(f"  {label} {recv:>{recv_w}}")
-        parts.append("[font=RobotoMono]" + "\n".join(rows) + "[/font]")
+        table = "\n".join(rows)
+        parts.append(f"[font=RobotoMono]{table}[/font]" if _MONO_OK else table)
     else:
         parts.append("[i](nothing yet)[/i]")
     parts.append("")
