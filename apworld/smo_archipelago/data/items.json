@@ -561,14 +561,5 @@
         ],
         "count": 1,
         "progression": true
-    },
-    {
-        "name": "Bowser",
-        "category": [
-            "Capture",
-            "post-metro"
-        ],
-        "count": 1,
-        "progression": true
     }
 ]

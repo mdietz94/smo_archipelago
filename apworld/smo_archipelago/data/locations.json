@@ -3865,7 +3865,7 @@
         ],
         "region": "Moon Kingdom",
         "victory": true,
-        "requires": "{OptAll(|Banzai Bill| and |Bowser|)} and {ParabonesSkip()}"
+        "requires": "{OptOne(Banzai Bill)} and {ParabonesSkip()}"
     },
     {
         "name": "Capture: Paragoomba",
@@ -4217,14 +4217,5 @@
         ],
         "region": "Moon Kingdom",
         "requires": "({ParabonesSkip()} and {OptOne(Banzai Bill)}) AND |Chargin' Chuck|"
-    },
-    {
-        "name": "Capture: Bowser",
-        "category": [
-            "post-metro",
-            "Capture"
-        ],
-        "region": "Moon Kingdom",
-        "requires": "({ParabonesSkip()} and {OptOne(Banzai Bill)}) AND |Bowser|"
     }
 ]

@@ -45,15 +45,21 @@ IsExistInHackDictionaryFn s_isExistInHackDictionary = nullptr;
 // Raw SMO hack names (cross-checked against capture_map.json):
 //   "Frog"        — cap_name "Frog" (Cap Kingdom)
 //   "ElectricWire"— cap_name "Spark pylon" (Wooded Kingdom)
+//   "Koopa"       — cap_name "Bowser" (Moon Kingdom escape sequence). Excluded
+//                   from the AP pool because the capture has no gameplay role
+//                   outside the forced post-boss escape — keeping it AP-locked
+//                   would softlock any player who reached the escape without
+//                   the item (you can't back out of the throne-room cutscene).
 //
 // captureBitFor() returns 0xff for these (they're not in capture_table.h),
 // so AddHackDictionaryHook::captureBlocked() returns false and our writes
 // pass through Orig naturally. If the user organically captures one before
 // the reconciler ever runs, the same hook lets the organic write through —
 // idempotent either way.
-inline constexpr std::array<std::string_view, 2> kBaselineHacks = {
+inline constexpr std::array<std::string_view, 3> kBaselineHacks = {
     "Frog",
     "ElectricWire",
+    "Koopa",
 };
 
 }  // namespace
