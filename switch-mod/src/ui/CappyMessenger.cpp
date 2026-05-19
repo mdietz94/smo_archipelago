@@ -168,11 +168,14 @@ void CappyMessenger::tryPump(const void* scene) {
     }
 
     // Idle pre-flight isActive check: this is the FIRST call into rs::
-    // territory for a brand-new dispatch. Bracket with logs so a hang here
-    // is identifiable in the Ryujinx log.
-    SMOAP_LOG_INFO("[cappy] >> isActive(scene=%p) [pre-flight]", scene);
+    // territory for a brand-new dispatch. Bracket with DEBUG logs — this
+    // runs every frame while items are queued and CapMessage is busy, so
+    // INFO would flood the sink and the wire-forward path. The meaningful
+    // transitions (`dispatched`, `dropping head after N frames`, `balloon
+    // released`) are logged at INFO separately.
+    SMOAP_LOG_DEBUG("[cappy] >> isActive(scene=%p) [pre-flight]", scene);
     const bool nintendo_active = s_isActive(scene);
-    SMOAP_LOG_INFO("[cappy] << isActive returned %d", nintendo_active);
+    SMOAP_LOG_DEBUG("[cappy] << isActive returned %d", nintendo_active);
 
     // If isActive is true for any *other* reason (Nintendo CapMessage in
     // flight), back off to next frame. Also bump retry counter so a stuck

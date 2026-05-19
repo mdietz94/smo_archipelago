@@ -478,11 +478,17 @@ public:
     // ~600 bytes of fixed char[] fields (no allocator path), so copying it
     // by value into the ring is M6.1-allocator-safe.
     //
-    // Cap = 16 — applyOnFrame's drain-cap is 16 items/frame, so even a worst-
-    // case "all 16 are captures during a GDH-down window" pushes at most 16.
-    // The ring is frame-thread-only on both ends; SpscRing just gives us the
-    // same shape as the other queues.
-    SpscRing<Item, 16> pending_capture_grant;
+    // Cap = 64 — sized to the full HELLO-replay capture burst (42 caps
+    // today, with headroom for future apworld additions). The earlier cap
+    // of 16 matched applyOnFrame's per-frame drain limit, but in practice
+    // the GDH-down window after a reconnect lasts many frames — so the
+    // 16-cap and 26-cap follow-up drains all pile into the ring before the
+    // reconciler can fire its first retry. Pre-fix symptom: captures past
+    // slot 16 in a HELLO replay against an un-loaded save got dropped with
+    // "pending_capture_grant FULL" warns and never landed in SMO's dict.
+    // The ring is frame-thread-only on both ends; SpscRing just gives us
+    // the same shape as the other queues.
+    SpscRing<Item, 64> pending_capture_grant;
 
     // Apply queued inbound items to the game (frame thread).
     void applyOnFrame();

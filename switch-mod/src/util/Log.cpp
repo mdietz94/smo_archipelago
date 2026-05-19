@@ -41,6 +41,17 @@
 #  define SMOAP_LOG_FORWARD_MIN_LEVEL 1
 #endif
 
+// Compile-time threshold for the kernel debug-log sink (svcOutputDebugString
+// → Ryujinx, lm on real Switch). Same scale as above; default INFO keeps the
+// per-frame DEBUG diagnostics out of normal Ryujinx logs. Rebuild with
+// -DSMOAP_LOG_SINK_MIN_LEVEL=0 to surface DEBUG when investigating an issue.
+// The SMOAP_DEBUG_SD_LOG ring (when enabled) is independent — it always
+// captures the full stream, since its whole purpose is exhaustive boot
+// capture in environments where the debug log isn't visible.
+#ifndef SMOAP_LOG_SINK_MIN_LEVEL
+#  define SMOAP_LOG_SINK_MIN_LEVEL 1
+#endif
+
 namespace smoap::util {
 
 namespace {
@@ -176,7 +187,9 @@ void log(LogLevel lvl, const char* fmt, ...) {
 
     buf[total++] = '\n';
 
-    svcOutputDebugString(buf, total);
+    if (static_cast<int>(lvl) >= SMOAP_LOG_SINK_MIN_LEVEL) {
+        svcOutputDebugString(buf, total);
+    }
 
 #ifdef SMOAP_DEBUG_SD_LOG
     ringAppend(buf, total);
