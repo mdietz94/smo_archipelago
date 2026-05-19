@@ -31,6 +31,8 @@ See [`docs/first-time-setup.md`](docs/first-time-setup.md) for the full prereq t
 5. **Boot SMO.** The mod loads on game start and dials your PC every couple seconds until SMO Client is listening.
 6. **Join a multiworld.** Type the host/port and your slot name into the Connect bar in SMO Client and click *Connect* — exactly like any other Archipelago client.
 
+> ⚠️ **Start a new save before opening SMO Client.** The Switch mod talks to SMO Client as soon as the client is listening — well before you click *Connect* — and any moon/capture/scenario event the game fires from that moment on is a candidate to be reported as a fresh check. Loading a save with prior progress can replay state-restore events that look identical to fresh collects. Boot SMO and start a new game first, then open SMO Client.
+
 Detailed walkthrough: [`docs/first-time-setup.md`](docs/first-time-setup.md).
 
 After setup, joining additional multiworlds is the same as any other Archipelago client — open SMO Client from the Archipelago Launcher and connect to the AP server. No rebuild required when changing host, slot, password, or apworld version.
