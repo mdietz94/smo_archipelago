@@ -367,12 +367,16 @@ int formatCappyMsg(char* buf, std::size_t cap, const smoap::ap::Item& item) {
     const char* name = short_name;
     const char* sender = item.from[0] == '\0' ? "?" : item.from;
 
-    // M6 phase C reconcile — when the bridge sends the offline-sentinel
-    // from, drop the "from <sender>" suffix entirely: the message reads
-    // "Got X!" instead of "Got X from (offline)!". The sentinel value is
-    // never a real player name (parens aren't legal in slot names) so this
-    // is unambiguous and short-circuits the whole truncation branch below.
-    if (std::strcmp(sender, kReconcileFromSentinel) == 0) {
+    // Synthetic-sender sentinels — when the bridge tags the from-field with
+    // one of these, drop the "from <sender>" suffix entirely: the message
+    // reads "Got X!" instead of "Got X from (offline)!" / "Got X from
+    // (self)!". Neither sentinel can collide with a real player name
+    // (parens aren't legal in slot names) so the strcmp is unambiguous and
+    // short-circuits the whole truncation branch below.
+    //   (offline) — M6 phase C reconcile of a bridge-offline collection
+    //   (self)    — AP echo of a user-issued /send_location
+    if (std::strcmp(sender, kReconcileFromSentinel) == 0
+        || std::strcmp(sender, kManualGrantSentinel) == 0) {
         int n = std::snprintf(buf, cap, "Got %s!", name);
         if (n < 0) {
             buf[0] = '\0';

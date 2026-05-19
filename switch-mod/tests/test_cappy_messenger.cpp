@@ -171,6 +171,23 @@ TEST(format_reconcile_sentinel_filter_passes) {
     EXPECT(!shouldShowCappyMsg(ItemKind::Moon, "Mario", "Mario", false));
 }
 
+// Manual-grant sentinel ("(self)") — bridge tags the from-field with this
+// for the AP echo of a user-issued `/send_location`. Renders identically
+// to the reconcile sentinel: clean "Got X!" with no from-clause.
+
+TEST(format_manual_grant_sentinel_drops_from_clause) {
+    Item item = makeItem(ItemKind::Capture, kManualGrantSentinel, "Bullet Bill");
+    char buf[96];
+    formatCappyMsg(buf, sizeof(buf), item);
+    EXPECT_EQ_S(std::string(buf), "Got Bullet Bill!");
+}
+
+TEST(format_manual_grant_sentinel_filter_passes) {
+    // Same belt-and-braces as the reconcile sentinel: filter must accept
+    // "(self)" (non-empty, never matches a real slot name).
+    EXPECT(shouldShowCappyMsg(ItemKind::Capture, kManualGrantSentinel, "Mario", false));
+}
+
 // --------------------------------------------------------------------------
 // shortenItemNameForBubble — cosmetic suffix rewrites
 // --------------------------------------------------------------------------

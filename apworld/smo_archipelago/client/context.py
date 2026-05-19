@@ -200,6 +200,14 @@ class SMOContext(CommonContext):
         # LocationScouts request issued on Connected. The cache holds
         # per-location NetworkItem.flags so both consumers can read them.
         self.scout_cache = ScoutCache()
+        # loc_ids the Switch has reported via report_check (natural in-game
+        # checks + snapshot replays). Used by _parse_received_item to
+        # distinguish gameplay self-finds (suppress Cappy — the in-game
+        # moon-get cutscene or capture animation already gave feedback) from
+        # user-issued `/send_location` self-finds (bubble — no in-game event
+        # ever fired). In-memory only; cross-restart misclassifications are
+        # acceptable (at most a few extra bubbles during HELLO replay).
+        self._switch_reported_loc_ids: set[int] = set()
         # Wired by main() after SwitchServer construction. Optional because
         # tests construct SMOContext without one.
         self.switch: "SwitchServer | None" = None
@@ -758,15 +766,24 @@ class SMOContext(CommonContext):
 
         ``sender_name`` is the real player name for logging + ItemEvent
         tracking. ``cappy_from`` is the value to pass as ItemMsg.from_:
-        empty string for gameplay self-finds (sender_idx == self.slot —
-        AP looked up the item at the location we just checked and routed
-        it back to us), real sender_name otherwise. Server-injected items
-        (/send, releases, collects; sender_idx == 0) and items from other
-        real players still surface a Cappy speech bubble. Switch-side
-        filter treats empty ``from`` as "do not speak".
+
+          * gameplay self-find (sender_idx == self.slot AND the source
+            loc_id is in ``self._switch_reported_loc_ids``): empty string.
+            The in-game moon-get cutscene or capture animation already gave
+            feedback — a Cappy bubble would double up.
+          * user-issued `/send_location` self-find (sender_idx ==
+            self.slot AND loc_id NOT in the Switch-reported set): the
+            ``(self)`` sentinel. CappyMessenger renders it as "Got X!"
+            without a from-clause. No in-game event ever fired, so the
+            bubble is the only feedback.
+          * everyone else (other real players, server-injected /send,
+            releases, collects with sender_idx == 0): the real sender_name.
+
+        Switch-side filter treats empty ``from`` as "do not speak".
         """
         item_id = ni.get("item") if isinstance(ni, dict) else getattr(ni, "item", None)
         sender_idx = ni.get("player") if isinstance(ni, dict) else getattr(ni, "player", None)
+        location_id = ni.get("location") if isinstance(ni, dict) else getattr(ni, "location", None)
         flags = ni.get("flags", 0) if isinstance(ni, dict) else getattr(ni, "flags", 0)
         if item_id is None:
             return None, None, None, None
@@ -783,7 +800,17 @@ class SMOContext(CommonContext):
         classification = classification_from_flags(int(flags or 0)).value
         ref.classification = classification
         sender_name = self._sender_name(sender_idx)
-        cappy_from = "" if (sender_idx is not None and sender_idx == self.slot) else sender_name
+        if sender_idx is not None and sender_idx == self.slot:
+            # Self-routed item. Distinguish gameplay self-find from manual
+            # /send_location by checking whether the Switch reported this
+            # location. report_check populates the set synchronously before
+            # forwarding LocationChecks to AP, so the echo can't race ahead.
+            if location_id is not None and location_id in self._switch_reported_loc_ids:
+                cappy_from = ""
+            else:
+                cappy_from = "(self)"
+        else:
+            cappy_from = sender_name
         return ref, classification, sender_name, cappy_from
 
     async def _handle_ap_package(self, cmd: str, args: dict) -> None:
@@ -1039,6 +1066,13 @@ class SMOContext(CommonContext):
         if loc_id is None:
             log.warning("no AP id for location %r (kind=%s)", loc_name, kind)
             return None
+        # Mark as Switch-reported BEFORE the dedup early-return below so a
+        # snapshot replay of an already-checked loc still counts. This set
+        # gates the Cappy-suppression logic in _parse_received_item: the AP
+        # echo of a check the Switch reported is a self-find (the in-game
+        # event already gave feedback); the AP echo of a `/send_location`
+        # the user typed isn't in the set and gets a bubble.
+        self._switch_reported_loc_ids.add(loc_id)
         if loc_id in self.locations_checked:
             log.info(
                 "check %r (id=%d) already in locations_checked; skipping LocationChecks send",

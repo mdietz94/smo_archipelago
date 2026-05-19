@@ -104,8 +104,10 @@ def _make_ctx(*, my_slot: int = 1) -> tuple[SMOContext, _StubSwitch]:
     return ctx, sw
 
 
-async def _drive(ctx: SMOContext, sender_idx: int | None) -> None:
-    ni = {"item": _ITEM_ID, "player": sender_idx, "flags": 0}
+async def _drive(
+    ctx: SMOContext, sender_idx: int | None, *, location: int | None = None,
+) -> None:
+    ni = {"item": _ITEM_ID, "player": sender_idx, "location": location, "flags": 0}
     await ctx._handle_ap_package("ReceivedItems", {"items": [ni]})
 
 
@@ -116,7 +118,7 @@ async def _drive_batch(
     `index`. Mirrors AP's wire format — `index` is the absolute position
     of the first item in the receiver's items_received list; `items` is
     [(item_id, sender_idx), ...]."""
-    nis = [{"item": iid, "player": s, "flags": 0} for (iid, s) in items]
+    nis = [{"item": iid, "player": s, "location": None, "flags": 0} for (iid, s) in items]
     await ctx._handle_ap_package("ReceivedItems", {"index": index, "items": nis})
 
 
@@ -133,12 +135,44 @@ async def test_other_player_keeps_real_sender_name():
 
 
 @pytest.mark.asyncio
-async def test_self_find_collapses_to_empty():
-    """Sender == our own slot → silence Cappy → `from_` is empty."""
+async def test_gameplay_self_find_collapses_to_empty():
+    """Sender == our own slot AND the Switch reported the location (natural
+    in-game collection) → silence Cappy → `from_` is empty. The in-game
+    moon-get cutscene or capture animation already gave the player feedback;
+    a Cappy bubble on top would double it up."""
     ctx, sw = _make_ctx(my_slot=1)
-    await _drive(ctx, sender_idx=1)
+    # Simulate report_check having tracked this loc_id before the AP echo.
+    ctx._switch_reported_loc_ids.add(9001)
+    await _drive(ctx, sender_idx=1, location=9001)
     assert len(sw.items) == 1
     assert sw.items[0].from_ == ""
+
+
+@pytest.mark.asyncio
+async def test_send_location_self_grant_uses_manual_sentinel():
+    """User typed `/send_location` for a loc the Switch never reported
+    (e.g. a capture they never naturally captured). AP echoes back with
+    sender == self.slot but the loc_id is NOT in _switch_reported_loc_ids.
+    Bridge tags `from_` with the "(self)" sentinel so CappyMessenger
+    surfaces a "Got X!" bubble — without the manual path the capture
+    would unlock silently and the player would have no feedback."""
+    ctx, sw = _make_ctx(my_slot=1)
+    # Note: _switch_reported_loc_ids stays empty — the user bypassed the
+    # natural-check pipeline.
+    await _drive(ctx, sender_idx=1, location=9001)
+    assert len(sw.items) == 1
+    assert sw.items[0].from_ == "(self)"
+
+
+@pytest.mark.asyncio
+async def test_self_grant_with_no_location_field_uses_manual_sentinel():
+    """Defensive: NetworkItem with no `location` field can't be matched
+    against the reported set, so we conservatively treat it as a manual
+    grant (bubble) rather than silently dropping the only feedback channel."""
+    ctx, sw = _make_ctx(my_slot=1)
+    await _drive(ctx, sender_idx=1, location=None)
+    assert len(sw.items) == 1
+    assert sw.items[0].from_ == "(self)"
 
 
 @pytest.mark.asyncio
@@ -168,16 +202,17 @@ async def test_unattributed_sender_passes_self_string_through():
 @pytest.mark.asyncio
 async def test_state_received_item_keeps_real_sender_for_logging():
     """ItemEvent recorded in BridgeState keeps the real sender name even
-    when ItemMsg.from_ is collapsed for the self-find case — the in-app
-    tracker UI and log lines rely on attribution."""
+    when ItemMsg.from_ is collapsed for the gameplay self-find case — the
+    in-app tracker UI and log lines rely on attribution."""
     ctx, _ = _make_ctx(my_slot=1)
-    await _drive(ctx, sender_idx=1)
+    ctx._switch_reported_loc_ids.add(9001)
+    await _drive(ctx, sender_idx=1, location=9001)
     evts = list(ctx.state.received_items)
     assert len(evts) == 1
     assert evts[0].sender == "Mario"
     # The Cappy-suppression decision is persisted on the ItemEvent so the
-    # HELLO replay path can re-use it without recomputing — a self-find
-    # stays silent across save loads.
+    # HELLO replay path can re-use it without recomputing — a gameplay
+    # self-find stays silent across save loads.
     assert evts[0].cappy_from == ""
 
 

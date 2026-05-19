@@ -50,6 +50,14 @@ inline constexpr const char* kArchipelagoLabel = "ArchipelagoCappyMsg";
 // short and avoiding a confusing literal "(offline)" in the bubble.
 inline constexpr const char* kReconcileFromSentinel = "(offline)";
 
+// Manual-grant sentinel — bridge sets `Item.from = "(self)"` for the AP
+// echo of a `/send_location` (or any other CommonContext path that
+// bypasses the Switch's natural-check pipeline). The item routed back
+// to the player's own slot, but no in-game event ran, so we still want a
+// bubble — just without an attribution suffix. Formatter handling is
+// identical to the reconcile sentinel.
+inline constexpr const char* kManualGrantSentinel = "(self)";
+
 class CappyMessenger {
 public:
     // Pending-message ring. Cap chosen empirically: a kingdom-unlock burst
