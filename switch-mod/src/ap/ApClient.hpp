@@ -44,6 +44,17 @@ public:
     // this after a save reload clears our session dedupe set.
     void requestRehello();
 
+    // Frame-thread API: arm a deferred "connection-status" Cappy bubble for
+    // the post-save-load notification. The worker thread fires either
+    // "Connected to Archipelago" the instant the bridge reports ap_state=ready
+    // (covers the common case where the AP dial finishes within ~1s of save
+    // load), or "Not connected to Archipelago" once the wait window expires
+    // without a ready signal. This replaces the prior synchronous read of
+    // ApState::conn at enqueue time, which announced "Not connected" before
+    // the bridge had time to finish its AP handshake — and got the matching
+    // ap_state(ready) bubble suppressed by the rehello suppression window.
+    void deferSaveLoadStatusBubble();
+
     // Pump outbound rings into the wire. Called by the socket thread.
     void pumpOnce();
 
@@ -103,6 +114,15 @@ private:
     // never flipped to "disconnected"). If grace expires with no recovery,
     // the worker loop fires the bubble + commits the state transition.
     std::atomic<std::int64_t> pending_disconnect_bubble_at_ms_{0};
+    // Deferred save-load status bubble. Set by deferSaveLoadStatusBubble()
+    // (frame thread, from SaveLoadHook) to a monotonic-ms deadline. The
+    // worker thread checks this each loop iteration: fires
+    // "Connected to Archipelago" early if ap_state=ready is observed, or
+    // "Not connected to Archipelago" once the deadline expires. Either path
+    // clears the deadline back to 0. The ap_state message handler also
+    // honors this so the "ready" branch can fire the bubble immediately
+    // instead of waiting on the worker's recv_timeout polling cycle.
+    std::atomic<std::int64_t> save_load_announce_deadline_ms_{0};
     int socket_fd_{-1};
     char read_buf_[kInboundLineCap];
     std::size_t read_buf_len_{0};

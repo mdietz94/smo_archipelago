@@ -14,7 +14,6 @@
 #include "nn/time/time_timespan.hpp"
 #include "../ap/ApClient.hpp"
 #include "../ap/ApState.hpp"
-#include "../ui/CappyMessenger.hpp"
 #include "../util/Log.hpp"
 #include "HookSymbols.hpp"
 #include "SoftInstall.hpp"
@@ -149,7 +148,7 @@ HOOK_DEFINE_TRAMPOLINE(SaveLoadHook) {
         // worker thread; we just set the atomic here.
         smoap::ap::ApClient::instance().requestRehello();
 
-        // Queue a "current connection status" Cappy bubble on every save load
+        // Arm a "current connection status" Cappy bubble on every save load
         // (covers both New Game and Continue). On New Game the messenger holds
         // it until the Cap Kingdom intro releases the CapMessage director
         // (kSceneSettleFrames + retry budget), so it surfaces right when Cappy
@@ -157,32 +156,16 @@ HOOK_DEFINE_TRAMPOLINE(SaveLoadHook) {
         // connection survive?" question the player otherwise has to guess at.
         // On Continue the bubble fires within seconds of the load completing.
         //
-        // The reconnect bubble that ap_state(ready) would normally emit after
-        // requestRehello is suppressed by suppress_state_bubble_until_ms_ so
-        // we don't double-announce. This call IS the authoritative announcement
-        // for the save-load round trip; it reads ApState::conn at enqueue time
-        // (pre-reconnect), which is what the player most recently knew. If the
-        // post-load rehello changes state, the natural transition path will
-        // still fire after the suppression window expires.
-        const auto conn_state = st.conn.load(std::memory_order_acquire);
-        const char* status_text = nullptr;
-        switch (conn_state) {
-            case smoap::ap::ConnState::Ready:
-                status_text = "Connected to Archipelago";
-                break;
-            case smoap::ap::ConnState::Connecting:
-            case smoap::ap::ConnState::Hello:
-                status_text = "Connecting to Archipelago...";
-                break;
-            case smoap::ap::ConnState::Disconnected:
-                status_text = "Not connected to Archipelago";
-                break;
-        }
-        if (status_text) {
-            SMOAP_LOG_INFO("SaveLoadHook: queueing connection-status bubble '%s'",
-                           status_text);
-            smoap::ui::CappyMessenger::instance().enqueueSystem(status_text);
-        }
+        // Deferred (not synchronous): we just requested a re-HELLO above, and
+        // SMOClient typically takes ~1s after our HELLO to finish dialing AP.
+        // Reading ApState::conn here would announce "Not connected" for the
+        // common "AP is about to be ready" case — and the matching natural
+        // ap_state(ready) bubble would be suppressed by the rehello window we
+        // just armed, leaving the player with the wrong status until next save
+        // load. Instead, deferSaveLoadStatusBubble() arms a worker-thread
+        // deadline that fires the right text the moment ap_state=ready arrives
+        // (fast path), or falls back to "Not connected" once the wait expires.
+        smoap::ap::ApClient::instance().deferSaveLoadStatusBubble();
     }
 };
 }  // namespace

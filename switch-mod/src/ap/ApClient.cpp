@@ -232,6 +232,16 @@ static constexpr std::int64_t kRehelloBubbleSuppressMs = 3000;
 // through the normal path.
 static constexpr std::int64_t kDisconnectGracePeriodMs = 10000;
 
+// Deferred-announce window for the save-load "current connection status"
+// bubble. SaveLoadHook arms a deadline at now + this many ms; the worker
+// loop fires "Connected to Archipelago" the instant ap_state=ready is
+// observed inside the window, or "Not connected to Archipelago" once the
+// window expires without one. 1500ms covers the ~1.4s SMOClient typically
+// needs between accepting the Switch HELLO and the AP server returning
+// Connected, with ~100ms slack for slower hosts. Bigger windows just delay
+// the negative answer in the "bridge genuinely down" case.
+static constexpr std::int64_t kSaveLoadAnnounceWaitMs = 1500;
+
 void ApClient::requestRehello() {
     // Arm the bubble suppressor BEFORE setting the rehello flag so the worker
     // thread can't race ahead and call disconnect() between these stores.
@@ -244,6 +254,24 @@ void ApClient::requestRehello() {
     // closes-and-reopens. We do NOT call disconnect() here because we're on
     // the frame thread and socket close should be owned by the worker.
     rehello_requested_.store(true, std::memory_order_release);
+}
+
+void ApClient::deferSaveLoadStatusBubble() {
+    // Arm the worker-thread deadline. The worker fires "Connected" the moment
+    // ap_state=ready is observed inside the window (typically when the bridge
+    // finishes its AP handshake ~1s after we HELLO'd), or "Not connected"
+    // once the deadline expires. Either path clears the atomic back to 0.
+    //
+    // Idempotency: if multiple SaveLoadHook fires call this within the
+    // debounce window, store unconditionally so the LATEST save load resets
+    // the wait — the deferred bubble should reflect the connection state as
+    // of the most recent save reload, not whatever the original load picked.
+    save_load_announce_deadline_ms_.store(
+        ApState::nowMs() + kSaveLoadAnnounceWaitMs,
+        std::memory_order_relaxed);
+    SMOAP_LOG_INFO("[bubble] deferring save-load status announcement "
+                   "(wait %lldms for AP handshake to settle)",
+                   static_cast<long long>(kSaveLoadAnnounceWaitMs));
 }
 
 void ApClient::threadMain() {
@@ -287,6 +315,32 @@ void ApClient::threadMain() {
                 .enqueueSystem("Disconnected from Archipelago");
             std::strcpy(s_last_ap_state, "disconnected");
             pending_disconnect_bubble_at_ms_.store(0, std::memory_order_relaxed);
+        }
+
+        // Save-load deferred status announcement. Two ways out: early-fire
+        // "Connected" the moment ap_state=ready is observed, or wait for the
+        // deadline and announce whatever state we ended up in. The ap_state
+        // message handler also checks this atomic for the fast-path fire so a
+        // sub-second AP handshake doesn't block on the recv_timeout poll.
+        if (const auto deadline = save_load_announce_deadline_ms_.load(
+                std::memory_order_relaxed);
+            deadline > 0) {
+            const bool ready_now = std::strcmp(s_last_ap_state, "ready") == 0;
+            const bool expired = ApState::nowMs() >= deadline;
+            if (ready_now) {
+                SMOAP_LOG_INFO("[bubble] firing deferred save-load status "
+                               "'Connected to Archipelago' (ap_state=ready)");
+                smoap::ui::CappyMessenger::instance()
+                    .enqueueSystem("Connected to Archipelago");
+                save_load_announce_deadline_ms_.store(0, std::memory_order_relaxed);
+            } else if (expired) {
+                SMOAP_LOG_INFO("[bubble] firing deferred save-load status "
+                               "'Not connected to Archipelago' (wait expired, "
+                               "ap_state=%s)", s_last_ap_state);
+                smoap::ui::CappyMessenger::instance()
+                    .enqueueSystem("Not connected to Archipelago");
+                save_load_announce_deadline_ms_.store(0, std::memory_order_relaxed);
+            }
         }
 
         // Reset backoff after we've held a connection for kStableConnectMs.
@@ -978,6 +1032,24 @@ void ApClient::handleLine(char* line, std::size_t line_len) {
             ++i;
         }
         s_last_ap_state[i] = '\0';
+        // Save-load deferred announcement — fast path. If the post-save-load
+        // wait window is still armed and we just learned the AP is ready, fire
+        // "Connected to Archipelago" now instead of waiting for the worker
+        // loop's next iteration (saves up to recv_timeout_ms of latency, and
+        // beats the deadline-expiry path's "Not connected" fallback). The
+        // worker-loop branch above handles the no-ap_state-arrives case.
+        if (now_ready) {
+            const auto deadline = save_load_announce_deadline_ms_.load(
+                std::memory_order_relaxed);
+            if (deadline > 0) {
+                SMOAP_LOG_INFO("[bubble] firing deferred save-load status "
+                               "'Connected to Archipelago' (ap_state=ready "
+                               "arrived inside wait window)");
+                smoap::ui::CappyMessenger::instance()
+                    .enqueueSystem("Connected to Archipelago");
+                save_load_announce_deadline_ms_.store(0, std::memory_order_relaxed);
+            }
+        }
     } else if (eq(m.t, "print")) {
         SMOAP_LOG_INFO("[bridge] %s", m.print.text);
     } else if (eq(m.t, "pong")) {
