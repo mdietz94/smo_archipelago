@@ -11,6 +11,8 @@ Today the SMO Archipelago experience is a *Manual* client ([empathy-mp3/SMO-manu
 
 > ⚠️ **Status: pre-alpha.** Core gameplay loop works end-to-end (Ryujinx and real Switch), but rough edges remain — see [the open issues](../../issues) before joining a serious multiworld.
 
+**Community:** join the [Discord](https://discord.gg/DQDzYjJdn3) for setup help, multiworld matchmaking, and bug reports.
+
 ## Requirements
 
 - **Super Mario Odyssey 1.0.0**
