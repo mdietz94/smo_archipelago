@@ -142,27 +142,6 @@ jobs:
             **🔄 Changing AP server / slot / bridge PC after setup:**
             [docs/changing-servers.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/changing-servers.md)
 
-            ### ⚠️ Compatibility requirements
-
-            SMO Archipelago targets **Super Mario Odyssey 1.0.0** on a
-            **modded Switch running Atmosphere CFW on firmware 21.x or
-            earlier**.
-
-            - **Platform:** **Windows only today.** Linux / macOS aren't
-              blocked by design but the setup wizard and several scripts
-              assume `%APPDATA%`, `C:/devkitPro`, and the Windows Python
-              launcher; nobody has tested the flow on other platforms.
-            - **SMO version:** must be **1.0.0**. Versions 1.1.0, 1.2.0,
-              1.3.0 will not work. If you're on a newer version, use
-              [Istador/odyssey-downgrade](https://github.com/Istador/odyssey-downgrade)
-              to drop back to 1.0.0 first.
-            - **Switch firmware:** must be **FW 21.x or earlier**.
-              **FW 22+ is NOT supported** by this project — even though
-              Atmosphere 1.11+ technically boots on FW22, the homebrew
-              lifecycle changes Nintendo shipped in FW22 break the
-              subsdk9-style mods we rely on. Stay on FW 21.x if you want
-              to use SMO Archipelago.
-
             ### Verifying the downloads
 
             ```
