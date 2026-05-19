@@ -259,7 +259,10 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
             "from scratch.\n\n"
             "This wizard will:\n"
             "  - Check that you have devkitPro, CMake, Ninja, hactool, "
-            "Python 3.12, and your Switch prod.keys.\n"
+            "Python 3.12, and your Switch prod.keys. (Ninja installs "
+            "quickest with `winget install Ninja-build.Ninja` — close "
+            "and reopen this app afterwards so PATH gets refreshed, "
+            "otherwise the prereq check still won't see it.)\n"
             "  - Extract moon + capture name tables from your own SMO 1.0.0 "
             "NSP (we cannot ship these — they are Nintendo content).\n"
             "  - Compile the Switch module with your bridge PC's LAN IP "
@@ -333,6 +336,25 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
                 else:
                     row.add_widget(Label(text="", size_hint_x=0.1))
                 rows_box.add_widget(row)
+                # When a detector provides multi-line install guidance
+                # (currently just Ninja's winget hint + restart reminder),
+                # surface it as a sub-row below the main row. Auto-size
+                # the height to the wrapped text so the message can't be
+                # silently clipped — the restart reminder is the whole
+                # point of the note.
+                if not r.ok and r.note:
+                    note_lbl = Label(
+                        text=r.note,
+                        size_hint_y=None,
+                        halign="left",
+                        valign="top",
+                        color=(0.85, 0.7, 0.2, 1),
+                    )
+                    def _resize_note(inst, val, _lbl=note_lbl):
+                        _lbl.text_size = (val[0], None)
+                        _lbl.height = _lbl.texture_size[1] + 8
+                    note_lbl.bind(size=_resize_note)
+                    rows_box.add_widget(note_lbl)
             ok = all_ok(results)
             if "next_btn" in next_btn_holder:
                 next_btn_holder["next_btn"].disabled = not ok

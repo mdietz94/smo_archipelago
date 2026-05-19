@@ -276,6 +276,12 @@ def test_ninja_missing(fake_run) -> None:
     fake_run({})
     r = check_ninja()
     assert not r.ok
+    # The Windows-easy install path and the restart-after-install
+    # reminder must be load-bearing in the failure surface: PATH
+    # changes don't reach an already-running wizard process, so
+    # silently dropping either string would make Ninja a UX dead-end.
+    assert "winget install Ninja-build.Ninja" in r.note
+    assert "REOPEN" in r.note or "reopen" in r.note.lower()
 
 
 # ---------- check_hactool ----------

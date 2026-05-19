@@ -78,6 +78,12 @@ class PrereqResult:
     install_url: str = ""
     picker_label: str = ""
     picker_filter: tuple[str, ...] = ()
+    # Multi-line install guidance shown beneath the row when the detector
+    # fails. Use this for instructions that don't fit the single-line
+    # `detail` slot — e.g. a winget command + a reminder that PATH
+    # changes don't reach an already-running process so the wizard needs
+    # to be restarted after installing.
+    note: str = ""
 
 
 def _run(cmd: list[str], *, timeout: float = 10.0) -> tuple[int, str, str]:
@@ -338,6 +344,14 @@ def check_ninja() -> PrereqResult:
             "ninja", "Ninja", False,
             "not found on PATH",
             INSTALL_URLS["ninja"],
+            note=(
+                "Easiest install on Windows:\n"
+                "    winget install Ninja-build.Ninja\n"
+                "Then CLOSE and REOPEN this app before re-checking. "
+                "Windows only refreshes PATH for newly-spawned processes, "
+                "so an already-running wizard won't see Ninja even after "
+                "winget finishes."
+            ),
         )
     ver = (r[1] or r[2]).strip()
     return PrereqResult("ninja", "Ninja", True, ver)
