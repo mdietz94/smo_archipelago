@@ -27,7 +27,7 @@ This repository is open-source and built on a careful line: **functional identif
 - Any moon-name list, capture list, or stage list of more than ~5 entries pasted into a doc, comment, or commit message as illustrative content — bulk transcription is the same exposure as the file.
 
 **Generally OK (already in the repo, established by upstream forks):**
-- `apworld/smo_archipelago/data/locations.json` and `items.json` — the community-curated location and capture names (currently 482 locations + 42 captures after the shop / outfit / trap purge). Forked from the public [empathy-mp3/SMO-manual-AP](https://github.com/empathy-mp3/SMO-manual-AP) Manual world. Edits are fine; bulk additions from a romfs dump are not — alignment with Nintendo's MSBT should happen one mismatch at a time, not as a wholesale copy.
+- `apworld/smo_archipelago/data/locations.json` and `items.json` — the community-curated location and capture names (~479 locations + 42 captures after the shop / outfit / trap / Bowser-softlock purges; `grep -c '"name"'` for the current count). Forked from the public [empathy-mp3/SMO-manual-AP](https://github.com/empathy-mp3/SMO-manual-AP) Manual world. Edits are fine; bulk additions from a romfs dump are not — alignment with Nintendo's MSBT should happen one mismatch at a time, not as a wholesale copy.
 - Functional identifiers like `WaterfallWorldHomeStage`, `obj214`, `ScenarioName_<ObjId>`, `ShineList`, kingdom internal names (`CapWorld`/`SkyWorld`/etc.). These appear in every public SMO modding project (lunakit, MoonFlow, OdysseyDecomp) and are functional, not expressive.
 - The one M5.7 anchor entry (`"Our First Power Moon"`) appears in CLAUDE.md, the test suite, and docs as a known ground-truth datapoint. One name as a verifiable test fixture is fine; a list of names is not.
 
@@ -67,46 +67,9 @@ The client owns AP-protocol complexity (websocket + deflate + TLS + reconnect, a
 | **Game name `Spicy Meatball Overdrive`, zip `smo.apworld`** | Renamed 2026-05-16. AP-protocol name dropped the Manual-framework `Manual_SMO_archipelago` prefix (we ship a real client now, not a Manual world). Deployed zip shortened from `smo_archipelago.apworld` to `smo.apworld` — Archipelago derives the module name from the zip stem, so the world imports as `worlds.smo` and the host.yaml settings key is `smo_options`. The in-repo source folder stayed `apworld/smo_archipelago/` to avoid churning every dev-workflow path reference; see the identifier table in the preamble |
 | **Two-stage connect gate (SNI-style)** | SMOClient never auto-dials AP on launch. Clicking Connect (or `/connect` / `--connect`) parks the request until the Switch HELLOs; `SMOContext.connect()` overrides `CommonContext.connect` to dial AP from the Switch-ready callback. State tracked as `disconnected → waiting_for_switch → connected`. Mirrors SNIClient (user-cited gold standard); pre-fix, the default `archipelago.gg` host produced "Connection refused" the moment the user opened the Launcher button. Any new AP-dial path (auto-reconnect, scripted launch) must route through `SMOContext.connect()` — never `asyncio.create_task(server_loop(ctx))` directly. `disconnect()` clears the pending state so a stale dial doesn't fire on the next Switch reconnect. Tests: `apworld/smo_archipelago/tests/test_connect_gate.py` |
 
-## Current status — track by track
+## Status
 
-| Track | What it is | Status |
-|---|---|---|
-| **1 — Bridge runtime** | Python bridge can connect to AP server | DONE wiring, needs Archipelago submodule add |
-| **2 — Switch dev toolchain** | devkitPro / CMake / Ninja installed on PC | **DONE** |
-| **3 — Modded Switch + game dump** | Native SMO 1.0.0 install on FW 21.2 | **DONE.** Native 1.0.0 NSP + `main.nso` dump at `C:\Users\maxwe\Downloads\` (DO NOT commit — copyrighted). Keys at `C:\Users\maxwe\.switch\` |
-| **4 — Symbol discovery (M0)** | Mangled symbols in `switch-mod/src/hooks/HookSymbols.hpp` | **DONE + VERIFIED.** All 8 symbols resolve in real 1.0.0 main.nso (`scripts/check_nso_symbols.py`). 3 byte-identical to lunakit's verified 1.0.0 hooks; 5 computed from OdysseyDecomp forward-decls. Runtime `nn::ro::LookupSymbol` will succeed |
-| **5 — Ryujinx dev loop** | Build deploys to emulator, validates before Switch | **DONE.** Build skill (`smo-build`) covers the manual deploy flow |
-| **6 — Generate test seed** | Use forked apworld in Archipelago checkout to make a seed | DONE. See `smo-loopback-test` skill |
-| **7 — Real-Switch deploy** | Final validation after Ryujinx green | Ryujinx green (2026-05-15: HELLO observed end-to-end). Ready when desired |
-
-## Plan milestones
-
-`C:\Users\maxwe\.claude\plans\after-much-work-i-tender-thompson.md` is the authoritative plan (FW 21.2 + SMO 1.0.0 simplification). One-line status per milestone; deep narratives in [docs/milestones.md](docs/milestones.md).
-
-| Milestone | Status | Details |
-|---|---|---|
-| M0 — toolchain + symbol map | DONE | [docs/milestones.md#m0](docs/milestones.md#m0) |
-| M1 — bridge skeleton | CODE COMPLETE | [docs/milestones.md#m1](docs/milestones.md#m1) |
-| M2 — apworld parity fork | CODE COMPLETE | [docs/milestones.md#m2](docs/milestones.md#m2) |
-| M3 — Switch module skeleton | RUNTIME VALIDATED 2026-05-15 (Ryujinx) | [docs/milestones.md#m3](docs/milestones.md#m3) |
-| M4 — read-only state mirroring | DONE | [docs/milestones.md#m4](docs/milestones.md#m4) |
-| M4.5 — disconnect state reconciliation | CODE COMPLETE | [docs/milestones.md#m45](docs/milestones.md#m45) |
-| M4.6 — inbound DeathLink | DONE 2026-05-15 | [docs/milestones.md#m46](docs/milestones.md#m46) |
-| M5 — web tracker | CODE COMPLETE | [docs/milestones.md#m5](docs/milestones.md#m5) |
-| M5.5 — AP server live integration | DONE 2026-05-15 | [docs/milestones.md#m55](docs/milestones.md#m55) |
-| M5.7 — Ryujinx E2E first moon | DONE 2026-05-15 | [docs/milestones.md#m57](docs/milestones.md#m57) |
-| M5.8 — moon + capture extraction | DONE 2026-05-15 | [docs/milestones.md#m58](docs/milestones.md#m58) |
-| M6 phase A — AP-credit HUD substitution | DONE 2026-05-15 | [docs/milestones.md#m6-phase-a](docs/milestones.md#m6-phase-a) |
-| M6 phase A.5 — moon-get cutscene label | DONE 2026-05-16 (Ryujinx-verified) | [docs/milestones.md#m6-phase-a5](docs/milestones.md#m6-phase-a5) |
-| M6 phase B — capture grant | DONE 2026-05-16 | [docs/milestones.md#m6-phase-b](docs/milestones.md#m6-phase-b) |
-| M6.1 — worker-thread allocator hardening | DONE 2026-05-16 | [docs/milestones.md#m61](docs/milestones.md#m61) |
-| M6 phase C — snapshot enumerate | DEFERRED (kingdom-unlock half dropped 2026-05-18) | [docs/milestones.md#m6-phase-c-deferred](docs/milestones.md#m6-phase-c-deferred) |
-| M6 phase D — moon-deposit debit | DONE 2026-05-17 (Ryujinx-verified) | [docs/milestones.md#m6-phase-d](docs/milestones.md#m6-phase-d) |
-| M7 Path A — kingdom-order gate | DONE 2026-05-17 (Ryujinx-verified) | [docs/milestones.md#m7-path-a--kingdom-order-gate](docs/milestones.md#m7-path-a--kingdom-order-gate) |
-| M7 phase A — capture lock | DONE 2026-05-16 | [docs/milestones.md#m7-phase-a--capture-lock](docs/milestones.md#m7-phase-a--capture-lock) |
-| M7 phase B — goal detection | DONE 2026-05-18 (bridge-side rewire) | [docs/milestones.md#m7-phase-b](docs/milestones.md#m7-phase-b) |
-| M8 — apworld extensions + ImGui + polish | NOT STARTED | [docs/milestones.md#m8](docs/milestones.md#m8) |
-| PopTracker pack | DONE 2026-05-17 (user-verified) | [docs/milestones.md#poptracker-pack](docs/milestones.md#poptracker-pack) |
+Shipped as v0.1.x-alpha (see `git tag`). All planned milestones (M0 through M7) are complete and a real-Switch deploy has been validated end-to-end. The PopTracker pack ships alongside the apworld zip on every tagged release. M8 polish is partial — Cappy speech-bubble notifications shipped in place of an ImGui overlay; 2D-moon recolor and uncapture-animation cleanup remain. Deep per-milestone narratives — including the exact provenance of every wire-protocol decision and the failed-iteration history — live in [docs/milestones.md](docs/milestones.md). The original implementation plan at `C:\Users\maxwe\.claude\plans\after-much-work-i-tender-thompson.md` is retained for historical reference.
 
 Pattern invariants worth knowing even without reading the milestone narratives:
 
@@ -126,11 +89,12 @@ C:\Users\maxwe\Documents\smo_archipelago\
   .claude/skills/                Project skills (smo-build, smo-loopback-test, ...)
   apworld/smo_archipelago/       Forked manual_smo_mp3 → smo_archipelago apworld + client
     __init__.py                  World class + SMOSettings + "SMO Client" Component reg
-    data/                        items.json / locations.json / regions.json / categories.json
+    data/                        categories.json / game.json / items.json /
+                                 locations.json / meta.json / regions.json
     hooks/                       Manual-framework hook surfaces (Rules, Options, World, ...)
     Data.py, Game.py, ...        Manual framework boilerplate
-    ManualClient.py              Vestigial — NOT Launcher-registered; kept because the Manual
-                                 framework references it. The active client is client/main.py.
+    _setup/                      One-download setup wizard (Kivy) — first-time toolchain +
+                                 deploy + extract, surfaces in Archipelago Launcher.
     client/                      Python client (replaces the old standalone `bridge/`)
       __init__.py                Empty / lightweight; never pulls Kivy
       main.py                    Launcher entry point; `def launch(*args)` invoked via Component
@@ -143,8 +107,10 @@ C:\Users\maxwe\Documents\smo_archipelago\
       commands.py                Pure `parse_command` for the /-commands in context.py
       config.py, logging_setup.py  Legacy TOML overlay (kept for back-compat) + log config
       data/                      shine_map.json + capture_map.json (gitignored; regenerated)
-    tests/                       120 passing (11 skipped: live-AP gated on SMOAP_LIVE_AP=1
-                                 + extraction tests need shine/capture maps present)
+    tests/                       30 test files; ~150 passing with a handful skipped (live-AP
+                                 gated on SMOAP_LIVE_AP=1 + extraction tests need shine/capture
+                                 maps present). Run them via the command at the bottom of this
+                                 file for current pass/skip numbers.
       pyproject.toml             Self-contained pytest config (importmode=importlib)
       conftest.py                Inserts apworld/smo_archipelago/ into sys.path
       seeds/                     Loopback test seeds (smo_loopback.yaml + gitignored out/)
@@ -154,10 +120,18 @@ C:\Users\maxwe\Documents\smo_archipelago\
       main.cpp                   exl_main entry — installs hooks, spawns worker
       ap/{ApClient,ApState,ApConfig,ApFrameBridge,ApProtocol}.{cpp,hpp}
       ap/capture_table.h         AUTO-GENERATED (42 cap names) — run sync_capture_table.py
-      hooks/HookSymbols.hpp      Mangled SMO 1.0.0 symbols
-      hooks/{MoonGet,CaptureStart,ScenarioFlag,SaveLoad,Ending,MoonLabel,WorldMapSelect}Hook.cpp
+      hooks/HookSymbols.hpp      Mangled SMO 1.0.0 symbols — `grep -c '^inline constexpr'`
+                                 for the current count (was 8 at M0, grew through M6/M7).
+      hooks/*.cpp                One file per hook target; see directory listing. Covers
+                                 moon get/label, capture start/lock, scenario flag, save
+                                 load, world-map select, addPayShine debit, addHackDictionary
+                                 gating, Cappy message routing, shine appearance, death-link.
       game/{MoonApply,CaptureGate,KingdomUnlock,KingdomOrderGate}.{cpp,hpp}
-      ui/ApHudOverlay.{cpp,hpp}
+                                 KingdomUnlock retains the kingdom name ↔ bit ↔ worldId
+                                 tables M6-D + M7-A depend on, despite its now-legacy name.
+      ui/ApHudOverlay.{cpp,hpp}  Heartbeat-mode HUD (kept for debug logging surface).
+      ui/CappyMessenger.{cpp,hpp}  In-game speech-bubble notifications via SMO's CappyMessenger
+                                 (used by M6-C reconciliation, M7-A lock messaging, etc.).
       util/{Json,Log}.{cpp,hpp}
     romfs/ap_config.json         INFORMATIONAL ONLY — bridge IP/port are baked in at
                                  compile time via CMake -DBRIDGE_HOST/-DBRIDGE_PORT. The
@@ -176,14 +150,18 @@ C:\Users\maxwe\Documents\smo_archipelago\
     .extract-venv/               Auto-created Python 3.12 venv (gitignored)
   docs/
     architecture.md              Two-tier diagram, threading, responsibilities
-    wire-protocol.md             14 message types with examples
+    wire-protocol.md             Wire-format reference
     build-windows.md             Toolchain install
     extract-moon-data.md         How to generate shine_map.json + capture_map.json
     install-switch.md            SD card layout, troubleshooting
-    milestones.md                Deep per-milestone narrative — linked from status table above
+    first-time-setup.md          End-user setup walkthrough (paired with the wizard)
+    release-process.md           Tag → CI release workflow notes
+    changing-servers.md          End-user server-switch flow
+    milestones.md                Deep per-milestone narrative — provenance for every
+                                 decision that lives load-bearing in current code.
+  .github/workflows/             release.yml (tag-triggered), test.yml (CI), dependabot.yaml
   vendor/                        For submodules (Archipelago goes here)
-  third_party/                   Local clones — gitignored
-    SMO-manual-AP/               Reference clone of upstream Manual world
+  third_party/                   Local clones — gitignored (may be empty in fresh checkouts)
   poptracker/
     pack-src/                    Hand-authored: manifest, init.lua, logic.lua (Lua ports of
                                  Rules.py), autotracking.lua, layouts.
@@ -215,36 +193,25 @@ Project skills live in `.claude/skills/`. They auto-load when triggered by their
 
 For anything not covered by a skill, [docs/milestones.md](docs/milestones.md) is the deep-dive: it captures pattern decisions (Channel-A scout pre-warm, the three-layer hook pattern from M7 Path A, the worker-thread allocator hardening from M6.1) that successor work tends to need.
 
-## Known unknowns / risks
+## Known unknowns / risks for new work
 
 1. **`PlayerHackKeeper::startHack` may not be a single chokepoint** — capture entry can split across multiple functions per cap-type. Secondary read-only check on `CapTargetInfo::isCaptureTarget` from the frame pump if the trampoline misses cases.
 2. **Synthetic moon grant** must not retrigger our own hook — `ApState::synthetic_grant_this_frame` guard exists, plus belt-and-braces dedupe by `locations_checked` hash set.
-3. **`Game.py` game-name guard**: bridge should compare `game_name` against `RoomInfo` at startup to catch seed mis-pairing. Not yet implemented.
-4. **Goal detection runs on the Switch via the Mushroom-Kingdom visit hook.** Vanilla SMO awards NO Power Moon for clearing the main game — Mario is simply deposited in Mushroom Kingdom after the wedding cutscene, with nothing to collect. Prior iterations got this wrong: (a) `DemoPeachWedding::makeActorAlive` (the old `EndingHook` target) fires in Bowser's Kingdom too because `DemoPeachWedding` per OdysseyDecomp is a generic "Peach in wedding dress on screen" actor; (b) the 2026-05-18 bridge-side trigger on the "Defeat Bowser and Escape the Moon" location was hung on an alias of Nintendo's "Long Journey's End" — actually the **Darker Side** completion moon, not the main-game ending. The fix (2026-05-19) reuses the M7 Path A `visited_kingdoms` machinery: `WorldMapSelectHook::markVisitedFromStage` calls `smoap::ap::reportGoal()` on the 0→1 transition for the Mushroom bit, gated by `ApState::goal_sent` (cleared by SaveLoadHook on save load). The apworld's `victory: true` location was renamed to "Arrive in the Mushroom Kingdom" to match. `MOON_NAME_ALIASES` and the moon-check→goal trigger are gone from context.py.
+3. **Goal-detection wiring (load-bearing, easy to break by accident).** Vanilla SMO awards NO Power Moon for clearing the main game — Mario is simply deposited in Mushroom Kingdom after the wedding cutscene, with nothing to collect. Two earlier attempts got this wrong: (a) `DemoPeachWedding::makeActorAlive` fires in Bowser's Kingdom too (the actor is a generic "Peach in wedding dress" per OdysseyDecomp); (b) hanging the bridge-side trigger on the "Defeat Bowser and Escape the Moon" location actually fires on the *Darker Side* completion moon, not the main ending. The shipped fix reuses the M7 Path A `visited_kingdoms` machinery: `WorldMapSelectHook::markVisitedFromStage` and `ShineNumGetHook` (save-load-into-Mushroom path) both call `smoap::ap::reportGoal()` on the 0→1 transition for the Mushroom bit, gated by `ApState::goal_sent` (cleared by `SaveLoadHook` on save load). The apworld's `victory: true` location is "Arrive in the Mushroom Kingdom". Don't re-introduce a moon-check or `DemoPeachWedding` trigger here.
 
-## What's definitely NOT done
+## Partial / deferred work for a future iteration
 
-- On-screen status overlay — deferred to M8 per user Q&A; M3 ships heartbeat-to-lm-log instead (web tracker is the canonical source of truth).
-- HELLO `cap_table_hash` field is empty — populated in M4 once we hash the generated `capture_table.h`.
-- **AP-credit HUD overlay (M8)**: M6 phase A hooks `getCurrentShineNum`/`getGotShineNum` to return AP-credit-only counts (not orig+credit). The natural HUD shows our AP count — visually weird: a locally collected moon does NOT bump the counter even though the shine appears in the shine list. A dedicated ImGui-style AP overlay (à la lunakit devgui) belongs in M8 to surface AP credit info in a clearer, separate UI element. Hooks lying about the natural counter is a stopgap.
-- **`getGotShineNum` fires for save-slot summary queries, not the per-kingdom HUD**: per OdysseyDecomp the int param is `file_id` (save slot, default -1), not a world id — the function returns global lifetime collected from that slot, and SMO's per-kingdom HUD uses a different (inlined field-access) path. Observed firing ~6× during kingdom-departure cutscenes (verified 2026-05-19 in a Bowser → Moon transition, all calls with `worldId=-1`). The hook returns `sumAllKingdomCredits()` so AP credit lands correctly across all kingdoms in that context. Kingdom-progression gating ended up handled by M7 Path A's substitution hooks rather than an explicit AP-driven unlock — the `unlockWorld` fallback was dropped 2026-05-18 along with the rest of the kingdom-unlock plumbing.
-- **Cleaner M7 uncapture animation (M8 polish)**: M7 phase A uses `PlayerHackKeeper::forceKillHack` which despawns the captured enemy actor. The visual is jarring on big captures like T-Rex. Researched alternatives (`rs::endHack`, `PlayerHackKeeper::endHack`) carry non-trivial risk; see [docs/milestones.md#m7-phase-a--capture-lock](docs/milestones.md#m7-phase-a--capture-lock).
+- **HELLO `cap_table_hash` field** is empty — would close the Switch↔apworld cap-table drift detection loop. Hash the generated `capture_table.h` and compare on connect.
 - **2D moons aren't recolored by item type yet.** `ShineAppearanceHook` inline-patches the 3D moon actor only; the 2D variant bypasses the patched offsets. Symmetric inline patches on the 2D shine init path would close the gap.
-
-## What's next
-
-**M7 phase B — goal detection (DONE 2026-05-19).** Switch-side trigger on the first 0→1 transition of `visited_kingdoms[Mushroom]` (reusing the M7 Path A visited-bit machinery — `WorldMapSelectHook::markVisitedFromStage` flips the bit when `tryChangeNextStageWithDemoWorldWarp` flies Mario to PeachWorld, which the post-wedding cutscene does as the game's only "you finished the main story" signal). Replaced both the 2026-05-18 bridge-side moon-check trigger (which hung on an alias of "Long Journey's End", actually the Darker Side moon) and the earlier `DemoPeachWedding`-based Switch hook (which fired in Bowser's Kingdom too). See known-unknowns #4 above.
-
-**M6 phase C — snapshot enumerate** is the natural next big-ticket item. The kingdom-unlock half of phase C was dropped 2026-05-18 (M7 Path A's substitution hooks cover gating without needing AP-driven `unlockWorld` writes). What remains: `enumerateOwnedShines` / `enumerateOwnedCaptures` to populate the M4.5 reconciliation stream the bridge already consumes — stubs are in `CaptureGate.cpp` / `MoonApply.cpp` and just need GameDataHolder traversal bodies.
-
-**M6.6 — Cappy bubble (Channel B)**: items arriving outside the moon-get cutscene window need a UI surface. Three UI candidates to spike — see [docs/milestones.md#m66-deferred-next-milestone](docs/milestones.md#m66-deferred-next-milestone).
+- **Cleaner uncapture animation (M7 polish).** `PlayerHackKeeper::forceKillHack` despawns the captured enemy actor; the visual is jarring on big captures like T-Rex. Researched alternatives (`rs::endHack`, `PlayerHackKeeper::endHack`) carry non-trivial risk; see [docs/milestones.md#m7-phase-a--capture-lock](docs/milestones.md#m7-phase-a--capture-lock).
+- **`getGotShineNum` semantics quirk.** Per OdysseyDecomp the int param is `file_id` (save slot, default -1), not a world id — the function returns global lifetime collected from that slot, and SMO's per-kingdom HUD uses a different (inlined field-access) path. Our hook returns `sumAllKingdomCredits()` so AP credit lands correctly in save-slot summary contexts. Kingdom-progression gating ended up handled by M7 Path A's substitution hooks rather than an explicit AP-driven unlock; `unlockWorld`/`ItemKind::Kingdom` were dropped 2026-05-18.
+- **Dedicated AP-credit overlay.** M6 phase A's `getCurrentShineNum`/`getGotShineNum` hooks return AP-credit-only counts so the natural HUD shows AP credit — visually weird because a locally collected moon doesn't bump the counter even though the shine appears in the shine list. Cappy speech bubbles smoothed most of this, but a dedicated ImGui-style AP overlay (à la lunakit devgui) would be cleaner.
 
 ## Test commands worth knowing (Python)
 
 ```pwsh
-# Client tests — 120 pass + 11 skip (live-AP / extraction gated)
 cd C:\Users\maxwe\Documents\smo_archipelago
 .\bridge\.venv\Scripts\python -m pytest apworld\smo_archipelago\tests\ -v
 ```
 
-For switch-mod C++ host tests, use the `smo-host-tests` skill. For the cross-build, use the `smo-build` skill.
+The pre-merge `bridge/.venv` lives in the main checkout (not in worktrees) — Archipelago's deps are a superset of what SMOClient needs. For switch-mod C++ host tests, use the `smo-host-tests` skill. For the cross-build, use the `smo-build` skill.

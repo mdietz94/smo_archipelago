@@ -29,7 +29,7 @@ $env:Path = "C:\msys64\mingw64\bin;" + $env:Path
 .\test_protocol.exe
 ```
 
-Expected: both exes exit 0 with `PASS` lines per test case. As of 2026-05-17: 27 tests in `test_json` (encoder/LineBuffer/overflow/round-trip), all in `test_protocol` including `decode_checked_replay_truncates_past_cap`, `decode_field_overlong_string_truncates`, and the 7 added in M6 phase D.
+Expected: both exes exit 0 with `PASS` lines per test case. `test_json` covers encoder/LineBuffer/overflow/round-trip; `test_protocol` covers every wire-protocol message type with truncation + overlong-field edge cases.
 
 ## Cleanup
 
