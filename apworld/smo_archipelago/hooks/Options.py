@@ -1,31 +1,12 @@
-# Object classes from AP that represent different types of options that you can create
+# Option classes for the SMO apworld. New options are registered in
+# before_options_defined() at the bottom of this file. Options are defined
+# before the world itself is created, so they can't reference per-player state
+# at class-definition time — read it via is_option_enabled / get_option_value
+# from a hook that runs later.
 from Options import FreeText, NumericOption, Toggle, DefaultOnToggle, Choice, TextChoice, Range, NamedRange
-
-# These helper methods allow you to determine if an option has been set, or what its value is, for any player in the multiworld
 from ..Helpers import is_option_enabled, get_option_value
 
 
-
-####################################################################
-# NOTE: At the time that options are created, the world has no concept of the multiworld or its own world.
-#       Options are defined before the world is even created.
-#
-# Example of creating your own option:
-#
-#   class MakeThePlayerOP(Toggle):
-#       """Should the player be overpowered? Probably not, but you can choose for this to do... something!"""
-#       display_name = "Make me OP"
-#
-#   options["make_op"] = MakeThePlayerOP
-#
-#
-# Then, to see if the option is set, you can call is_option_enabled or get_option_value.
-#####################################################################
-
-
-# To add an option, use the before_options_defined hook below and something like this:
-#   options["total_characters_to_win_with"] = TotalCharactersToWinWith
-#
 class IncludeCapPeaceMoons(DefaultOnToggle):
     """Turn off to skip the small set of Cap Kingdom moons that are either only available after
     the kingdom's story is complete or are otherwise tedious to track down."""

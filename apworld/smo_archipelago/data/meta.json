@@ -1,17 +1,12 @@
 {
-    "_comment": [ "remove the _ before a non-comment/info propertie to enable it",
-    "For more info use json schemas to get a description and allowed value for every properties"],
+    "_comment": "Disabled fields use a leading underscore. See https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/world%20api.md#webworld-class for the webworld schema.",
     "docs": {
-        "_comment": [ "For more info on the possible documentation properties check schema and/or the github",
-            "https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/world%20api.md#webworld-class"
-        ],
         "apworld_description": [
             "Spicy Meatball Overdrive is the Archipelago world for Super Mario Odyssey on a modded Nintendo Switch (FW 21.x, SMO 1.0.0, Atmosphere CFW) or an emulator.",
             "An in-game module detects moons / captures / scenario events on Switch and reports them as AP location checks, receives AP items and applies them to the live game,",
             "and enforces capture locks until the AP item is received. Progress is surfaced through a tracker tab in SMO Client and an in-game HUD overlay."
         ],
         "web": {
-            "_comment": "for more info check github https://github.com/ArchipelagoMW/Archipelago/blob/main/docs/world%20api.md#webworld-class",
             "theme": "grass",
             "bug_report_page": "https://discord.gg/T5bcsVHByx",
             "tutorials": [
@@ -20,13 +15,11 @@
                     "description": "A guide to setting up Super Mario Odyssey for Archipelago multiworld games.",
                     "language": "English",
                     "file_name": "setup_en.md",
-                    "link": "setup/en",
-                    "_authors": ["Fuzzy"],
-                    "_comment": "if you don't include the authors it will use the creator constant in Data.py"
+                    "link": "setup/en"
                 }
             ]
         }
     },
-    "_comment_":"Enable the generation of puml diagram of your apworld region and locations for debug purposes",
+    "_comment_": "Enable the generation of a puml diagram of regions and locations for debugging.",
     "enable_region_diagram": false
 }
