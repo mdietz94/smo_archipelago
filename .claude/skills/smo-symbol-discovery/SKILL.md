@@ -9,10 +9,10 @@ Pipeline: identify symbol in OdysseyDecomp / lunakit → produce mangled name �
 
 ## Sources of symbol identities
 
-8 symbols currently in `switch-mod/src/hooks/HookSymbols.hpp` (count is approximate — see file). Two ways they get there:
+Several dozen symbols currently in `switch-mod/src/hooks/HookSymbols.hpp` (count grows per milestone — `grep -c '^inline constexpr' switch-mod/src/hooks/HookSymbols.hpp` for the current number). Two ways they get there:
 
-1. **Lunakit-verified hooks** (3 symbols, byte-identical): copy from `lunakit-vendor/src/program/main.cpp` `InstallAtSymbol(...)` call list. These are the canonical 1.0.0 source.
-2. **OdysseyDecomp forward-decls** (5+ symbols, computed): for symbols lunakit doesn't hook, forward-declare the signature in a scratch `.cpp` from MonsterDruide1's [OdysseyDecomp](https://github.com/MonsterDruide1/OdysseyDecomp) (a 1.0.0 decompilation) and let GCC compute the mangle.
+1. **Lunakit-verified hooks** (byte-identical): copy from `lunakit-vendor/src/program/main.cpp` `InstallAtSymbol(...)` call list. These are the canonical 1.0.0 source.
+2. **OdysseyDecomp forward-decls** (most of the rest, computed): for symbols lunakit doesn't hook, forward-declare the signature in a scratch `.cpp` from MonsterDruide1's [OdysseyDecomp](https://github.com/MonsterDruide1/OdysseyDecomp) (a 1.0.0 decompilation) and let GCC compute the mangle.
 
 ## Mangling via aarch64-none-elf-g++
 
