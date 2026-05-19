@@ -51,7 +51,7 @@ back-and-forth:
 | **CMake 3.24+** | Build orchestrator | https://cmake.org/download/ |
 | **Ninja** | Build backend | https://github.com/ninja-build/ninja/releases (or `winget install Ninja-build.Ninja`) |
 | **hactool** | Extracts RomFS from your SMO NSP | https://github.com/SciresM/hactool/releases |
-| **prod.keys** (Switch console keys) | hactool needs them to decrypt the NSP | Dump with [Lockpick_RCM](https://github.com/Lockpick-Switch/Lockpick_RCM) → place at `%USERPROFILE%\.switch\prod.keys` |
+| **prod.keys** (Switch console keys) | hactool needs them to decrypt the NSP | Dump with Lockpick_RCM → place at `%USERPROFILE%\.switch\prod.keys` |
 | **Your SMO 1.0.0 NSP** | Source of moon + capture names | Your legally-purchased copy. **Not** a patched version — 1.0.0 only. |
 | **A modded Switch OR an emulator** | Where SMO actually runs | Atmosphere CFW on a modded Switch (FW 21.x or earlier), or an emulator |
 

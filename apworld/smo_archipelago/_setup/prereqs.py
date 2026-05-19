@@ -49,7 +49,7 @@ INSTALL_URLS = {
     "cmake": "https://cmake.org/download/",
     "ninja": "https://github.com/ninja-build/ninja/releases",
     "hactool": "https://github.com/SciresM/hactool/releases",
-    "prodkeys": "https://github.com/Lockpick-Switch/Lockpick_RCM",
+    "prodkeys": "",
 }
 
 
