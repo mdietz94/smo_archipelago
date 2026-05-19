@@ -5,6 +5,7 @@
   "package_version": "0.0.0",
   "platform": "switch",
   "min_poptracker_version": "0.32.0",
+  "versions_url": "https://raw.githubusercontent.com/mdietz94/smo_archipelago/main/poptracker/versions.json",
   "variants": {
     "ap": {
       "display_name": "Archipelago",
