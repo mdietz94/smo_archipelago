@@ -197,13 +197,14 @@ public:
 
     std::bitset<128> captures_unlocked;     // 43 used; index from capture_table.h
     FlatHashSet<4096> locations_checked;    // session dedupe (hash of message body)
-    // Goal-once latch: WorldMapSelectHook flips this true the first time
-    // Mario flies to PeachWorld (Mushroom Kingdom) — vanilla SMO awards no
-    // moon for clearing the main game, so arriving in Mushroom is the
-    // canonical "you've beaten Bowser" signal. ApClient encodes this in
-    // state_chunk meta so the bridge can suppress a stale snapshot re-fire
-    // on HELLO. SaveLoadHook clears it on reload so a different save can
-    // re-trigger the goal.
+    // Goal-once latch: CreditsStartHook (inline patch on StaffRollScene::init)
+    // flips this true when the post-wedding credits roll starts — vanilla SMO
+    // awards no moon for clearing the main game, and Mushroom-arrival
+    // false-positives on the Luncheon portrait warp, so the credits scene is
+    // the only no-false-positive signal. ApClient encodes this in state_chunk
+    // meta so the bridge can suppress a stale snapshot re-fire on HELLO.
+    // SaveLoadHook clears it on reload so a different save can re-trigger the
+    // goal.
     bool goal_sent = false;
     bool synthetic_grant_this_frame = false;
 

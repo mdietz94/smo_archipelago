@@ -2,20 +2,21 @@
 
 Vanilla SMO awards NO Power Moon for clearing the main game — Mario is
 deposited in Mushroom Kingdom by the post-wedding cutscene with nothing
-to collect. The Switch detects this via the first 0→1 flip of
-`ApState::visited_kingdoms[Mushroom]` (set from
-`WorldMapSelectHook::markVisitedFromStage`) and emits a `goal` wire
-message.
+to collect. The Switch detects "main game cleared" via `CreditsStartHook`
+(inline patch at offset 0x4C54A4, the BL inside `StaffRollScene::init`)
+and emits a one-shot `goal` wire message.
 
 The bridge side is just: `SwitchServer._on_goal` -> `ctx.report_goal()`
 -> AP `StatusUpdate{ClientGoal}`, with a one-shot latch so snapshot
 replays across reconnects don't reprint the log line on every (re)connect.
 
-This file replaces the previous moon-check-resolution path
-(`MOON_NAME_ALIASES["Moon: Long Journey's End"] -> "Defeat Bowser and
-Escape the Moon"`), which fired in the wrong scenarios — "Long Journey's
-End" turned out to be the Darker Side completion moon, not the main-game
-ending, and there's no main-game completion moon to hook at all.
+This trigger replaces three earlier wrong paths: a moon-check resolution
+(`MOON_NAME_ALIASES["Moon: Long Journey's End"]` — fired on Darker Side
+completion); `DemoPeachWedding::makeActorAlive` (also fired in Bowser's
+Kingdom); and "first Mushroom Kingdom arrival" (false-fires on the
+Luncheon portrait warp). The credits scene only initializes when the
+post-wedding cutscene actually plays, so it's the only no-false-positive
+signal.
 """
 
 from __future__ import annotations

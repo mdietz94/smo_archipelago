@@ -64,6 +64,8 @@ void installCappyMessengerSymbols();
 void installShineAppearanceHook();
 // M7 Path A: world-map kingdom-select intercept + AP-moon-count gate.
 void installWorldMapSelectHook();
+// Credits-roll goal trigger: inline patch on StaffRollScene::init.
+void installCreditsStartHook();
 // M7 phase A (capture lock): drain ApState::pending_kill_keeper if its
 // deadline elapsed. Called once per frame from DrawMainHook.
 void tickPendingUncapture();
@@ -260,6 +262,9 @@ extern "C" void exl_main(void* /*x0*/, void* /*x1*/) {
 
     SMOAP_LOG_INFO("installing WorldMapSelectHook (M7 Path A kingdom-order gate)");
     smoap::hooks::installWorldMapSelectHook();
+
+    SMOAP_LOG_INFO("installing CreditsStartHook (StaffRollScene::init goal trigger)");
+    smoap::hooks::installCreditsStartHook();
 
     SMOAP_LOG_INFO("=== exl_main END (waiting for GameSystem::init to fire) ===");
 }

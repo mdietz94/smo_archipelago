@@ -28,12 +28,14 @@ void reportStatus(const char* stage_name, int scenario_no);
 // DeathHook -> sends death event; debounced via ApState::death_pending_send.
 void reportDeath();
 
-// WorldMapSelectHook -> sends a one-shot `goal` wire message when the player
-// first arrives in Mushroom Kingdom (the only "you've beaten the main game"
-// signal SMO emits — there is no game-completion Power Moon awarded; Mario is
-// simply deposited in PeachWorld after the wedding cutscene). Idempotent at
-// the caller side via the ApState::visited_kingdoms 0→1 transition check, so
-// this just enqueues an event; the worker thread drains outbound_status.
+// CreditsStartHook -> sends a one-shot `goal` wire message when SMO's credits
+// scene (StaffRollScene) initializes. Vanilla SMO awards no Power Moon for
+// clearing the main game and Mario is simply deposited in PeachWorld after
+// the wedding cutscene, so credits-roll is the only false-positive-free
+// "main game cleared" signal — Mushroom-arrival triggers false-fire on the
+// Luncheon portrait warp. Idempotent at the caller side via the
+// ApState::goal_sent latch (cleared by SaveLoadHook on save-data load); this
+// just enqueues an event for the worker thread to drain via outbound_status.
 void reportGoal();
 
 // smoap::util::log() forwarder. Pushes a Log entry into

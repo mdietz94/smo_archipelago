@@ -20,7 +20,6 @@
 // overlay lands in M8.
 
 #include "lib.hpp"  // HOOK_DEFINE_TRAMPOLINE
-#include "../ap/ApFrameBridge.hpp"
 #include "../ap/ApState.hpp"
 #include "../game/KingdomUnlock.hpp"
 #include "../util/Log.hpp"
@@ -59,26 +58,7 @@ HOOK_DEFINE_TRAMPOLINE(ShineNumGetHook) {
 
         int ap_value = 0;
         const char* kname = "<offline>";
-        // Resolve the current kingdom regardless of bridge state so the
-        // goal-fire below works on a save-load that lands the player in
-        // Mushroom Kingdom before SMOClient connects. The AP-credit
-        // computation still gates on `online` (no credit to show until
-        // we know lifetime-received).
         std::uint8_t bit = resolveCurrentKingdomBit();
-        // Mushroom-arrival is the canonical "main game beaten" signal —
-        // there is no completion Power Moon in vanilla SMO. Save-load
-        // bypasses the M7 Path A `tryChangeNextStage*` chokepoints that
-        // `WorldMapSelectHook::markVisitedFromStage` rides, so we poll
-        // here too. The latch (`goal_sent`) makes coexistence safe; the
-        // HUD-tick polling rate (every frame the moon counter is read)
-        // bounds the worst-case delay between Mushroom-arrival and
-        // goal-fire to a few frames.
-        if (bit == 14u /*Mushroom*/ && !s.goal_sent) {
-            s.goal_sent = true;
-            SMOAP_LOG_INFO(
-                "[goal] current kingdom resolved to Mushroom — reporting goal");
-            smoap::ap::reportGoal();
-        }
         const bool online = s.bridge_connected.load(std::memory_order_relaxed);
         if (online) {
             if (bit < 17) {
