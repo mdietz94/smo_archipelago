@@ -210,10 +210,17 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
     # ----------------------------- shared state ---------------------------
 
     saved_state = load_setup_state()
+    # Pre-fill the NSP/XCI dump path from saved state if the file is still
+    # there. The user typically points the wizard at the same dump on every
+    # re-run; making them re-Browse is busywork. We verify the file exists
+    # before pre-filling so a moved/deleted dump falls back to "click Browse"
+    # instead of silently propagating a stale path into the extract step.
+    saved_dump = saved_state.get("dump_path")
+    initial_dump = Path(saved_dump) if saved_dump and Path(saved_dump).is_file() else None
     wizard_state: dict[str, Any] = {
         "smoap_path": smoap_path,
         "smoap": parse_smoap(Path(smoap_path)) if smoap_path else None,
-        "dump_path": None,       # Path | None — NSP or XCI
+        "dump_path": initial_dump,
         "bridge_ip": detect_lan_ip(),
         "build_done": False,     # set True when cmake completes
         "deploy_target": saved_state.get("deploy_target", "ryujinx"),
@@ -431,8 +438,14 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
         # at the right edge for any path past the viewport width).
         picker_row = BoxLayout(orientation="horizontal", size_hint_y=None,
                                height=48, spacing=8)
+        # Pre-fill from setup_state if the user previously picked a dump
+        # that still exists; we initialized wizard_state["dump_path"] from
+        # saved_state at the top of run_setup_wizard. Otherwise show the
+        # "click Browse" placeholder.
+        initial_dump_path = wizard_state.get("dump_path")
         path_input = TextInput(
-            text="(no file picked — click Browse...)",
+            text=(str(initial_dump_path) if initial_dump_path
+                  else "(no file picked — click Browse...)"),
             readonly=True,
             multiline=False,
         )
@@ -443,7 +456,9 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
 
         nav, _, next_btn = _nav_row(lambda: goto("prereqs"),
                                     lambda: goto("extract"))
-        next_btn.disabled = True
+        # If we restored a valid dump path from saved state, the user can
+        # advance immediately without re-Browsing.
+        next_btn.disabled = initial_dump_path is None
 
         def on_browse(_i) -> None:
             # `Utils.open_filename` is the same helper Launcher.open_patch
@@ -462,6 +477,12 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
                 wizard_state["dump_path"] = Path(picked)
                 path_input.text = picked
                 next_btn.disabled = False
+                # Persist so the next wizard run pre-fills this path.
+                # Merge into existing state to preserve sibling keys
+                # (hactool_path, prodkeys_path, deploy_target, ...).
+                state = load_setup_state()
+                state["dump_path"] = picked
+                save_setup_state(state)
 
         browse_btn.bind(on_release=on_browse)
         root.add_widget(nav)
@@ -958,12 +979,19 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
             if not result.ok:
                 status.text = f"Deploy failed: {result.error}"
                 return
-            save_setup_state({
+            # Merge into existing state instead of replacing — sibling
+            # keys like hactool_path, prodkeys_path, and dump_path are
+            # persisted by other wizard pages, and writing a fresh dict
+            # here would wipe them so every subsequent setup run would
+            # re-prompt the user for files they already located.
+            state = load_setup_state()
+            state.update({
                 "deploy_target": wizard_state["deploy_target"],
                 "ryujinx_root": wizard_state["ryujinx_root"],
                 "sd_root": wizard_state["sd_root"],
                 "custom_root": wizard_state["custom_root"],
             })
+            save_setup_state(state)
             wizard_state["deploy_result"] = result
             wizard_log("deploy succeeded; transitioning to 'done' page")
             goto("done")
