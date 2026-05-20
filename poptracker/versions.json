@@ -1,6 +1,17 @@
 {
   "versions": [
     {
+      "package_version": "0.1.24-alpha",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.24-alpha/smo-poptracker-v0.1.24-alpha.zip",
+      "sha256": "a0704bf966c46625ef83fa72884c676ff346641ef3316f921deef20133b68763",
+      "changelog": [
+        "test(extract): real-NSP integration tests + actionable rc != 0 error",
+        "fix(setup): remember hactool / prod.keys / NSP paths across wizard runs",
+        "fix(extract): tolerate hactool section-corruption when files we need parse cleanly",
+        "docs: drop stale main.nso local-path claim; point at extract recipe"
+      ]
+    },
+    {
       "package_version": "0.1.20-alpha",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.20-alpha/smo-poptracker-v0.1.20-alpha.zip",
       "sha256": "ab1055b5fa516fbfea46a0b7603b10561aa4a03906c3ebe1a1fa0fe5831e4da8",
