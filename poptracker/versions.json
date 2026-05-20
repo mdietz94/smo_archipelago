@@ -1,6 +1,15 @@
 {
   "versions": [
     {
+      "package_version": "0.1.25-alpha",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.25-alpha/smo-poptracker-v0.1.25-alpha.zip",
+      "sha256": "bd4298e7700224ef2139848fa0473e065b3f1320f52391680014fff62e3a7c43",
+      "changelog": [
+        "Recolor all shine variants via material-parameter override",
+        "PopTracker auto-update: add v0.1.23-alpha to versions.json"
+      ]
+    },
+    {
       "package_version": "0.1.23-alpha",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.23-alpha/smo-poptracker-v0.1.23-alpha.zip",
       "sha256": "3e62cee4774d106b84270813f55a523b940e21a0dc691e976043f56ea0e9ae66",
