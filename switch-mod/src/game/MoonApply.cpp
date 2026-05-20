@@ -1,7 +1,22 @@
 // M6 phase C: snapshot enumeration. Walks GameDataFile::mShineHintList and
 // emits (stage_name, object_id, unique_id) for each owned shine into the
 // caller-supplied callback. Worker-thread safe — no allocations, only raw
-// pointer reads against in-game memory + one bound symbol call per slot.
+// pointer reads against in-game memory.
+//
+// PRIOR BUG (2026-05-19, fixed by reading HintInfo::mIsGet directly).
+// Earlier revision called GameDataFile::isGotShine(int) passing each
+// HintInfo's mUniqueID. That overload takes a per-world *shine index*
+// (small dense integer 0..40-ish), NOT a global unique ID. The two
+// numeric ranges overlap, so the function would return true whenever
+// the int we passed happened to equal an actually-collected per-world
+// index. Concrete case observed: Mario picks up Cascade "Our First
+// Power Moon" (Cascade-local index 31, global UID 205). isGotShine(31)
+// in Cascade-world context returns true. We walked the full hint list
+// passing UIDs; the entry whose mUniqueID == 31 — "Snow: Running the
+// Flower Road" — emitted as a phantom "collected" shine on every
+// reconnect. Source: MonsterDruide1/OdysseyDecomp GameDataFile.h. The
+// fix is to read mIsGet on each HintInfo directly, which the game sets
+// on the matching HintInfo when setGotShine fires. No UID/index ambiguity.
 
 #include "MoonApply.hpp"
 
@@ -9,7 +24,6 @@
 #include <cstdint>
 
 #include "lib/nx/nx.h"           // Result, R_FAILED
-#include "nn/ro.h"               // nn::ro::LookupSymbol
 #include "../ap/ApState.hpp"
 #include "../hooks/HookSymbols.hpp"
 #include "../util/Log.hpp"
@@ -31,10 +45,18 @@ constexpr std::size_t kGameDataFile_mShineHintListOffset = 0x9A0;
 // GameDataFile.h:86 — `static_assert(sizeof(HintInfo) == 0x238)`.
 constexpr std::size_t kHintInfo_Size = 0x238;
 
-// HintInfo fields (offsets from GameDataFile.h:57-83):
+// HintInfo fields (offsets from GameDataFile.h:57-83 + OdysseyDecomp):
 constexpr std::size_t kHintInfo_StageName  = 0x000;  // FixedSafeString<0x80>
 constexpr std::size_t kHintInfo_ObjId      = 0x098;  // FixedSafeString<0x80>
-constexpr std::size_t kHintInfo_UniqueID   = 0x1F0;  // int
+// "isGet" / collected flag. Lunakit's header labels offset 0x1D1 as
+// `unkBool1` adjacent to `mIsMoonRock` (0x1D0), `mIsAchievement` (0x1D2),
+// etc. — OdysseyDecomp identifies this slot as the "collected" bool that
+// setGotShine flips. VERIFIED 2026-05-19 via [hintinfo-probe] in
+// MoonGetHook on a fresh Cascade obj214 pickup:
+//   [hintinfo-probe] bytes @0x1D0..0x1D5 = 00 01 00 00 00 00
+// Only the byte at 0x1D1 transitions to 1 on collection.
+constexpr std::size_t kHintInfo_IsGet      = 0x1D1;  // bool
+constexpr std::size_t kHintInfo_UniqueID   = 0x1F0;  // int (kept for diagnostic logging)
 
 // sead::FixedSafeString layout: vtable at +0x0, then `char* mBuffer` at +0x8
 // pointing at the inline `mInlineBuffer` at +0x18. Reading mBuffer gives a
@@ -45,9 +67,6 @@ constexpr std::size_t kSeadFixedSafeString_mBufferOffset = 0x08;
 // lunakit's custom findShine(int shineUid) scans 0x400 entries unconditionally
 // (see GameDataFile.h:362-369), so mShineHintList is sized for ≥ 0x400.
 constexpr int kShineHintListScanCount = 0x400;
-
-using IsGotShineByUidFn = bool (*)(const void* /* GameDataFile* this */, int);
-IsGotShineByUidFn s_isGotShine = nullptr;
 
 inline const char* readFixedSafeStringBuffer(const std::uint8_t* fss_addr) {
     return *reinterpret_cast<const char* const*>(
@@ -75,9 +94,8 @@ bool extractShineCoords(std::string& out_kingdom, std::string& out_shine_id) {
 void enumerateOwnedShines(ShineEnumerationCallback cb, void* ctx) {
     void* gdh = smoap::ap::ApState::instance().game_data_holder_cache.load(
         std::memory_order_relaxed);
-    if (!gdh || !s_isGotShine) {
-        SMOAP_LOG_WARN("[snapshot] enumerateOwnedShines skipped: gdh=%p sym=%p",
-                       gdh, reinterpret_cast<void*>(s_isGotShine));
+    if (!gdh) {
+        SMOAP_LOG_WARN("[snapshot] enumerateOwnedShines skipped: gdh=%p", gdh);
         return;
     }
     const auto* gdh_bytes = reinterpret_cast<const std::uint8_t*>(gdh);
@@ -100,9 +118,13 @@ void enumerateOwnedShines(ShineEnumerationCallback cb, void* ctx) {
     for (int i = 0; i < kShineHintListScanCount; ++i) {
         const std::uint8_t* h = hint_base + (i * kHintInfo_Size);
         const int uid = *reinterpret_cast<const int*>(h + kHintInfo_UniqueID);
-        if (uid == 0) continue;  // unused slot
+        if (uid == 0) continue;  // unused / sentinel slot
         ++scanned;
-        if (!s_isGotShine(gdf, uid)) continue;
+        // Read the HintInfo's own "isGet" flag — set by SMO's setGotShine on
+        // the matching HintInfo when Mario picks up that shine. Direct byte
+        // read; no symbol lookup, no UID-vs-index ambiguity.
+        const bool is_get = *(h + kHintInfo_IsGet) != 0;
+        if (!is_get) continue;
         const char* stage = readFixedSafeStringBuffer(h + kHintInfo_StageName);
         const char* obj   = readFixedSafeStringBuffer(h + kHintInfo_ObjId);
         if (!stage || !obj || !stage[0] || !obj[0]) continue;
@@ -114,14 +136,9 @@ void enumerateOwnedShines(ShineEnumerationCallback cb, void* ctx) {
 }
 
 void installSnapshotSymbols() {
-    uintptr_t addr = 0;
-    Result rc = nn::ro::LookupSymbol(&addr, smoap::sym::kGameDataFileIsGotShineByUid);
-    if (R_FAILED(rc)) {
-        SMOAP_LOG_ERROR("isGotShine(int) lookup FAILED rc=0x%x", rc);
-        return;
-    }
-    s_isGotShine = reinterpret_cast<IsGotShineByUidFn>(addr);
-    SMOAP_LOG_INFO("isGotShine(int) resolved @ 0x%lx", addr);
+    // No symbols to resolve anymore — enumeration reads HintInfo::isGet
+    // directly. Kept as a stub so call sites in main.cpp don't churn.
+    SMOAP_LOG_INFO("installSnapshotSymbols: no-op (HintInfo::isGet read directly)");
 }
 
 }  // namespace smoap::game
