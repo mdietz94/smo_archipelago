@@ -4,13 +4,17 @@ This is the operational runbook for migrating `switch-mod/` off exlaunch + lunak
 
 This doc is **execution-oriented**: each phase has concrete commands, exact file paths, and a deliverable that gates the next phase.
 
+**Estimated total: ~6.5 days.** Was 7 days under the original phase 3 (1 day) + phase 4 (2 days) split; the consolidated phase 3a (0.5 day) + phase 3b (3 days) better reflects the ap/ ↔ game/ ↔ hooks/ ↔ ui/ entanglement (see "Risk callout" in Locked-in decisions) without adding net time.
+
 ## Locked-in decisions (2026-05-20)
 
 1. **Worktree-isolated.** Migration lives on branch `claude/hakkun-cutover` in worktree `.claude/worktrees/hakkun-migration/`. `main` stays shippable; the worktree merges in one PR when phase 6 passes.
 2. **Stay on subsdk9 at cutover.** During phases 1–5 the new build emits **subsdk8** (so it can coexist with the production subsdk9 mod in Ryujinx + on SD); phase 6 flips `MODULE_BINARY` from `subsdk8` to `subsdk9` as part of the rename + replace.
 3. **LibHakkun Windows-port patches: upstream-first, fork fallback.** Submodule pins upstream `github.com/fruityloops1/LibHakkun`. Patches are applied locally via `scripts/patch_hakkun.py` while upstream PRs are in flight. If a PR review stalls > 1 week, fork to `github.com/mdietz94/LibHakkun-smo` and re-pin.
 4. **SMO 1.0.0 only at cutover.** Sail supports `@smo:100,101,110,120,130` in one binary, but offsets for 1.0.1+ are unresearched. Multi-version is a follow-up PR.
-5. **Functional parity is the cutover gate.** Phase 5 must show: the loopback test passes against the new subsdk; a Ryujinx manual play session collects 5 moons via AP location checks and applies an AP item to the running game; the same passes on real Switch FW22. Strict log-byte-equivalence is NOT required.
+5. **Functional parity is the cutover gate.** Phase 5 must show, in order: (a) the loopback test passes against the new subsdk; (b) Ryujinx manual play — connect to AP server, collect ≥ 5 moons, receive ≥ 1 AP item, observe correct application, capture-lock denies on a non-received cap; (c) real-Switch FW22 — same manual-play sequence. Strict log-byte-equivalence is NOT required. (Production switch-mod's bridge connection has been confirmed working on real Switch FW22 with the current exlaunch build, so the new subsdk's behavior under (c) is the meaningful gate.)
+
+**Risk callout (added 2026-05-20):** `switch-mod/src/ap/ApState.cpp` includes `game/{CaptureGate,KingdomUnlock,MoonApply}.hpp`, `hooks/DeathHook.hpp`, `ui/CappyMessenger.hpp`. `ApState::applyOnFrame()` drives MoonApply::grantMoon, CaptureGate::grantCapture, CappyMessenger::tryPump, DeathHook::synthFire on every inbound item. The ap/, game/, hooks/, ui/ source trees form one connected component of the include graph — there is no buildable intermediate state between "skeleton subsdk8" (phase 1/2) and "full runtime ported" (phase 3b done). The phase 3a + 3b split below reflects this: phase 3a ports only the layers that don't depend on the runtime (wire format, config, util) and lands as dead code; phase 3b lands the entire live runtime as one batch. Rollback granularity is "everything in phase 3b" — there is no partial-3b checkpoint.
 
 ## Spike artifacts you'll reuse
 
@@ -149,92 +153,118 @@ python scripts\build_switchmod_hk.py
 - llvm-nm shows all 37 names from `SmoApSymbols.sym` in `fakesymbols.so`.
 - Build is still clean (no link errors from `main.cpp` referencing missing symbols — there's nothing to reference yet).
 
-## Phase 3 — AP subsystem port  *(1 day)*
+## Phase 3a — Pure-plumbing port  *(0.5 day)*
 
-**Goal:** `switch-mod/src/ap/` (5 .cpp + 5 .hpp files) is rewritten in `switch-mod-hk/src/ap/` using `hk::socket::Socket` for sockets, `hk::os::Thread` for the worker, `hk::os::Mutex` where threading mutexes are needed. Bridge connects in Ryujinx loopback.
+**Goal:** Port the wire-format, config, frame-bridge, and util layers — the parts of switch-mod that touch *neither* Hakkun's runtime primitives *nor* SMO's game state. Lands independently because nothing references these files until phase 3b — they survive the link via `--gc-sections` (the skeleton from phase 1 already has this property).
 
-### Per-file mapping
+### Per-file mapping (one-to-one ports, mostly verbatim)
 
-| Old file (`switch-mod/src/ap/`) | New file (`switch-mod-hk/src/ap/`) | Key changes |
+| Old file (`switch-mod/src/`) | New file (`switch-mod-hk/src/`) | Notes |
 |---|---|---|
-| `ApClient.cpp` (~600 lines) | `ApClient.cpp` | `nn::socket::Initialize/Socket/Connect/Send/Recv/Close` → `hk::socket::Socket::initialize<"bsd:u">`, `.socket()`, `.connect()`, `.send()`, `.recv()`, `.close()`. Drop the manual sockaddr workaround (use `hk::socket::SocketAddrIpv4::parse(host, port)`). Worker thread: replace `nn::os::CreateThread` with `hk::os::Thread`. Drop `FlatHashSet` usage → `std::set<u32> locations_checked`. Drop atomic-published `pending_moon_label` → `std::string` directly. |
-| `ApConfig.cpp` | `ApConfig.cpp` | No changes — still compile-time `-DBRIDGE_HOST=...`. |
-| `ApFrameBridge.cpp` | `ApFrameBridge.cpp` | No changes — callbacks just get re-bound to new HkTrampoline hooks in phase 4. |
-| `ApProtocol.cpp` | `ApProtocol.cpp` | No changes — wire format is byte-equivalent contract. |
-| `ApState.cpp` | `ApState.cpp` | Use `std::set` / `std::vector` / `std::string` freely (Gate 4 cleared this). Retire the `FlatHashSet<256>` workaround. |
+| `util/Json.{cpp,hpp}` | `util/Json.{cpp,hpp}` | Verbatim copy — no nn::/exlaunch/lunakit deps. |
+| `util/Log.{cpp,hpp}` | `util/Log.{cpp,hpp}` | Swap `svcOutputDebugString` → `hk::svc::OutputDebugString`. Drop the `SMOAP_DEBUG_SD_LOG` compile-gate (exlaunch-era diagnostic; no Hakkun port for `nn::fs::*`). Retain `markFsReady` / `drainPendingToFile` as no-op stubs for source compat. |
+| `ap/ApConfig.{cpp,hpp}` | `ap/ApConfig.{cpp,hpp}` | Verbatim — pure config struct, still compile-time `-DBRIDGE_HOST=...`. |
+| `ap/ApProtocol.{cpp,hpp}` | `ap/ApProtocol.{cpp,hpp}` | Verbatim — wire format is byte-equivalent contract. The `ApProtocol.hpp` allocator comment can be relaxed but isn't load-bearing. |
+| `ap/ApFrameBridge.{cpp,hpp}` | `ap/ApFrameBridge.{cpp,hpp}` | Verbatim — references `ApState::instance()` but only via the singleton accessor (header-only declaration is enough at compile time; link succeeds once phase 3b lands ApState.cpp). |
 
-### Files to remove (deferred until phase 6, but listed here for the audit trail)
-
-- `switch-mod/src/util/FlatHashSet.hpp` — obsolete.
-- M6.1 hardening in `switch-mod/src/util/Log.cpp` (the `snprintf`-to-stack-char-array pattern) — obsolete; can use `std::string` on worker thread.
+**Important: the phase 3a build relies on `--gc-sections` dropping all the new translation units** because `main.cpp`'s `hkMain()` is still empty (per phase 1). Do not reference any of the new files from `main.cpp` until phase 3b. The phase 1 skeleton already verifies the gc-sections behavior.
 
 ### Commands
 
 ```pwsh
-# 3.1 Port each file by hand. Pattern:
-#   - Replace #include "lib.hpp" with #include "hk/socket/service.h", "hk/os/Thread.h", etc.
-#   - Replace nn::socket::*  → hk::socket::Socket::instance()->*
-#   - Replace nn::os::CreateThread → hk::os::Thread ctor + .start()
-#   - Replace FlatHashSet<N>     → std::set<u32>
-#   - Replace atomic-string game → std::string
+# 3a.1 Create directories and copy the five file pairs.
+New-Item -ItemType Directory -Force switch-mod-hk\src\util | Out-Null
+New-Item -ItemType Directory -Force switch-mod-hk\src\ap   | Out-Null
+Copy-Item switch-mod\src\util\Json.cpp       switch-mod-hk\src\util\Json.cpp
+Copy-Item switch-mod\src\util\Json.hpp       switch-mod-hk\src\util\Json.hpp
+Copy-Item switch-mod\src\util\Log.cpp        switch-mod-hk\src\util\Log.cpp
+Copy-Item switch-mod\src\util\Log.hpp        switch-mod-hk\src\util\Log.hpp
+Copy-Item switch-mod\src\ap\ApConfig.cpp     switch-mod-hk\src\ap\ApConfig.cpp
+Copy-Item switch-mod\src\ap\ApConfig.hpp     switch-mod-hk\src\ap\ApConfig.hpp
+Copy-Item switch-mod\src\ap\ApProtocol.cpp   switch-mod-hk\src\ap\ApProtocol.cpp
+Copy-Item switch-mod\src\ap\ApProtocol.hpp   switch-mod-hk\src\ap\ApProtocol.hpp
+Copy-Item switch-mod\src\ap\ApFrameBridge.cpp switch-mod-hk\src\ap\ApFrameBridge.cpp
+Copy-Item switch-mod\src\ap\ApFrameBridge.hpp switch-mod-hk\src\ap\ApFrameBridge.hpp
 
-# 3.2 Build.
+# 3a.2 Edit util/Log.cpp: swap svcOutputDebugString → hk::svc::OutputDebugString,
+# remove SMOAP_DEBUG_SD_LOG block, stub out markFsReady / drainPendingToFile.
+
+# 3a.3 Build.
 python scripts\build_switchmod_hk.py
-
-# 3.3 Deploy.
-$dst = "$env:APPDATA\Ryujinx\mods\contents\0100000000010000\smo-archipelago-hk\exefs"
-Copy-Item -Force switch-mod-hk\build\sd\atmosphere\contents\0100000000010000\exefs\subsdk8 $dst\subsdk8
-
-# 3.4 Run loopback test (the smo-loopback-test skill is the canonical flow).
-#     Probe: subsdk8 connects to the loopback bridge, exchanges HELLO, the bridge sees
-#     the connect from the new mod even though there are no hooks yet.
 ```
-
-### Risk to probe in phase 3
-
-`nn::socket::Initialize` is called by SMO itself; the spike used `hk::socket::Socket::initialize<"bsd:u">` alongside SMO's bsd:u use without conflict (separate SM session, separate IPC channel). If a probe shows interference (SMO loses network, e.g.), mirror lunakit's pattern: replace-hook SMO's `nn::socket::Initialize` to no-op, then open our own pool. Not expected, but worth a probe.
 
 ### Done when
 
-- `switch-mod-hk/src/ap/` has 5 .cpp + 5 .hpp files matching the old structure.
-- The new subsdk8 connects to the loopback bridge (visible in the bridge's log: a connection from our new client).
-- No `[rtld]` errors at boot.
+- The 5 new pairs of files exist under `switch-mod-hk/src/{util,ap}/`.
+- `python scripts/build_switchmod_hk.py` still produces a clean subsdk8 (.nso size unchanged from phase 2 — gc-sections drops the dead code).
 
-## Phase 4 — Hook ports  *(2 days)*
+## Phase 3b — Switch-side runtime port  *(3 days — was phases 3+4 combined)*
 
-**Goal:** All 14 hook files in `switch-mod/src/hooks/` are rewritten in `switch-mod-hk/src/hooks/`. 26 trampoline hooks become `HkTrampoline<...>` + `installAtSym<...>()`. The 1 inline-at-offset hook (`CreditsStartHook`) is refactored to a trampoline on the enclosing `StaffRollScene::init` (Strategy B per spike Gate 3).
+**Goal:** Rewrite the entire live runtime — `ApState`, `ApClient`, all 14 hook files, the `game/` state-machine modules, and the `ui/` (`CappyMessenger`, `ApHudOverlay`) — against Hakkun primitives in one batch. This phase must land as a single coherent change because the include graph forms one connected component (see "Risk callout" in Locked-in decisions).
 
-### Hook-by-hook checklist
+### Sub-deliverables, in suggested order
 
-Estimate: 5–10 min mechanical per trampoline (proven in Gate 5); ~30 min for `CreditsStartHook` (Strategy B refactor).
+1. **Headers first** *(0.25 day)* — copy and adjust `ap/ApState.hpp`, `ap/ApClient.hpp`, `game/{CaptureGate,KingdomUnlock,KingdomOrderGate,MoonApply,ShineInfoLayout}.hpp`, `hooks/*.hpp`, `ui/{ApHudOverlay,CappyMessenger}.hpp`. Headers compile against each other once the include graph is consistent — no implementation code yet.
 
-| File | Old macro × count | New form |
-|---|---|---|
-| `AddHackDictionaryHook.cpp` | TRAMPOLINE × 1 | `HkTrampoline<...> g_xxx` + lambda + `.installAtSym<"...">()` in `hkMain` |
-| `AddPayShineHook.cpp` | TRAMPOLINE × 2 | same |
-| `CappyMessageHook.cpp` | TRAMPOLINE × 4 | same |
-| `CaptureStartHook.cpp` | TRAMPOLINE × 1 | same |
-| **`CreditsStartHook.cpp`** | **INLINE @ 0x4C54A4** | **Strategy B: HkTrampoline on `StaffRollScene::init`.** Symbol candidate: `_ZN15StaffRollScene4initERKN2al13ActorInitInfoE`. Verify against main.nso before commit. If false-positive (credits-from-menu), add a guard or fall back to Strategy A (naked-trampoline @ 0x4C54A4 via `writeBranchLinkAtMainOffset`). |
-| `DeathHook.cpp` | TRAMPOLINE × 1 | mechanical |
-| `MoonGetHook.cpp` | TRAMPOLINE × 2 | mechanical — [spike_gate5.cpp](third_party/hakkun-example/src/spike_gate5.cpp) is the canonical template |
-| `MoonLabelHook.cpp` | TRAMPOLINE × 4 | mechanical |
-| `SaveLoadHook.cpp` | TRAMPOLINE × 1 | mechanical |
-| `ScenarioFlagHook.cpp` | TRAMPOLINE × 1 | mechanical |
-| `ShineAppearanceHook.cpp` | TRAMPOLINE × 1 | mechanical (already trampoline on `Shine::init`, not inline) |
-| `ShineNumByWorldGetHook.cpp` | TRAMPOLINE × 1 | mechanical |
-| `ShineNumGetHook.cpp` | TRAMPOLINE × 2 | mechanical |
-| `WorldMapSelectHook.cpp` | TRAMPOLINE × 5 | mechanical |
+2. **Hook trampolines (26 hooks across 14 files)** *(1 day)* — port one .cpp file at a time, swapping `HOOK_DEFINE_TRAMPOLINE` → `HkTrampoline<...>` + `installAtSym<"...">()` in `hkMain`. [spike_gate5.cpp](third_party/hakkun-example/src/spike_gate5.cpp) is the canonical template; per-hook estimate 5–10 min mechanical. Plus the 1 inline-at-offset hook (`CreditsStartHook`) refactored to a trampoline on the enclosing `StaffRollScene::init` (Strategy B from spike Gate 3 — symbol candidate `_ZN15StaffRollScene4initERKN2al13ActorInitInfoE`; verify against main.nso before commit; if false-positive on credits-from-menu, add a guard or fall back to Strategy A naked-trampoline @ 0x4C54A4 via `writeBranchLinkAtMainOffset`).
 
-### Files to remove (deferred until phase 6)
+   Per-file inventory (was the phase-4 table):
 
+   | File | Old macro × count | Notes |
+   |---|---|---|
+   | `AddHackDictionaryHook.cpp` | TRAMPOLINE × 1 | mechanical |
+   | `AddPayShineHook.cpp` | TRAMPOLINE × 2 | mechanical |
+   | `CappyMessageHook.cpp` | TRAMPOLINE × 4 | mechanical |
+   | `CaptureStartHook.cpp` | TRAMPOLINE × 1 | mechanical |
+   | `CreditsStartHook.cpp` | INLINE @ 0x4C54A4 | Strategy B refactor (see above) |
+   | `DeathHook.cpp` | TRAMPOLINE × 1 | mechanical |
+   | `MoonGetHook.cpp` | TRAMPOLINE × 2 | mechanical |
+   | `MoonLabelHook.cpp` | TRAMPOLINE × 4 | mechanical |
+   | `SaveLoadHook.cpp` | TRAMPOLINE × 1 | mechanical |
+   | `ScenarioFlagHook.cpp` | TRAMPOLINE × 1 | mechanical |
+   | `ShineAppearanceHook.cpp` | TRAMPOLINE × 1 | already trampoline on `Shine::init`, not inline |
+   | `ShineNumByWorldGetHook.cpp` | TRAMPOLINE × 1 | mechanical |
+   | `ShineNumGetHook.cpp` | TRAMPOLINE × 2 | mechanical |
+   | `WorldMapSelectHook.cpp` | TRAMPOLINE × 5 | mechanical |
+
+3. **Game state modules + UI** *(0.5 day)* — port `game/{CaptureGate,KingdomUnlock,KingdomOrderGate,MoonApply}.cpp` and `ui/{CappyMessenger,ApHudOverlay}.cpp`. These are SMO-internal logic + occasional `nn::ro::LookupSymbol` calls → `hk::ro::lookupSymbol`.
+
+4. **ApState.cpp** *(0.25 day)* — swap `nn::os::GetSystemTick` for `hk::svc::getSystemTick`. May now use `std::set` / `std::vector` / `std::string` freely (spike Gate 4 cleared this), but `FlatHashSet` is no longer *required* as a workaround — actually retiring it is deferred to phase 7 polish, not load-bearing for parity.
+
+5. **ApClient.cpp (~600 lines, but the apworld's current ApClient.cpp is ~1,124 lines)** *(1 day)* — the major port. `nn::socket::*` → `hk::socket::Socket::instance()->*`; the manual sockaddr workaround dies (use `hk::socket::SocketAddrIpv4::parse(host, port)`); worker thread uses `hk::os::Thread` + raw page-aligned stack; `nn::nifm::*` is replaced or wrapped per Open question 2 below.
+
+6. **`main.cpp` wiring** *(stub time)* — install all 26 trampolines + the 1 enclosing-function trampoline in `hkMain()`, plus `hk::socket::Socket::initialize<"bsd:u">(...)` and the worker thread spawn.
+
+### Files to remove (deferred until phase 6, but listed here for the audit trail)
+
+- `switch-mod/src/util/FlatHashSet.hpp` — obsolete after the libstdc++ allocator restriction lifts (phase 7 retirement, not load-bearing).
+- M6.1 hardening in `switch-mod/src/util/Log.cpp` (`snprintf`-to-stack-char-array pattern) — obsolete; can use `std::string` on worker thread.
 - `switch-mod/src/hooks/HookSymbols.hpp` — sail .sym replaces it.
 - `switch-mod/src/hooks/SoftInstall.hpp` — `installAtSym<"...">()` IS the soft install equivalent.
 
+### Open questions to lock in before starting phase 3b
+
+These don't change the plan structure but shape execution. Spelled out in full in the proposal doc; condensed here:
+
+1. **`hk::socket::Socket` vs SMO's own `nn::socket::Initialize`.** Production switch-mod relies on SMO already calling `nn::socket::Initialize` (per [CLAUDE.md SMO-already-inits-socket note](CLAUDE.md)). The spike used `hk::socket::Socket::initialize<"bsd:u">` from `hkMain` without conflict — but the spike's hkMain didn't exchange data, just took the function address. **Recommended:** match the spike Gate 2 build (call `hk::socket::Socket::initialize<"bsd:u">` from `hkMain`); probe in phase 3b for conflicts; if any surface, mirror lunakit's pattern of replace-hooking SMO's `nn::socket::Initialize` to no-op.
+2. **`nn::nifm::*` mapping.** `ApClient` calls `nn::nifm::Initialize` + `SubmitNetworkRequestAndWait` + `IsNetworkAvailable`. Hakkun's surface for `nifm` is undocumented in the spike. **Recommended:** keep the `nn::nifm` calls by adding `nifm` symbols to a new `switch-mod-hk/syms/nn/nifm.sym` file (sail resolves and links against SMO's dynsym). Minimal change.
+3. **`BAKE_SYMBOLS` choice.** Phase 2's sail `.sym` block uses `BAKE_SYMBOLS = FALSE` (per `switch-mod-hk/config/config.cmake`); names are stored as strings and resolved by `hk::ro::lookupSymbol` at module load. The alternative — `BAKE_SYMBOLS = TRUE` — replaces strings with murmur hashes for smaller binary. **Recommended:** no change (debugging easier with unbaked names; size isn't a constraint).
+
+### Commands
+
+```pwsh
+# 3b.N (after each sub-deliverable, or in one shot at the end):
+python scripts\build_switchmod_hk.py
+$dst = "$env:APPDATA\Ryujinx\mods\contents\0100000000010000\smo-archipelago-hk\exefs"
+Copy-Item -Force switch-mod-hk\build\sd\atmosphere\contents\0100000000010000\exefs\subsdk8 $dst\subsdk8
+```
+
 ### Done when
 
-- All 14 hook files exist in `switch-mod-hk/src/hooks/`.
-- All hooks install in `hkMain` via `xxxHook.installAtSym<"...">()` calls.
-- Build is clean, sail resolves every symbol referenced.
+- Build is clean — `scripts/build_switchmod_hk.py` produces subsdk8.
+- Sail resolves every symbol referenced by hooks; `llvm-nm --dynamic build/fakesymbols.so` still shows all 37 SMO symbols.
+- Loopback test ([smo-loopback-test skill](.claude/skills/smo-loopback-test/SKILL.md)) passes: bridge sees HELLO, scout pre-warm runs, fake moon collection routes through, capture-lock deny rejection fires.
+- No `[rtld]` errors at boot.
 
 ## Phase 5 — End-to-end validation  *(1 day)*
 
@@ -349,6 +379,21 @@ If phase 5 reveals a > 1-day blocker:
 1. Don't merge. The migration branch stays a branch; main is unchanged.
 2. File the symptom (creport, log, HUD state) for follow-up.
 3. Either fix on the migration branch, or shelve. Shelving costs nothing — spike artifacts + this runbook stay in the repo.
+
+## Working-state checkpoint commits
+
+Each row is a known-good rollback target. The phase 3b row covers the full ap/ + game/ + hooks/ + ui/ runtime port — there is no buildable intermediate state inside phase 3b (see Risk callout).
+
+| Phase | Commit (will populate as we land) | Artifact at this checkpoint |
+|---|---|---|
+| 0 | `5612a20` | Port wrappers + patch_hakkun.py |
+| 1 | `5a537af` | Skeleton subsdk8 (~13 KiB) builds from `switch-mod-hk/` |
+| 2 | `1f1399d` | Sail resolves all 37 SMO 1.0.0 hooks; build still clean |
+| 2.5 | `c119228` | `build_switchmod_hk.py` auto-applies patches |
+| 3a | _TBD_ | Pure-plumbing files copied (`util/Json,Log` + `ap/{ApConfig,ApProtocol,ApFrameBridge}`); subsdk8 size unchanged (gc-sections drops dead code) |
+| 3b | _TBD_ | Full runtime ported; loopback test green; sail still resolves 37 symbols |
+| 5 | _TBD_ | All three validation gates pass (loopback, Ryujinx manual, real-Switch FW22) |
+| 6 | _TBD_ | Cutover: switch-mod-hk → switch-mod, subsdk8 → subsdk9, lunakit/exlaunch removed |
 
 ## Glossary
 
