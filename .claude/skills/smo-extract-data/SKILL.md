@@ -1,14 +1,15 @@
 ---
 name: smo-extract-data
-description: Extract shine_map.json and capture_map.json from an SMO 1.0.0 NSP — produces the per-machine, gitignored maps that the SMOClient uses to resolve raw SMO identifiers (stage + obj_id, hack_name) to display names. Use when the user asks to "extract", "regenerate", or work with "shine_map", "capture_map", an "NSP" file, "romfs", or "hactool"; or when a fresh clone / fresh worktree is missing `apworld/smo_archipelago/client/data/{shine_map,capture_map}.json` and moon collects silently drop. The extracted files are Nintendo-IP-sensitive and MUST stay gitignored.
+description: Extract shine_map.json and capture_map.json from an SMO 1.0.0 NSP or XCI — produces the per-machine, gitignored maps that the SMOClient uses to resolve raw SMO identifiers (stage + obj_id, hack_name) to display names. Use when the user asks to "extract", "regenerate", or work with "shine_map", "capture_map", an "NSP" or "XCI" file, "romfs", or "hactool"; or when a fresh clone / fresh worktree is missing `apworld/smo_archipelago/client/data/{shine_map,capture_map}.json` and moon collects silently drop. The extracted files are Nintendo-IP-sensitive and MUST stay gitignored.
 ---
 
 # Game data extraction (M5.8 workflow)
 
-One command after `git clone` produces both maps:
+One command after `git clone` produces both maps. NSPs and XCI cartridge dumps are both supported:
 
 ```pwsh
 python scripts/extract_shine_map.py --nsp <SMO_1.0.0.nsp>
+python scripts/extract_shine_map.py --xci <SMO_1.0.0.xci>
 ```
 
 For example:
@@ -17,7 +18,7 @@ python C:\Users\maxwe\Documents\smo_archipelago\scripts\extract_shine_map.py `
     --nsp C:\Users\maxwe\Downloads\SMO_1.0.0.nsp
 ```
 
-Self-bootstraps a Python 3.12 venv with `oead` at `scripts/.extract-venv/` (no Python 3.13 wheel exists for oead), runs `hactool` to extract RomFS (~5 GB cache at `.romfs-cache/`), then walks the BYML + MSBT files.
+Self-bootstraps a Python 3.12 venv with `oead` at `scripts/.extract-venv/` (no Python 3.13 wheel exists for oead), runs `hactool` to extract RomFS (~5 GB cache at `.romfs-cache/`), then walks the BYML + MSBT files. NSP unpacks via the PFS0 partition (`hactool -t pfs0`); XCI unpacks via the HFS0 secure partition (`hactool -t xci --securedir=`). Same NCA layout downstream — the largest NCA is the program NCA and its RomFS is what we walk.
 
 ## What gets produced
 
@@ -31,8 +32,9 @@ All four files contain verbatim Nintendo USen strings and **MUST stay gitignored
 
 ## Prerequisites
 
-- SMO 1.0.0 NSP at a known path (user's lives at `C:\Users\maxwe\Downloads\SMO_1.0.0.nsp`, copyrighted — never commit).
+- SMO 1.0.0 NSP **or** XCI at a known path (user's NSP lives at `C:\Users\maxwe\Downloads\SMO_1.0.0.nsp`, copyrighted — never commit).
 - `prod.keys` at `C:\Users\maxwe\.switch\` (hactool default location). Switch keys are themselves IP-sensitive.
+- `title.keys` at the same location — **required for XCI** (cartridge dumps don't carry a ticket so hactool has to look up the titlekey by rights ID). NSPs ship the ticket inside the package; the extractor lifts it directly and `title.keys` is unused on that path.
 - hactool on PATH (or in a known location — script auto-finds).
 - Python 3.12 available on PATH (script bootstraps the venv from this).
 

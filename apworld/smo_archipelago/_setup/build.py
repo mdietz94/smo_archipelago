@@ -346,7 +346,7 @@ def run_sync_capture_table(on_line: ProgressFn | None = None) -> BuildResult:
 
 
 def run_extract_maps(
-    nsp_path: Path,
+    dump_path: Path,
     *,
     keys_path: Path | None = None,
     hactool_path: Path | None = None,
@@ -358,6 +358,11 @@ def run_extract_maps(
     a Python 3.12 venv on first run because `oead` has no wheel for
     Python 3.13+ — wizard's prereq check (`check_python312`) confirms
     that's possible before we ever get here.
+
+    `dump_path` may be an NSP or an XCI; the extractor flag is picked
+    from the file extension. XCI dumps additionally require `title.keys`
+    populated with the SMO entry (NSPs ship a .tik inside the package
+    we can lift directly; XCIs do not).
 
     Outputs are written into the per-user `%APPDATA%/SMOArchipelago/data/`
     so SMOClient picks them up via the search path added in `client/main.py`.
@@ -373,6 +378,11 @@ def run_extract_maps(
     """
     script = bundled_script("extract_shine_map.py")
     out_dir = data_dir()
+    # Pick --nsp vs --xci from the file extension. Anything other than
+    # .xci falls through to --nsp so unknown / missing extensions still
+    # hit the established code path with its clear "NSP not found"
+    # error rather than failing in a less obvious place inside hactool.
+    dump_flag = "--xci" if dump_path.suffix.lower() == ".xci" else "--nsp"
     # Point the extractor at the bundled apworld data files explicitly.
     # Its REPO_ROOT-relative default (`<__file__>.parent.parent / "apworld"
     # / "smo_archipelago" / "data" / "locations.json"`) assumes a dev
@@ -380,7 +390,7 @@ def run_extract_maps(
     # them at <bundled>/data/.
     args = [
         *_python_invoker(), "-u", str(script),
-        "--nsp", str(nsp_path),
+        dump_flag, str(dump_path),
         "--out", str(out_dir / "shine_map.json"),
         "--review", str(out_dir / "shine_map_review.json"),
         "--cap-out", str(out_dir / "capture_map.json"),

@@ -97,6 +97,94 @@ def test_run_extract_maps_sets_pythonunbuffered_env(tmp_path) -> None:
     )
 
 
+def test_run_extract_maps_dispatches_nsp_flag_for_nsp(tmp_path) -> None:
+    """An `.nsp` dump path must be passed to the extractor as `--nsp <path>`.
+
+    Locks in the extension-based flag dispatch added when XCI support
+    landed — a sibling test below pins the .xci branch. The pair guards
+    against accidental swap or removal of the dispatch logic in
+    `build.run_extract_maps`.
+    """
+    captured: dict = {}
+
+    def fake_stream(cmd, *, cwd=None, env=None, on_line=None):
+        captured["cmd"] = cmd
+        return build.BuildResult(ok=True, returncode=0, log="")
+
+    (tmp_path / "extract_shine_map.py").write_text("")
+    (tmp_path / "locations.json").write_text("[]")
+    (tmp_path / "items.json").write_text("[]")
+    with patch.object(build, "_stream_subprocess", fake_stream), \
+         patch.object(build, "bundled_script",
+                      lambda name: tmp_path / name), \
+         patch.object(build, "bundled_data_file",
+                      lambda name: tmp_path / name):
+        build.run_extract_maps(tmp_path / "fake.nsp")
+
+    cmd = captured["cmd"]
+    assert "--nsp" in cmd, f"--nsp missing from extract cmd: {cmd}"
+    assert "--xci" not in cmd, f"--xci should NOT be in NSP cmd: {cmd}"
+    nsp_idx = cmd.index("--nsp")
+    assert cmd[nsp_idx + 1].endswith("fake.nsp"), (
+        f"--nsp value should be the dump path; got {cmd[nsp_idx + 1]!r}"
+    )
+
+
+def test_run_extract_maps_dispatches_xci_flag_for_xci(tmp_path) -> None:
+    """An `.xci` dump path must be passed to the extractor as `--xci <path>`.
+
+    XCI cartridge dumps have a different hactool unpack path (HFS0
+    secure partition rather than PFS0); the extractor branches on the
+    flag, so the wizard must pick the right one based on file extension.
+    """
+    captured: dict = {}
+
+    def fake_stream(cmd, *, cwd=None, env=None, on_line=None):
+        captured["cmd"] = cmd
+        return build.BuildResult(ok=True, returncode=0, log="")
+
+    (tmp_path / "extract_shine_map.py").write_text("")
+    (tmp_path / "locations.json").write_text("[]")
+    (tmp_path / "items.json").write_text("[]")
+    with patch.object(build, "_stream_subprocess", fake_stream), \
+         patch.object(build, "bundled_script",
+                      lambda name: tmp_path / name), \
+         patch.object(build, "bundled_data_file",
+                      lambda name: tmp_path / name):
+        build.run_extract_maps(tmp_path / "fake.xci")
+
+    cmd = captured["cmd"]
+    assert "--xci" in cmd, f"--xci missing from extract cmd: {cmd}"
+    assert "--nsp" not in cmd, f"--nsp should NOT be in XCI cmd: {cmd}"
+    xci_idx = cmd.index("--xci")
+    assert cmd[xci_idx + 1].endswith("fake.xci"), (
+        f"--xci value should be the dump path; got {cmd[xci_idx + 1]!r}"
+    )
+
+
+def test_run_extract_maps_xci_dispatch_is_case_insensitive(tmp_path) -> None:
+    """`.XCI` (uppercase, as some dump tools produce) must still dispatch
+    to `--xci`. The extension check lowercases the suffix to handle this."""
+    captured: dict = {}
+
+    def fake_stream(cmd, *, cwd=None, env=None, on_line=None):
+        captured["cmd"] = cmd
+        return build.BuildResult(ok=True, returncode=0, log="")
+
+    (tmp_path / "extract_shine_map.py").write_text("")
+    (tmp_path / "locations.json").write_text("[]")
+    (tmp_path / "items.json").write_text("[]")
+    with patch.object(build, "_stream_subprocess", fake_stream), \
+         patch.object(build, "bundled_script",
+                      lambda name: tmp_path / name), \
+         patch.object(build, "bundled_data_file",
+                      lambda name: tmp_path / name):
+        build.run_extract_maps(tmp_path / "FAKE.XCI")
+
+    cmd = captured["cmd"]
+    assert "--xci" in cmd, f"--xci missing from extract cmd: {cmd}"
+
+
 def test_run_extract_maps_preserves_existing_env(monkeypatch, tmp_path) -> None:
     """Setting PYTHONUNBUFFERED must NOT wipe the rest of os.environ —
     the child process needs PATH, DEVKITPRO (set by the prereq detector

@@ -10,7 +10,7 @@ Pages (sequenced; each calls `next_page()` when its work completes):
 
   1. WelcomePage       — what the wizard does, prereqs overview
   2. PrereqPage        — runs `_setup.prereqs.check_all()`, surfaces ✓/✗
-  3. NspPickerPage     — file dialog for the user's SMO 1.0.0 NSP
+  3. DumpPickerPage    — file dialog for the user's SMO 1.0.0 NSP or XCI
   4. ExtractPage       — runs the extractor in a worker thread, streams log
   5. BridgeIpPage      — text field prefilled with `detect_lan_ip()`
   6. BuildPage         — runs sync_capture_table → cmake configure → cmake build
@@ -213,7 +213,7 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
     wizard_state: dict[str, Any] = {
         "smoap_path": smoap_path,
         "smoap": parse_smoap(Path(smoap_path)) if smoap_path else None,
-        "nsp_path": None,        # Path | None
+        "dump_path": None,       # Path | None — NSP or XCI
         "bridge_ip": detect_lan_ip(),
         "build_done": False,     # set True when cmake completes
         "deploy_target": saved_state.get("deploy_target", "ryujinx"),
@@ -265,7 +265,8 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
             "and reopen this app afterwards so PATH gets refreshed, "
             "otherwise the prereq check still won't see it.)\n"
             "  - Extract moon + capture name tables from your own SMO 1.0.0 "
-            "NSP (we cannot ship these — they are Nintendo content).\n"
+            "NSP or XCI dump (we cannot ship these — they are Nintendo "
+            "content).\n"
             "  - Compile the Switch module with your bridge PC's LAN IP "
             "baked in (the IP cannot be changed without a recompile on "
             "retail Switch firmware).\n"
@@ -409,17 +410,20 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
         s.bind(on_pre_enter=lambda _i: do_check())
         return s
 
-    # --- 3. NSP picker
+    # --- 3. NSP/XCI picker
     def build_nsp() -> Screen:
         s = Screen(name="nsp")
         root = BoxLayout(orientation="vertical", padding=20, spacing=12)
-        root.add_widget(_h1("Pick your SMO 1.0.0 NSP"))
+        root.add_widget(_h1("Pick your SMO 1.0.0 dump"))
         root.add_widget(_label(
-            "Browse to a NSP dump of Super Mario Odyssey 1.0.0 (not a "
-            "patched version — 1.0.0 only). Moon + capture names will be "
+            "Browse to an NSP or XCI dump of Super Mario Odyssey 1.0.0 (not "
+            "a patched version — 1.0.0 only). Moon + capture names will be "
             "extracted to %APPDATA%/SMOArchipelago/data/ and never leave "
-            "your machine.",
-            height=64,
+            "your machine.\n\n"
+            "XCI dumps additionally need your title.keys (alongside "
+            "prod.keys) to contain the SMO entry — NSPs ship their own "
+            "ticket so this isn't required for that path.",
+            height=96,
         ))
 
         # The path display + Browse button. Display is a read-only text
@@ -448,14 +452,14 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
             # file picker. `suggest` pre-fills with the previous pick
             # (handy on a Re-pick after a path typo).
             from Utils import open_filename
-            current = wizard_state.get("nsp_path")
+            current = wizard_state.get("dump_path")
             picked = open_filename(
-                "Select Super Mario Odyssey 1.0.0 NSP",
-                (("Switch NSP", (".nsp",)),),
+                "Select Super Mario Odyssey 1.0.0 NSP or XCI",
+                (("Switch dump", (".nsp", ".xci")),),
                 suggest=str(current) if current else "",
             )
             if picked:
-                wizard_state["nsp_path"] = Path(picked)
+                wizard_state["dump_path"] = Path(picked)
                 path_input.text = picked
                 next_btn.disabled = False
 
@@ -470,7 +474,7 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
         root = BoxLayout(orientation="vertical", padding=20, spacing=12)
         root.add_widget(_h1("Extract moon + capture maps"))
         status = _label(
-            "Extracting moon + capture maps from your NSP. This typically "
+            "Extracting moon + capture maps from your dump. This typically "
             "takes 2-5 minutes the first time (oead venv setup + RomFS "
             "extract); subsequent runs are faster.",
             height=64,
@@ -560,7 +564,7 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
                     _state["last_output_ts"] = time.monotonic()  # debounce
 
         def run_in_worker() -> None:
-            nsp = wizard_state["nsp_path"]
+            dump = wizard_state["dump_path"]
             import time
             _state["last_output_ts"] = time.monotonic()
             # Open file log fresh per run; "w" truncates so each Retry
@@ -570,9 +574,9 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
             except OSError as e:
                 _state["log_file"] = None
                 on_line(f"[wizard] could not open {extract_log_path}: {e}")
-            status.text = f"Extracting from {nsp.name}... (2-5 minutes typical)"
+            status.text = f"Extracting from {dump.name}... (2-5 minutes typical)"
             on_line(f"[wizard] === extract run start: {time.strftime('%Y-%m-%d %H:%M:%S')} ===")
-            on_line(f"[wizard] NSP: {nsp}")
+            on_line(f"[wizard] dump: {dump} (kind={dump.suffix.lstrip('.').lower() or 'nsp'})")
             try:
                 # Use the user-picked hactool path if the wizard's prereq
                 # page persisted one; extractor falls back to PATH otherwise.
@@ -594,7 +598,7 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
                 _state["heartbeat_thread"] = hb
                 hb.start()
                 result = run_extract_maps(
-                    nsp,
+                    dump,
                     keys_path=prod_keys_override,
                     hactool_path=hactool_override,
                     on_line=on_line,

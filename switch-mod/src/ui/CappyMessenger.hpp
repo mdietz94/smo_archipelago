@@ -153,6 +153,20 @@ public:
     // isActiveCapMessage == false).
     void markDispatched();
 
+    // "Cappy can speak" latch. Flips to true the first time tryPump
+    // successfully dispatches a balloon (rs::tryShowCapMessagePriorityLow
+    // returned true), and stays true until clearDispatchLatch() is called.
+    // The snapshot path in ApClient uses this as its scene-readiness gate:
+    // a true value implies scene != null AND settle_frames >= 600 AND the
+    // CapMessageDirector was registered AND Nintendo's pipeline accepted
+    // our show — i.e. we are unambiguously in a live gameplay scene with
+    // save data fully resident, not on a file-select preview render.
+    // SaveLoadHook clears this latch alongside its other session-state
+    // resets, so a re-HELLO defers snapshot until the new save's first
+    // Cappy dispatch lands.
+    bool hasDispatchedSinceReset() const { return dispatched_since_reset_; }
+    void clearDispatchLatch() { dispatched_since_reset_ = false; }
+
     // Test-only knobs ------------------------------------------------------
     std::size_t pendingCount() const { return live_count_; }
     bool bufferActive() const { return buffer_in_use_; }
@@ -185,6 +199,13 @@ private:
     // serves this pointer until markDispatched clears buffer_in_use_.
     char16_t buffer_[kBufferUtf16Words]{};
     bool buffer_in_use_ = false;
+
+    // Sticky "first dispatch since reset" latch — see hasDispatchedSinceReset.
+    // Single-threaded (frame-thread only), no atomic needed; the snapshot path
+    // reads this via hasDispatchedSinceReset() from the worker thread, but a
+    // stale false there only defers the snapshot one more loop iteration
+    // (worker re-checks every ~200ms), which is benign.
+    bool dispatched_since_reset_ = false;
 };
 
 // Filter rules (free function, exercised by host tests) -----------------------

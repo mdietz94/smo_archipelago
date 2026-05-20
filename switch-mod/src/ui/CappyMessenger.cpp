@@ -243,6 +243,11 @@ void CappyMessenger::tryPump(const void* scene) {
                    e.text,
                    static_cast<unsigned>(live_count_),
                    static_cast<unsigned>(live_count_ - 1));
+    // Latch "Cappy can speak" — the snapshot gate in ApClient reads this.
+    // A successful tryShow means scene+director are alive and the save
+    // file is past any deserialization races, so it's safe to enumerate
+    // owned shines now.
+    dispatched_since_reset_ = true;
     markDispatched();
 }
 
@@ -283,6 +288,7 @@ void CappyMessenger::resetForTest() {
     buffer_in_use_ = false;
     last_scene_ = nullptr;
     settle_frames_ = 0;
+    dispatched_since_reset_ = false;
 }
 
 // ----------------------------------------------------------------------------

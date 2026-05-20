@@ -242,13 +242,27 @@ void ApClient::threadMain() {
     // connected. Drives the quick-bounce / stability gates below.
     std::int64_t connected_at_ms = 0;
     // Snapshot gate has two halves: save_was_loaded (SaveLoadHook latch) and
-    // scene_cache != nullptr (HakoniwaSequence has a live curScene, i.e. the
-    // player is in an actual stage rather than on the file-select screen).
+    // CappyMessenger::hasDispatchedSinceReset (a successful Cappy balloon has
+    // fired in the current scene since the last save load — implies scene !=
+    // null AND settle_frames >= kSceneSettleFrames AND CapMessageDirector is
+    // registered AND Nintendo's pipeline accepted our show; i.e. we are in a
+    // live gameplay scene with save data definitively past any deserialization
+    // race). Earlier iterations used `scene_cache != nullptr` for the second
+    // half but that fired the moment any scene was active, including before
+    // the shine bitmap was fully resident — producing phantom moon checks
+    // (e.g. "Mushroom: Secret Path to Peach's Castle" credited on a save that
+    // had never visited Mushroom). The "Connected to Archipelago" / "Not
+    // connected" bubble armed by deferSaveLoadStatusBubble() on every save
+    // load guarantees a dispatch attempt that flips this latch as soon as the
+    // scene is healthy. If Cappy somehow never dispatches, we never snapshot —
+    // acceptable, since the player eventually leaves the scene (load/save/
+    // travel) and the next dispatch re-arms the gate.
+    //
     // sendHello fires unconditionally on connect; if either half is missing
     // at that point the snapshot is deferred and re-checked from the loop
     // body below on each iteration. Cleared after a successful sendSnapshot
-    // and re-evaluated on every (re)connect. Worker-thread-local — both gate
-    // signals are atomics so no extra locking.
+    // and re-evaluated on every (re)connect. Worker-thread-local — gate
+    // signals are atomics / single-write bools so no extra locking.
     bool snapshot_pending = false;
 
     while (running_) {
@@ -341,9 +355,10 @@ void ApClient::threadMain() {
             sendHello();
             // Two-part gate (see snapshot_pending declaration above):
             //   1. save_was_loaded — SaveLoadHook fired at least once.
-            //   2. scene_cache != nullptr — HakoniwaSequence has a live
-            //      curScene (player is in a stage), NOT on the file-select
-            //      screen.
+            //   2. CappyMessenger::hasDispatchedSinceReset — a Cappy balloon
+            //      has successfully fired in the current scene since the last
+            //      save load (implies scene is fully alive and save data is
+            //      past any deserialization race).
             // Why both: SaveLoadHook fires not just on user-initiated Load
             // Save / New Game, but also for every file-select preview render
             // on the title screen. On real Switch, SMO boots → file-select
@@ -352,28 +367,32 @@ void ApClient::threadMain() {
             // the snapshot would faithfully report the previous save's
             // moons/captures the moment the bridge connected, and AP would
             // credit them as fresh LocationChecks (observed 2026-05-18 with
-            // 10 moons forwarded from a never-loaded save). curScene is null
-            // at the file-select screen and becomes non-null once a real
-            // stage instantiates, so requiring both filters out preview-fires
-            // without needing to teach SaveLoadHook to distinguish them.
+            // 10 moons forwarded from a never-loaded save). Requiring a real
+            // Cappy dispatch is a stronger signal than the prior "scene_cache
+            // != nullptr" check — it folds in scene-stability (settle frames)
+            // + CapMessageDirector registration + Nintendo accepting our show,
+            // and only goes true when we're unambiguously past the title /
+            // file-select scenes.
             //
             // If the gate is closed at connect time, the loop body's drain
-            // block below polls scene_cache each iteration (~200 ms) and
-            // sends the snapshot once both conditions are true. No extra
-            // requestRehello round-trip needed — the existing socket is fine.
+            // block below polls hasDispatchedSinceReset each iteration
+            // (~200 ms) and sends the snapshot once both conditions are true.
+            // No extra requestRehello round-trip needed — the existing socket
+            // is fine.
             {
                 auto& s = ApState::instance();
                 const bool save_ok = s.save_was_loaded.load(std::memory_order_acquire);
-                const bool scene_ok = s.scene_cache.load(std::memory_order_relaxed) != nullptr;
-                if (save_ok && scene_ok) {
+                const bool cappy_ok =
+                    smoap::ui::CappyMessenger::instance().hasDispatchedSinceReset();
+                if (save_ok && cappy_ok) {
                     sendSnapshot();
                     snapshot_pending = false;
                 } else {
                     SMOAP_LOG_INFO("[conn] snapshot deferred (save_was_loaded=%d "
-                                   "scene_loaded=%d); will retry from worker loop "
+                                   "cappy_ok=%d); will retry from worker loop "
                                    "once both are true",
                                    static_cast<int>(save_ok),
-                                   static_cast<int>(scene_ok));
+                                   static_cast<int>(cappy_ok));
                     snapshot_pending = true;
                 }
             }
@@ -443,19 +462,22 @@ void ApClient::threadMain() {
         }
 
         // Late-arriving snapshot send: at HELLO time the gate may have been
-        // closed because the player was still on the file-select screen
-        // (scene_cache null). Poll scene_cache here — the frame-thread main
-        // loop updates it each frame — and send the snapshot the first time
-        // both halves of the gate are true. Polling cadence is recv_timeout_ms
-        // (default 200 ms), which the user won't perceive between entering a
-        // stage and the snapshot landing on the bridge.
+        // closed because the player was still on the file-select screen, or
+        // because the stage's first Cappy balloon hadn't fired yet. Poll
+        // hasDispatchedSinceReset() here — the frame-thread CappyMessenger
+        // flips it on the first successful tryShow — and send the snapshot
+        // the first time both halves of the gate are true. Polling cadence
+        // is recv_timeout_ms (default 200 ms), which the user won't perceive
+        // between Cappy's first bubble dispatching and the snapshot landing
+        // on the bridge.
         if (snapshot_pending && socket_fd_ >= 0) {
             auto& s = ApState::instance();
             const bool save_ok = s.save_was_loaded.load(std::memory_order_acquire);
-            const bool scene_ok = s.scene_cache.load(std::memory_order_relaxed) != nullptr;
-            if (save_ok && scene_ok) {
+            const bool cappy_ok =
+                smoap::ui::CappyMessenger::instance().hasDispatchedSinceReset();
+            if (save_ok && cappy_ok) {
                 SMOAP_LOG_INFO("[conn] snapshot gate now open "
-                               "(save_was_loaded=1 scene_loaded=1); sending");
+                               "(save_was_loaded=1 cappy_ok=1); sending");
                 sendSnapshot();
                 snapshot_pending = false;
             }

@@ -14,6 +14,7 @@
 #include "nn/time/time_timespan.hpp"
 #include "../ap/ApClient.hpp"
 #include "../ap/ApState.hpp"
+#include "../ui/CappyMessenger.hpp"
 #include "../util/Log.hpp"
 #include "HookSymbols.hpp"
 #include "SoftInstall.hpp"
@@ -114,6 +115,15 @@ HOOK_DEFINE_TRAMPOLINE(SaveLoadHook) {
         st.captures_unlocked.reset();
         st.goal_sent = false;
         st.death_pending_send.store(false, std::memory_order_release);
+        // Clear the "Cappy has dispatched" latch so the post-HELLO snapshot
+        // gate re-arms. The deferSaveLoadStatusBubble() call below enqueues a
+        // fresh status bubble whose successful dispatch will re-flip the
+        // latch — at which point we know scene + director are alive and the
+        // shine bitmap is safe to enumerate. Without this clear, a save load
+        // from inside live gameplay would let sendSnapshot fire immediately
+        // (latch still true from a prior dispatch), racing the new save's
+        // deserialization.
+        smoap::ui::CappyMessenger::instance().clearDispatchLatch();
         // Drain any pending capture-grant retries left over from before this
         // save load. After captures_unlocked is wiped above, AddHackDictionary
         // Hook would block any flushPendingCaptureGrants retry whose bit

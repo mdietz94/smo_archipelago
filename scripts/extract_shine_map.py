@@ -3,10 +3,13 @@
 ONE COMMAND from a fresh checkout (Nintendo IP, so each user runs locally):
 
     python scripts/extract_shine_map.py --nsp <SMO_1.0.0.nsp>
+    python scripts/extract_shine_map.py --xci <SMO_1.0.0.xci>
 
 On first run the script:
   1. Bootstraps a side venv at scripts/.extract-venv (Python 3.12 + oead).
-  2. Runs hactool to extract the NSP -> RomFS (~5 GB, into a gitignored cache).
+  2. Runs hactool to extract the dump -> RomFS (~5 GB, into a gitignored cache).
+     NSP -> PFS0 partition; XCI -> HFS0 secure partition. Same NCA layout
+     afterwards.
   3. Walks SystemData/ShineInfo.szs + LocalizedData/USen/MessageData/StageMessage.szs
      (moon names) AND SystemData/HackObjList.szs + .../SystemMessage/HackList.msbt
      (capture names).
@@ -19,7 +22,10 @@ Prereqs the user must have:
   - Python 3.12 on the `py` launcher (`winget install -e --id Python.Python.3.12`)
   - hactool on PATH or at C:/Users/maxwe/Desktop/Switch/hactool.exe
   - prod.keys at C:/Users/maxwe/.switch/prod.keys (override with --keys)
-  - SMO 1.0.0 NSP file (override location with --nsp)
+  - SMO 1.0.0 NSP **or** XCI file (override location with --nsp / --xci)
+  - For XCI dumps: title.keys *alongside* prod.keys (i.e. derived from
+    --keys's parent dir) with the SMO entry. Override the auto-derived
+    path with --titlekeys. NSPs ship their own .tik so this isn't needed.
 """
 from __future__ import annotations
 
@@ -413,7 +419,9 @@ def resolve_hactool(arg: Path | None) -> Path:
     )
 
 
-def _run_hactool(hactool: Path, keys: Path, *args: str) -> None:
+def _run_hactool(
+    hactool: Path, keys: Path, *args: str, title_keys: Path | None = None,
+) -> None:
     # hactool exits 0 even when it failed to decrypt: a missing titlekey
     # produces "[WARN] Unable to match rights id to titlekey. Update
     # title.keys?" followed by "Error: section 0 is corrupted!" lines, but
@@ -422,7 +430,16 @@ def _run_hactool(hactool: Path, keys: Path, *args: str) -> None:
     # output line-by-line, forward it to our stderr (so the wizard log
     # keeps showing the live hactool stream), and treat the WARN or any
     # "Error:" line as a hard failure.
-    cmd = [str(hactool), "--disablekeywarns", "-k", str(keys), *args]
+    #
+    # `title_keys`: if given AND the file exists, pass `--titlekeys=` to
+    # hactool. Without this, hactool defaults the title-keys lookup to
+    # `$HOME/.switch/title.keys` regardless of the `-k` path — surprising
+    # for users who keep prod.keys elsewhere and reasonably expect their
+    # title.keys to live next to it.
+    cmd = [str(hactool), "--disablekeywarns", "-k", str(keys)]
+    if title_keys is not None and title_keys.is_file():
+        cmd.append(f"--titlekeys={title_keys}")
+    cmd.extend(args)
     print(f"[hactool] {' '.join(cmd)}", file=sys.stderr, flush=True)
     proc = subprocess.Popen(
         cmd,
@@ -443,11 +460,15 @@ def _run_hactool(hactool: Path, keys: Path, *args: str) -> None:
             error_lines.append(line)
     rc = proc.wait()
     if titlekey_missing:
+        expected = title_keys if title_keys is not None else keys.parent / "title.keys"
         sys.exit(
-            "ERROR: hactool could not decrypt the NSP — your title.keys is missing\n"
-            "the entry for SMO's rights ID (01000000000100000000000000000003).\n"
-            f"Update title.keys (alongside {keys}) with the Super Mario Odyssey\n"
-            "titlekey and rerun the extract."
+            "ERROR: hactool could not decrypt the dump — your title.keys is\n"
+            "missing the entry for SMO's rights ID\n"
+            "(01000000000100000000000000000003). NSPs ship their own ticket so\n"
+            "this typically only happens with XCI cartridge dumps. Update\n"
+            f"title.keys at {expected} (derived from --keys; override with\n"
+            "--titlekeys) with the Super Mario Odyssey titlekey and rerun\n"
+            "the extract."
         )
     if error_lines:
         joined = "\n  ".join(error_lines)
@@ -456,28 +477,56 @@ def _run_hactool(hactool: Path, keys: Path, *args: str) -> None:
         sys.exit(f"ERROR: hactool exited {rc}")
 
 
-def extract_romfs(nsp: Path, keys: Path, hactool: Path, romfs_dir: Path) -> None:
-    """Extract NSP -> PFS0 -> program NCA -> RomFS at `romfs_dir`. Idempotent."""
+def extract_romfs(
+    dump: Path, dump_kind: str, keys: Path, hactool: Path, romfs_dir: Path,
+    *, title_keys: Path | None = None,
+) -> None:
+    """Extract NSP/XCI -> program NCA -> RomFS at `romfs_dir`. Idempotent.
+
+    `dump_kind` is "nsp" or "xci". NSPs unpack as a PFS0 partition; XCI
+    cartridge images expose an HFS0 "secure" partition. The NCA layout
+    after unpacking is the same — pick the largest NCA, lift the
+    titlekey from any .tik present (NSPs always include one; XCIs
+    almost never do, so we fall back to hactool's title.keys lookup),
+    and extract its RomFS.
+    """
     if (romfs_dir / "SystemData" / "ShineInfo.szs").exists():
         print(f"[romfs] cache hit at {romfs_dir}, skipping extract", file=sys.stderr)
         return
-    if not nsp.exists():
-        sys.exit(f"ERROR: NSP not found at {nsp}. Pass --nsp <path>.")
+    if dump_kind not in ("nsp", "xci"):
+        sys.exit(f"ERROR: unsupported dump kind {dump_kind!r}; expected nsp or xci")
+    if not dump.exists():
+        flag = "--xci" if dump_kind == "xci" else "--nsp"
+        sys.exit(f"ERROR: {dump_kind.upper()} not found at {dump}. Pass {flag} <path>.")
     if not keys.exists():
         sys.exit(f"ERROR: prod.keys not found at {keys}. Pass --keys <path>.")
-    pfs0_dir = romfs_dir.parent / (romfs_dir.name + ".pfs0")
-    pfs0_dir.mkdir(parents=True, exist_ok=True)
+    # Common work dir for the unpacked partition contents (NCAs ± a .tik).
+    # Suffix encodes the partition type so a leftover from a prior run on
+    # the wrong dump kind doesn't get mistakenly reused.
+    suffix = ".pfs0" if dump_kind == "nsp" else ".xci-secure"
+    work_dir = romfs_dir.parent / (romfs_dir.name + suffix)
+    work_dir.mkdir(parents=True, exist_ok=True)
     romfs_dir.mkdir(parents=True, exist_ok=True)
 
-    _run_hactool(hactool, keys, "-t", "pfs0", f"--pfs0dir={pfs0_dir}", str(nsp))
+    if dump_kind == "nsp":
+        _run_hactool(hactool, keys, "-t", "pfs0", f"--pfs0dir={work_dir}", str(dump),
+                     title_keys=title_keys)
+    else:  # xci
+        # `--securedir=` is the "actual game NCAs" partition. The XCI also
+        # has a "normal" partition (mostly metadata) and an optional
+        # "update" partition (FW deltas); we don't need either.
+        _run_hactool(hactool, keys, "-t", "xci", f"--securedir={work_dir}", str(dump),
+                     title_keys=title_keys)
 
     # Derive the title key from the .tik so we don't depend on a populated
     # title.keys. We always do this (rather than only as a fallback after a
     # failed hactool run) because hactool exits 0 even when titlekey lookup
     # silently fails — passing --titlekey= explicitly is the only reliable
-    # way to know the NCA call will actually decrypt.
+    # way to know the NCA call will actually decrypt. XCI dumps usually
+    # have no .tik in the secure partition and fall through to hactool's
+    # title.keys lookup.
     titlekey_args: list[str] = []
-    tiks = sorted(pfs0_dir.glob("*.tik"))
+    tiks = sorted(work_dir.glob("*.tik"))
     if tiks:
         try:
             rights_id_hex, enc_titlekey_hex = _derive_title_key(tiks[0], keys)
@@ -495,19 +544,23 @@ def extract_romfs(nsp: Path, keys: Path, hactool: Path, romfs_dir: Path) -> None
             print(f"[titlekey] could not derive ({e}); falling back to title.keys",
                   file=sys.stderr, flush=True)
     else:
-        print(f"[titlekey] no .tik in {pfs0_dir}; falling back to title.keys",
+        # The XCI path almost always lands here — flag it so the user
+        # knows where to look if hactool fails with the WARN line.
+        hint = (" (XCI dumps don't carry a ticket — populate title.keys "
+                "with the SMO entry)" if dump_kind == "xci" else "")
+        print(f"[titlekey] no .tik in {work_dir}; falling back to title.keys{hint}",
               file=sys.stderr, flush=True)
 
-    ncas = sorted(pfs0_dir.glob("*.nca"), key=lambda p: p.stat().st_size, reverse=True)
+    ncas = sorted(work_dir.glob("*.nca"), key=lambda p: p.stat().st_size, reverse=True)
     if not ncas:
-        sys.exit(f"ERROR: no .nca produced in {pfs0_dir}")
+        sys.exit(f"ERROR: no .nca produced in {work_dir}")
     program_nca = ncas[0]
     print(f"[romfs] program NCA: {program_nca.name} ({program_nca.stat().st_size/(1<<30):.2f} GB)",
           file=sys.stderr)
     _run_hactool(hactool, keys, "-t", "nca", f"--romfsdir={romfs_dir}",
-                 *titlekey_args, str(program_nca))
+                 *titlekey_args, str(program_nca), title_keys=title_keys)
 
-    shutil.rmtree(pfs0_dir, ignore_errors=True)
+    shutil.rmtree(work_dir, ignore_errors=True)
 
 
 # -------- BYML walking + MSBT join ----------------------------------------
@@ -773,10 +826,19 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__.split("\n\n", 1)[0],
         epilog=__doc__.split("\n\n", 1)[1] if "\n\n" in __doc__ else "",
     )
-    ap.add_argument("--nsp", type=Path, default=DEFAULT_NSP,
+    ap.add_argument("--nsp", type=Path, default=None,
                     help=f"SMO 1.0.0 NSP (default: {DEFAULT_NSP})")
+    ap.add_argument("--xci", type=Path, default=None,
+                    help="SMO 1.0.0 XCI cartridge dump. Mutually exclusive "
+                         "with --nsp. Requires title.keys (NSPs ship a .tik; "
+                         "XCIs do not).")
     ap.add_argument("--keys", type=Path, default=DEFAULT_KEYS,
                     help=f"prod.keys (default: {DEFAULT_KEYS})")
+    ap.add_argument("--titlekeys", type=Path, default=None,
+                    help="title.keys (default: derived from --keys's parent "
+                         "dir as <keys-parent>/title.keys, matching hactool's "
+                         "convention that prod.keys + title.keys live "
+                         "together)")
     ap.add_argument("--hactool", type=Path, default=None,
                     help=f"hactool path (default: PATH, then {DEFAULT_HACTOOL_FALLBACK})")
     ap.add_argument("--romfs-cache", type=Path, default=DEFAULT_ROMFS_CACHE,
@@ -817,8 +879,29 @@ def main(argv: list[str] | None = None) -> int:
         if not (romfs / "SystemData" / "ShineInfo.szs").exists():
             return _fail(f"{romfs} is not a romfs (no SystemData/ShineInfo.szs)")
     else:
+        # Resolve which dump to extract. Explicit --xci wins; explicit --nsp
+        # next; neither falls back to the historical default NSP location.
+        if args.nsp is not None and args.xci is not None:
+            return _fail("pass only one of --nsp or --xci, not both")
+        if args.xci is not None:
+            dump_path, dump_kind = args.xci, "xci"
+        elif args.nsp is not None:
+            dump_path, dump_kind = args.nsp, "nsp"
+        else:
+            dump_path, dump_kind = DEFAULT_NSP, "nsp"
+        print(f"[extract] dump: kind={dump_kind} path={dump_path}",
+              file=sys.stderr, flush=True)
         hactool = resolve_hactool(args.hactool)
-        extract_romfs(args.nsp, args.keys, hactool, args.romfs_cache)
+        # Default title.keys to the same directory as prod.keys — that's
+        # where Lockpick_RCM drops both in a single run, and where users
+        # who relocate prod.keys typically expect title.keys to live too.
+        # hactool itself defaults to $HOME/.switch/title.keys regardless
+        # of -k, which silently breaks XCI decode when --keys points
+        # elsewhere; passing --titlekeys= explicitly closes that gap.
+        title_keys = args.titlekeys if args.titlekeys is not None \
+            else args.keys.parent / "title.keys"
+        extract_romfs(dump_path, dump_kind, args.keys, hactool, args.romfs_cache,
+                      title_keys=title_keys)
         romfs = args.romfs_cache
 
     resolved, review = extract(romfs)

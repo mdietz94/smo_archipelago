@@ -23,8 +23,8 @@ Before you start, confirm all three:
 ## What you'll end up with
 
 - `smo.apworld` installed in your Archipelago install's `custom_worlds/`
-- Moon + capture name tables extracted from your own SMO 1.0.0 NSP, sitting
-  in `%APPDATA%/SMOArchipelago/data/`
+- Moon + capture name tables extracted from your own SMO 1.0.0 NSP or XCI,
+  sitting in `%APPDATA%/SMOArchipelago/data/`
 - A compiled Switch module (`subsdk9` + `main.npdm` + `ap_config.json`)
   sitting in `%APPDATA%/SMOArchipelago/build/`
 - That module copied to **either** your modded Switch's SD card **or**
@@ -50,9 +50,10 @@ back-and-forth:
 | **devkitPro + devkitA64** | Cross-compiler for the Switch module | https://devkitpro.org/wiki/Getting_Started |
 | **CMake 3.24+** | Build orchestrator | https://cmake.org/download/ |
 | **Ninja** | Build backend | https://github.com/ninja-build/ninja/releases (or `winget install Ninja-build.Ninja`) |
-| **hactool** | Extracts RomFS from your SMO NSP | https://github.com/SciresM/hactool/releases |
-| **prod.keys** (Switch console keys) | hactool needs them to decrypt the NSP | Dump with Lockpick_RCM → place at `%USERPROFILE%\.switch\prod.keys` |
-| **Your SMO 1.0.0 NSP** | Source of moon + capture names | Your legally-purchased copy. **Not** a patched version — 1.0.0 only. |
+| **hactool** | Extracts RomFS from your SMO dump | https://github.com/SciresM/hactool/releases |
+| **prod.keys** (Switch console keys) | hactool needs them to decrypt the dump | Dump with Lockpick_RCM → place at `%USERPROFILE%\.switch\prod.keys` |
+| **title.keys** (XCI only) | NSPs ship a ticket inside the package; XCI cartridge dumps don't, so hactool needs the SMO titlekey from `title.keys` | Dump with Lockpick_RCM (same run as prod.keys) → place at `%USERPROFILE%\.switch\title.keys` |
+| **Your SMO 1.0.0 NSP or XCI** | Source of moon + capture names | Your legally-dumped copy. **Not** a patched version — 1.0.0 only. NSP and XCI are both supported. |
 | **A modded Switch OR an emulator** | Where SMO actually runs | Atmosphere CFW on a modded Switch (FW 21.x or earlier), or an emulator |
 
 > ⚠️ **Why so many tools?** SMO Archipelago is "play your own Switch", not
@@ -84,7 +85,7 @@ to it, exactly like every other AP client.
    1. Welcome — read the overview.
    2. Prerequisites — wizard checks the table above; click "Install..." for
       anything missing, install it, click "Re-check".
-   3. SMO NSP picker — browse to your SMO 1.0.0 NSP.
+   3. SMO dump picker — browse to your SMO 1.0.0 NSP or XCI.
    4. Extract maps — wizard runs the extractor (~30s the first time
       because it sets up a Python 3.12 venv with `oead`, then faster on
       re-runs). Outputs land in `%APPDATA%/SMOArchipelago/data/`.

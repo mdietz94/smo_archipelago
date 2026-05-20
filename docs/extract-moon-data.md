@@ -12,12 +12,23 @@ Both live inside SMO's romfs and are copyrighted Nintendo content — we can't
 ship them, so each user generates them locally on first run. The same one
 command produces both.
 
+NSP and XCI dumps are both supported. NSPs are simpler to set up (they
+ship a `.tik` inside the package and decrypt with just `prod.keys`); XCI
+cartridge dumps additionally need a populated `title.keys` because
+cartridges don't carry a ticket.
+
 ## One command
 
-From the repo root:
+From the repo root, for an NSP:
 
 ```pwsh
 python scripts/extract_shine_map.py --nsp <path-to-SMO_1.0.0.nsp>
+```
+
+Or for an XCI cartridge dump:
+
+```pwsh
+python scripts/extract_shine_map.py --xci <path-to-SMO_1.0.0.xci>
 ```
 
 That writes:
@@ -42,7 +53,8 @@ following on disk first:
 | Python 3.12 | on the `py -3.12` launcher | `winget install -e --id Python.Python.3.12` |
 | `hactool.exe` | PATH or `C:\Users\maxwe\Desktop\Switch\hactool.exe` | https://github.com/SciresM/hactool/releases |
 | `prod.keys` | `~/.switch/prod.keys` | Lockpick_RCM on a hackable Switch |
-| SMO 1.0.0 NSP | `--nsp` argument | dump from your own cart |
+| `title.keys` (XCI only) | `~/.switch/title.keys` | Lockpick_RCM (same run as prod.keys) |
+| SMO 1.0.0 NSP or XCI | `--nsp` / `--xci` argument | dump from your own cart |
 
 If your paths differ, override:
 
@@ -52,6 +64,19 @@ python scripts/extract_shine_map.py `
     --keys    D:\switch\prod.keys `
     --hactool D:\tools\hactool.exe
 ```
+
+Same shape for an XCI — just swap the flag:
+
+```pwsh
+python scripts/extract_shine_map.py `
+    --xci     D:\dumps\SMO_1.0.0.xci `
+    --keys    D:\switch\prod.keys `
+    --hactool D:\tools\hactool.exe
+```
+
+For XCI dumps, make sure `title.keys` (next to `prod.keys`) contains
+SMO's titlekey entry. If it doesn't, the extractor will fail with a
+message telling you which rights ID is missing.
 
 If you already have an unencrypted RomFS extracted (e.g. via Ryujinx's
 "Dump RomFS" feature), skip hactool entirely:
@@ -65,8 +90,9 @@ python scripts/extract_shine_map.py --romfs <path-to-romfs-root>
 1. **Bootstrap** (first run only, ~30 s): creates `scripts/.extract-venv/`
    from `py -3.12 -m venv`, installs `oead`, then re-execs itself in the venv.
 2. **Romfs extract** (first run only, ~2 min): runs `hactool` twice — first
-   to crack the NSP into PFS0 contents, then to extract RomFS from the
-   largest NCA (the program NCA). Output lands in `.romfs-cache/`.
+   to crack the dump into NCA contents (NSP → PFS0 partition, XCI → HFS0
+   secure partition), then to extract RomFS from the largest NCA (the
+   program NCA). Output lands in `.romfs-cache/`.
 3. **Moons** — walks `SystemData/ShineInfo.szs` (Yaz0+SARC of 17 BYML files,
    one `ShineList_<HomeStage>.byml` per kingdom), then joins each shine's
    `ObjId` against the per-stage MSBT in
@@ -144,6 +170,15 @@ Most often a stale or wrong-version `prod.keys`. Re-dump with Lockpick_RCM
 and confirm it has `header_key`, `key_area_key_application_*`, etc.
 `hactool --disablekeywarns` is already passed; if you get key warnings
 without `--disablekeywarns` they may be informational only.
+
+**`hactool could not decrypt the dump — your title.keys is missing the entry for SMO's rights ID`** (XCI path)
+
+XCI cartridge dumps don't carry a ticket inside the package, so the
+extractor relies on `title.keys` to look up SMO's titlekey. The default
+location is alongside `prod.keys` (e.g. `%USERPROFILE%\.switch\title.keys`).
+Re-dump with Lockpick_RCM — its default run produces both `prod.keys`
+and `title.keys` together — and rerun the extractor. (NSPs ship their
+own `.tik` so this error doesn't apply to the `--nsp` path.)
 
 **`apworld unhit > 0`**
 
