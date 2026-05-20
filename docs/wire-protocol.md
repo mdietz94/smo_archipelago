@@ -4,7 +4,7 @@ Single persistent TCP connection. Each message is one line of UTF-8 JSON termina
 
 > **Dev tip (M5.5):** to exercise the SMOClient end-to-end without a Switch, run `scripts/switch_smoke_test.py` against a client connected to a local MultiServer hosting a seed of the forked apworld. See the "AP loopback" recipe in [`../CLAUDE.md`](../CLAUDE.md) for the full sequence, or run `SMOAP_LIVE_AP=1 pytest apworld/smo_archipelago/tests/test_ap_loopback.py` for the scripted version.
 
-- Default port: **17777** (configurable on both sides; SMOClient via `~/.archipelago/host.yaml` under `smo_options.switch_listen_port` or the `--switch-port` CLI arg, Switch at compile time via `cmake -DBRIDGE_PORT=...`. The `romfs/ap_config.json` on the SD is informational only — `nn::fs::MountSdCardForDebug` fails on retail firmware, so the mod uses compile-time defaults; see [ApConfig.cpp](../switch-mod/src/ap/ApConfig.cpp).)
+- Default port: **17777** (configurable on both sides; SMOClient via `~/.archipelago/host.yaml` under `meatballs_options.switch_listen_port` or the `--switch-port` CLI arg, Switch at compile time via `cmake -DBRIDGE_PORT=...`. The `romfs/ap_config.json` on the SD is informational only — `nn::fs::MountSdCardForDebug` fails on retail firmware, so the mod uses compile-time defaults; see [ApConfig.cpp](../switch-mod/src/ap/ApConfig.cpp).)
 - Max line length: **8 KiB**. Longer lines are dropped and the parser resyncs to the next `\n`.
 - Canonical kingdom / capture / shine names come from `apworld/smo_archipelago/data/items.json` and `data/locations.json`. Switch holds a static lookup; bridge reads the JSON directly.
 - All ids/strings are case-sensitive. The Switch never sees raw AP ids.

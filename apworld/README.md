@@ -12,7 +12,7 @@ ln -s /path/to/spicy-meatball-overdrive/apworld/smo_archipelago worlds/smo_archi
 # or on Windows: mklink /D worlds\smo_archipelago C:\Users\maxwe\Documents\smo_archipelago\apworld\smo_archipelago
 ```
 
-Generate a YAML, run `Generate.py`. The `.archipelago` it produces is played with SMO Client, launched from the Archipelago Launcher (or by double-clicking the `.smoap` file shipped in each player's zip).
+Generate a YAML, run `Generate.py`. The `.archipelago` it produces is played with SMO Client, launched from the Archipelago Launcher (or by double-clicking the `.meatballsap` file shipped in each player's zip).
 
 ## Planned extensions (M8)
 

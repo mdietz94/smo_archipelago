@@ -25,14 +25,14 @@ The Switch still only needs to speak a small line-delimited JSON protocol over a
 
 ## Module identity
 
-The apworld registers as `Spicy Meatball Overdrive`. The client's `Connect` packet uses this exact game name. Seeds generated for this world are not interchangeable with any earlier upstream's seeds; that's intentional — this world gains richer enforcement options that an honor-system upstream cannot honor. The Python package folder is still `smo_archipelago/` (and therefore the host.yaml settings key is still `smo_archipelago_options`) — renaming the folder would break in-flight Archipelago checkouts that already have the apworld unpacked, so the on-disk identifier and the user-facing game name intentionally differ.
+The apworld registers as `Spicy Meatball Overdrive`. The client's `Connect` packet uses this exact game name. Seeds generated for this world are not interchangeable with any earlier upstream's seeds; that's intentional — this world gains richer enforcement options that an honor-system upstream cannot honor. The deployed apworld zip stem is `meatballs` (so Archipelago imports as `worlds.meatballs` and the host.yaml settings key is `meatballs_options`); the in-repo Python source folder stayed `smo_archipelago/` to avoid churning every dev-workflow path reference. See the identifier table at the top of [CLAUDE.md](../CLAUDE.md) for the full mapping.
 
 ## Process boundaries
 
 | Process | Owns |
 |---|---|
 | Switch module (`subsdk9`) | hooks, game-state mirror, capture lock enforcement, HUD overlay |
-| SMOClient (`worlds.smo_archipelago.client.main`) | AP websocket, SwitchServer (TCP :17777), Kivy GUI with Tracker + Connections tabs, datapackage, replay-on-reconnect |
+| SMOClient (`worlds.meatballs.client.main` in the deployed zip; `smo_archipelago.client.main` in a loose source checkout) | AP websocket, SwitchServer (TCP :17777), Kivy GUI with Tracker + Connections tabs, datapackage, replay-on-reconnect |
 
 ## Threading
 

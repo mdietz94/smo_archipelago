@@ -25,9 +25,15 @@ def load_data_file(*args) -> dict:
 # Game-level constants. The "game" / "creator" fields are also used as the
 # seed for the per-player AP id allocation in Game.py; keep them stable.
 # scripts/build_poptracker_pack.py mirrors these values — update both.
+#
+# 2026-05-20 rename: "SMO" → "MEATBALLS" and "archipelago" → "maxdietz" so
+# we no longer collide with the upstream `worlds.smo` slot (existing apworld
+# that already uses the .apsmo namespace). The change shifts every item +
+# location ID, invalidating any in-flight seed — acknowledged at rename time
+# because the zip-stem rename to meatballs.apworld already forces a regen.
 game_table: dict = {
-    "game": "SMO",
-    "creator": "archipelago",
+    "game": "MEATBALLS",
+    "creator": "maxdietz",
     "filler_item_name": "Coin",
     "death_link": True,
 }

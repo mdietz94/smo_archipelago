@@ -50,7 +50,7 @@ Map+pins is the only approach that worked. Don't second-guess this.
 
 ## Release workflow
 
-[release.yml](../../.github/workflows/release.yml) builds the zip alongside `smo.apworld` on every tagged release; both ship as GitHub release assets with their own sha256 checksums.
+[release.yml](../../.github/workflows/release.yml) builds the zip alongside `meatballs.apworld` on every tagged release; both ship as GitHub release assets with their own sha256 checksums.
 
 ## Polish opportunities
 

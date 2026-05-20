@@ -861,8 +861,8 @@ def build(root: Path, version: str, out_dir: Path) -> dict[str, Any]:
     # Mirrors the inlined `game_table` in apworld/smo_archipelago/Data.py.
     # Update both if either changes — the AP id allocation in starting_index()
     # is seeded from these and must agree with the apworld at runtime.
-    game_short = "SMO"
-    creator = "archipelago"
+    game_short = "MEATBALLS"
+    creator = "maxdietz"
     filler_name = "Coin"
     start = starting_index(game_short, creator)
     item_ids = allocate_item_ids(items, filler_name, start)
@@ -967,11 +967,13 @@ def self_test() -> int:
         if not ok:
             failures.append(f"{name}: {detail}")
 
-    # starting_index reproduces the known SMO value (cross-checked via the
-    # observed AP location id 14481151511 in CLAUDE.md for the first moon).
-    s = starting_index("SMO", "archipelago")
-    check("starting_index SMO/archipelago", s == 14_481_151_000,
-          f"got {s}, want 14481151000")
+    # starting_index reproduces the known MEATBALLS/maxdietz value derived
+    # from apworld/smo_archipelago/Game.py. Pre-2026-05-20 the seed was
+    # ("SMO", "archipelago") with a starting_index of 14_481_151_000; the
+    # 2026-05-20 rename to ("MEATBALLS", "maxdietz") shifted every AP id.
+    s = starting_index("MEATBALLS", "maxdietz")
+    check("starting_index MEATBALLS/maxdietz", s == 13_404_070_000,
+          f"got {s}, want 13404070000")
 
     # tokenize: simple
     toks = tokenize("|A| and |B|")

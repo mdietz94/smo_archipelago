@@ -1,16 +1,17 @@
 # CLAUDE.md — context for the next session
 
-This file is a fast-load brief for picking up the **Spicy Meatball Overdrive** project cold. Three identifiers all refer to the same thing but spell it differently — keep them straight:
+This file is a fast-load brief for picking up the **Spicy Meatball Overdrive** project cold. The same project goes by several identifiers in different layers — keep them straight:
 
 | Identifier | Value | Scope |
 |---|---|---|
 | AP-protocol game name | `Spicy Meatball Overdrive` | Wire-format `game` field in YAML seeds and AP `Connect` packets |
-| Shipped apworld zip | `smo.apworld` | What lands in `vendor/Archipelago/custom_worlds/`; Archipelago imports it as `worlds.smo` |
-| host.yaml settings key | `smo_options` | Derived by Archipelago from the zip stem `smo` |
-| In-repo source folder | `apworld/smo_archipelago/` | Kept verbose to avoid churning every dev-workflow path reference; only the deployed artifact uses `smo` |
+| Shipped apworld zip | `meatballs.apworld` | What lands in `vendor/Archipelago/custom_worlds/`; Archipelago imports it as `worlds.meatballs` |
+| host.yaml settings key | `meatballs_options` | Derived by Archipelago from the zip stem `meatballs` |
+| Per-player file extension | `.meatballsap` | Generated alongside the standard AP zip; SuffixIdentifier in the Component routes it to SMOClient |
+| In-repo source folder | `apworld/smo_archipelago/` | Kept verbose to avoid churning every dev-workflow path reference; only the deployed artifact uses `meatballs` |
 | Switch mod CMake project | `smo_archipelago` | Unrelated to the apworld; lives in `switch-mod/CMakeLists.txt` |
 
-All four "smo" spellings parse as **S**picy **M**eatball **O**verdrive. The 2026-05-16 rename pass dropped a prior framework-derived `<framework>_SMO_archipelago` AP identifier (we ship a real client with in-game enforcement) and shortened the deployed zip to `smo.apworld` (the `_archipelago` suffix was redundant when the parent dir is literally `custom_worlds/`). Read this file first, then `docs/architecture.md` and the plan file at `C:\Users\maxwe\.claude\plans\after-much-work-i-tender-thompson.md`.
+The "meatballs" spelling and the historical "smo" spelling both parse as **S**picy **M**eatball **O**verdrive. Rename history: 2026-05-16 dropped a prior framework-derived `<framework>_SMO_archipelago` AP identifier (we ship a real client with in-game enforcement) and shortened the deployed zip to `smo.apworld`; 2026-05-20 renamed the zip stem / module path / options key / file extension from `smo` → `meatballs` because the upstream `worlds.smo` slot was already claimed by another apworld using the `.apsmo` namespace, and rotated the apworld `creator` from `archipelago` → `maxdietz` at the same time (the latter shifts every item/location ID, but the zip-stem rename already forces seeds to regen so we cashed in the breakage in a single hop). Read this file first, then `docs/architecture.md` and the plan file at `C:\Users\maxwe\.claude\plans\after-much-work-i-tender-thompson.md`.
 
 ## ⚠️ CRITICAL: Never commit Nintendo IP
 
@@ -64,7 +65,7 @@ The client owns AP-protocol complexity (websocket + deflate + TLS + reconnect, a
 | **LunaKit as soft dep (link headers), not fork** | LunaKit churns fast; submodule lets us pin without inheriting their bugs |
 | **Target SMO 1.0.0** | Canonical version every public mod (lunakit, smo-online, smo-practice, OdysseyDecomp) targets. User has a native 1.0.0 install on a downgraded FW 21.2 Switch |
 | **Bit-index capture table generated from apworld** | `scripts/sync_capture_table.py` regenerates `switch-mod/src/ap/capture_table.h` from `data/items.json` so Switch and bridge can't drift on cap-name → bit-index assignment |
-| **Game name `Spicy Meatball Overdrive`, zip `smo.apworld`** | Renamed 2026-05-16. AP-protocol name dropped a prior framework-derived prefix (we ship a real client with in-game enforcement). Deployed zip shortened from `smo_archipelago.apworld` to `smo.apworld` — Archipelago derives the module name from the zip stem, so the world imports as `worlds.smo` and the host.yaml settings key is `smo_options`. The in-repo source folder stayed `apworld/smo_archipelago/` to avoid churning every dev-workflow path reference; see the identifier table in the preamble |
+| **Game name `Spicy Meatball Overdrive`, zip `meatballs.apworld`** | AP-protocol name set 2026-05-16 (dropped a prior framework-derived prefix; we ship a real client with in-game enforcement). Deployed zip renamed `smo_archipelago.apworld` → `smo.apworld` (2026-05-16) → `meatballs.apworld` (2026-05-20). The 2026-05-20 hop moved us off the `worlds.smo` slot that an existing upstream apworld already owns under the `.apsmo` namespace. Archipelago derives the module name from the zip stem, so the world imports as `worlds.meatballs` and the host.yaml settings key is `meatballs_options`. The per-player file extension is `.meatballsap` (was `.smoap`). The in-repo source folder stayed `apworld/smo_archipelago/` to avoid churning every dev-workflow path reference; see the identifier table in the preamble |
 | **Two-stage connect gate (SNI-style)** | SMOClient never auto-dials AP on launch. Clicking Connect (or `/connect` / `--connect`) parks the request until the Switch HELLOs; `SMOContext.connect()` overrides `CommonContext.connect` to dial AP from the Switch-ready callback. State tracked as `disconnected → waiting_for_switch → connected`. Mirrors SNIClient (user-cited gold standard); pre-fix, the default `archipelago.gg` host produced "Connection refused" the moment the user opened the Launcher button. Any new AP-dial path (auto-reconnect, scripted launch) must route through `SMOContext.connect()` — never `asyncio.create_task(server_loop(ctx))` directly. `disconnect()` clears the pending state so a stale dial doesn't fire on the next Switch reconnect. Tests: `apworld/smo_archipelago/tests/test_connect_gate.py` |
 
 ## Status

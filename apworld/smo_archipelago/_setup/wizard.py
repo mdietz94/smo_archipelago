@@ -15,7 +15,7 @@ Pages (sequenced; each calls `next_page()` when its work completes):
   5. BridgeIpPage      — text field prefilled with `detect_lan_ip()`
   6. BuildPage         — runs sync_capture_table → cmake configure → cmake build
   7. DeployPage        — radio: SD card vs Ryujinx, with auto-detect
-  8. DonePage          — "Launch SMOClient" button (if a .smoap was passed)
+  8. DonePage          — "Launch SMOClient" button (if a .meatballsap was passed)
 
 Kivy is imported lazily INSIDE this module — never at apworld-import time —
 because AP generation hosts (Linux servers running `python ap_generate.py`)
@@ -116,7 +116,7 @@ def wizard_log(line: str) -> None:
 def run_setup_wizard(smoap_path: str | None = None) -> bool:
     """Open the Kivy wizard window. Blocks until the user closes it.
 
-    `smoap_path` is the .smoap file the user opened (if any) — used to
+    `smoap_path` is the .meatballsap file the user opened (if any) — used to
     pre-fill SMOClient on the "Launch now" button at the end. Pass None
     when the wizard is invoked standalone (e.g. via `/setup`).
 

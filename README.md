@@ -24,7 +24,7 @@ See [`docs/first-time-setup.md`](docs/first-time-setup.md) for the full prereq t
 
 ## Installation
 
-1. **Download `smo.apworld`** from the [Releases page](../../releases).
+1. **Download `meatballs.apworld`** from the [Releases page](../../releases).
 2. **Drop it into your Archipelago install's `custom_worlds/`** directory.
 3. **Open the Archipelago Launcher and click "SMO Client"** in the Clients list.
 4. **Run `/setup`** in the SMO Client command bar. The setup wizard walks you through prereq checks → SMO NSP pick → moon/capture extraction → your PC's LAN IP → Switch-mod compile → deploy to SD card (or Ryujinx). You only need to do this **once per machine** (or again if your PC's LAN IP changes, or after upgrading to a new SMO Archipelago release).

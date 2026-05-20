@@ -266,7 +266,7 @@ Apworld extensions + in-game ImGui + polish (incl. dedicated AP-credit HUD overl
 
 **Iteration history** (3 swing-and-a-miss before user-verified): (1) tried `tracker_default: {type: "locationtree"}` — invented widget type, broke main view entirely; (2) added kingdom-level layout grouping (`children` of locations holding nested sections) — too deep for PopTracker's location format; (3) stripped layout to a `text` widget telling user to open View > Locations — that menu item doesn't exist, locations need maps to be visible at all. Map+pins approach is the only one that worked.
 
-Pack zip ~27 KB; output at `poptracker/build/smo-poptracker-v<version>.zip`, gitignored — rebuild after any apworld change. 20 internal parser/translator/region-prereq tests pass (`python scripts/build_poptracker_pack.py --self-test`). Release workflow ([release.yml](../.github/workflows/release.yml)) builds the zip alongside `smo.apworld` on every tagged release; both ship as GitHub release assets with their own sha256 checksums.
+Pack zip ~27 KB; output at `poptracker/build/smo-poptracker-v<version>.zip`, gitignored — rebuild after any apworld change. 20 internal parser/translator/region-prereq tests pass (`python scripts/build_poptracker_pack.py --self-test`). Release workflow ([release.yml](../.github/workflows/release.yml)) builds the zip alongside `meatballs.apworld` on every tagged release; both ship as GitHub release assets with their own sha256 checksums.
 
 ## M6 phase-A playtest loop
 

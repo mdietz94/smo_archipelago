@@ -93,7 +93,7 @@ The M3 build delivers:
 ## Bring-up
 
 1. Launch SMOClient on the PC (Archipelago Launcher → "SMO Client", or
-   double-click any `.smoap`).
+   double-click any `.meatballsap`).
 2. Confirm the SMOClient log shows `Switch listen: 0.0.0.0:17777`.
 3. Click Connect (or pre-fill via `--connect <host>:<port>`). The status
    should show "waiting for Switch" because of the two-stage gate.

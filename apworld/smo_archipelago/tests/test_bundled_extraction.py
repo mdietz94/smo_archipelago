@@ -2,10 +2,10 @@
 
 Regression coverage for the v0.1.7-alpha bug where the wizard's extract
 step crashed with "bundled script 'extract_shine_map.py' not found at
-C:\\ProgramData\\Archipelago\\custom_worlds\\smo.apworld\\smo\\_setup\\
+C:\\ProgramData\\Archipelago\\custom_worlds\\meatballs.apworld\\meatballs\\_setup\\
 scripts\\extract_shine_map.py" — the apworld is loaded via Python's
 zipimporter, so `Path(__file__).parent / "scripts" / "x.py"` is a path
-string that traverses through `smo.apworld` (a real ZIP file, not a
+string that traverses through `meatballs.apworld` (a real ZIP file, not a
 directory). `Path.exists()` returns False on such paths; subprocess
 can't invoke files at them either.
 
@@ -38,9 +38,9 @@ def test_find_apworld_zip_walks_up_to_zip_ancestor(tmp_path) -> None:
     walker must return that zip path. Note: we synthesize the path string
     rather than constructing a real zip — `_find_apworld_zip` checks
     `is_file()`, which requires the .apworld to actually exist."""
-    fake_zip = tmp_path / "smo.apworld"
+    fake_zip = tmp_path / "meatballs.apworld"
     fake_zip.write_bytes(b"")  # empty file is enough for is_file()
-    setup_root = fake_zip / "smo" / "_setup"
+    setup_root = fake_zip / "meatballs" / "_setup"
     assert build._find_apworld_zip(setup_root) == fake_zip
 
 
@@ -75,33 +75,33 @@ def test_extract_bundled_tree_unpacks_zip_to_appdata(
     Validates the full unpacking machinery against a real zip.
 
     Three subtrees are extracted (everything subprocesses access by path):
-      smo/_setup/scripts/   -> <bundled>/scripts/
-      smo/_setup/switch_mod -> <bundled>/switch_mod/
-      smo/data/             -> <bundled>/data/
-    The apworld's Python modules (smo/client/, smo/Items.py, etc.) are
+      meatballs/_setup/scripts/   -> <bundled>/scripts/
+      meatballs/_setup/switch_mod -> <bundled>/switch_mod/
+      meatballs/data/             -> <bundled>/data/
+    The apworld's Python modules (meatballs/client/, meatballs/Items.py, etc.) are
     NOT extracted because they're imported via zipimport, not invoked
     as files."""
-    # Build a fake smo.apworld with the same layout as the real one.
-    fake_zip_path = tmp_path / "smo.apworld"
+    # Build a fake meatballs.apworld with the same layout as the real one.
+    fake_zip_path = tmp_path / "meatballs.apworld"
     with zipfile.ZipFile(fake_zip_path, "w") as zf:
-        zf.writestr("smo/__init__.py", "# stub")
-        zf.writestr("smo/_setup/__init__.py", "# stub")
-        zf.writestr("smo/_setup/scripts/extract_shine_map.py", "print('hi')")
-        zf.writestr("smo/_setup/scripts/sync_capture_table.py", "# sync")
-        zf.writestr("smo/_setup/switch_mod/CMakeLists.txt", "# cmake")
-        zf.writestr("smo/_setup/switch_mod/src/main.cpp", "int main() {}")
-        zf.writestr("smo/data/locations.json", '{"locations":[]}')
-        zf.writestr("smo/data/items.json", '{"items":[]}')
+        zf.writestr("meatballs/__init__.py", "# stub")
+        zf.writestr("meatballs/_setup/__init__.py", "# stub")
+        zf.writestr("meatballs/_setup/scripts/extract_shine_map.py", "print('hi')")
+        zf.writestr("meatballs/_setup/scripts/sync_capture_table.py", "# sync")
+        zf.writestr("meatballs/_setup/switch_mod/CMakeLists.txt", "# cmake")
+        zf.writestr("meatballs/_setup/switch_mod/src/main.cpp", "int main() {}")
+        zf.writestr("meatballs/data/locations.json", '{"locations":[]}')
+        zf.writestr("meatballs/data/items.json", '{"items":[]}')
         # Files at other prefixes that must NOT be extracted (the apworld
         # also bundles the world code itself; that's loaded via zipimport).
-        zf.writestr("smo/client/main.py", "# client")
-        zf.writestr("smo/Items.py", "# items")
+        zf.writestr("meatballs/client/main.py", "# client")
+        zf.writestr("meatballs/Items.py", "# items")
 
     fake_appdata = tmp_path / "AppData"
     fake_appdata.mkdir()
     monkeypatch.setenv("APPDATA", str(fake_appdata))
     monkeypatch.setattr(
-        build, "_SETUP_ROOT", fake_zip_path / "smo" / "_setup",
+        build, "_SETUP_ROOT", fake_zip_path / "meatballs" / "_setup",
     )
 
     extracted = build._extract_bundled_tree()
@@ -128,22 +128,22 @@ def test_bundled_data_file_works_from_zip(tmp_path, monkeypatch) -> None:
     C:\\...\\bundled\\apworld\\smo_archipelago\\data\\locations.json'
     because REPO_ROOT-relative paths inside the extractor don't apply to
     the bundled layout."""
-    fake_zip_path = tmp_path / "smo.apworld"
+    fake_zip_path = tmp_path / "meatballs.apworld"
     with zipfile.ZipFile(fake_zip_path, "w") as zf:
-        zf.writestr("smo/data/locations.json", '{"locations":[]}')
-        zf.writestr("smo/data/items.json", '{"items":[]}')
+        zf.writestr("meatballs/data/locations.json", '{"locations":[]}')
+        zf.writestr("meatballs/data/items.json", '{"items":[]}')
 
     fake_appdata = tmp_path / "AppData"
     fake_appdata.mkdir()
     monkeypatch.setenv("APPDATA", str(fake_appdata))
     monkeypatch.setattr(
-        build, "_SETUP_ROOT", fake_zip_path / "smo" / "_setup",
+        build, "_SETUP_ROOT", fake_zip_path / "meatballs" / "_setup",
     )
 
     p = build.bundled_data_file("locations.json")
     assert p.is_file()
-    assert "smo.apworld" not in str(p), (
-        f"path still contains 'smo.apworld' as a directory segment: {p}"
+    assert "meatballs.apworld" not in str(p), (
+        f"path still contains 'meatballs.apworld' as a directory segment: {p}"
     )
     assert p.read_text() == '{"locations":[]}'
 
@@ -155,15 +155,15 @@ def test_extract_bundled_tree_skips_when_marker_matches(
     extraction (zip mtime matches the cached marker). Important because
     extraction is ~25 MB of file I/O — re-doing it on every wizard open
     is needless work."""
-    fake_zip_path = tmp_path / "smo.apworld"
+    fake_zip_path = tmp_path / "meatballs.apworld"
     with zipfile.ZipFile(fake_zip_path, "w") as zf:
-        zf.writestr("smo/_setup/scripts/extract_shine_map.py", "v1")
+        zf.writestr("meatballs/_setup/scripts/extract_shine_map.py", "v1")
 
     fake_appdata = tmp_path / "AppData"
     fake_appdata.mkdir()
     monkeypatch.setenv("APPDATA", str(fake_appdata))
     monkeypatch.setattr(
-        build, "_SETUP_ROOT", fake_zip_path / "smo" / "_setup",
+        build, "_SETUP_ROOT", fake_zip_path / "meatballs" / "_setup",
     )
 
     extracted_first = build._extract_bundled_tree()
@@ -182,15 +182,15 @@ def test_extract_bundled_tree_re_extracts_when_zip_mtime_changes(
     """When the user upgrades the apworld, the zip's mtime changes and
     we must wipe + re-extract — otherwise they keep running the OLD
     extracted scripts and bugfixes never reach them."""
-    fake_zip_path = tmp_path / "smo.apworld"
+    fake_zip_path = tmp_path / "meatballs.apworld"
     with zipfile.ZipFile(fake_zip_path, "w") as zf:
-        zf.writestr("smo/_setup/scripts/extract_shine_map.py", "v1")
+        zf.writestr("meatballs/_setup/scripts/extract_shine_map.py", "v1")
 
     fake_appdata = tmp_path / "AppData"
     fake_appdata.mkdir()
     monkeypatch.setenv("APPDATA", str(fake_appdata))
     monkeypatch.setattr(
-        build, "_SETUP_ROOT", fake_zip_path / "smo" / "_setup",
+        build, "_SETUP_ROOT", fake_zip_path / "meatballs" / "_setup",
     )
 
     extracted = build._extract_bundled_tree()
@@ -200,12 +200,12 @@ def test_extract_bundled_tree_re_extracts_when_zip_mtime_changes(
     # Simulate user upgrading the apworld: rewrite the zip and bump mtime.
     fake_zip_path.unlink()
     with zipfile.ZipFile(fake_zip_path, "w") as zf:
-        zf.writestr("smo/_setup/scripts/extract_shine_map.py", "v2 has the fix")
+        zf.writestr("meatballs/_setup/scripts/extract_shine_map.py", "v2 has the fix")
     import os, time
     new_mtime = fake_zip_path.stat().st_mtime + 1.0
     os.utime(fake_zip_path, (new_mtime, new_mtime))
     monkeypatch.setattr(
-        build, "_SETUP_ROOT", fake_zip_path / "smo" / "_setup",
+        build, "_SETUP_ROOT", fake_zip_path / "meatballs" / "_setup",
     )
 
     extracted_after = build._extract_bundled_tree()
@@ -216,40 +216,40 @@ def test_bundled_script_works_from_zip(tmp_path, monkeypatch) -> None:
     """End-to-end: `bundled_script` must return an on-disk path even when
     the apworld is loaded from a zip. This is the regression test for the
     v0.1.7-alpha bug report ("bundled script 'extract_shine_map.py' not
-    found at C:\\...\\smo.apworld\\smo\\_setup\\scripts\\extract_shine_map.py")."""
-    fake_zip_path = tmp_path / "smo.apworld"
+    found at C:\\...\\meatballs.apworld\\meatballs\\_setup\\scripts\\extract_shine_map.py")."""
+    fake_zip_path = tmp_path / "meatballs.apworld"
     with zipfile.ZipFile(fake_zip_path, "w") as zf:
-        zf.writestr("smo/_setup/scripts/extract_shine_map.py", "# real script")
+        zf.writestr("meatballs/_setup/scripts/extract_shine_map.py", "# real script")
 
     fake_appdata = tmp_path / "AppData"
     fake_appdata.mkdir()
     monkeypatch.setenv("APPDATA", str(fake_appdata))
     monkeypatch.setattr(
-        build, "_SETUP_ROOT", fake_zip_path / "smo" / "_setup",
+        build, "_SETUP_ROOT", fake_zip_path / "meatballs" / "_setup",
     )
 
     p = build.bundled_script("extract_shine_map.py")
     assert p.is_file(), f"bundled_script returned a non-existent path: {p}"
     # And it should be invokable as a normal subprocess arg (not a path
     # inside a zip the OS can't traverse).
-    assert "smo.apworld" not in str(p), (
-        f"path still contains 'smo.apworld' as a directory segment: {p}"
+    assert "meatballs.apworld" not in str(p), (
+        f"path still contains 'meatballs.apworld' as a directory segment: {p}"
     )
 
 
 def test_bundled_switch_mod_works_from_zip(tmp_path, monkeypatch) -> None:
     """Same fix applies to the switch_mod source tree cmake reads as
     its -S source dir."""
-    fake_zip_path = tmp_path / "smo.apworld"
+    fake_zip_path = tmp_path / "meatballs.apworld"
     with zipfile.ZipFile(fake_zip_path, "w") as zf:
-        zf.writestr("smo/_setup/switch_mod/CMakeLists.txt", "# cmake")
-        zf.writestr("smo/_setup/switch_mod/src/x.cpp", "// src")
+        zf.writestr("meatballs/_setup/switch_mod/CMakeLists.txt", "# cmake")
+        zf.writestr("meatballs/_setup/switch_mod/src/x.cpp", "// src")
 
     fake_appdata = tmp_path / "AppData"
     fake_appdata.mkdir()
     monkeypatch.setenv("APPDATA", str(fake_appdata))
     monkeypatch.setattr(
-        build, "_SETUP_ROOT", fake_zip_path / "smo" / "_setup",
+        build, "_SETUP_ROOT", fake_zip_path / "meatballs" / "_setup",
     )
 
     mod = build.bundled_switch_mod()

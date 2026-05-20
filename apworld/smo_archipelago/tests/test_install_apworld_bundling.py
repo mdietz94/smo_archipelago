@@ -29,7 +29,7 @@ import pytest
 # REPO is the actual checkout root: tests/ → smo_archipelago/ → apworld/ → REPO.
 REPO = Path(__file__).resolve().parents[3]
 INSTALL_SCRIPT = REPO / "scripts" / "install_apworld.py"
-OUTPUT_PATH = REPO / "vendor" / "Archipelago" / "custom_worlds" / "smo.apworld"
+OUTPUT_PATH = REPO / "vendor" / "Archipelago" / "custom_worlds" / "meatballs.apworld"
 LUNAKIT_TOOLCHAIN = REPO / "switch-mod" / "lunakit-vendor" / "cmake" / "toolchain.cmake"
 
 
@@ -83,10 +83,10 @@ def test_default_install_excludes_nintendo_ip(install_script_present) -> None:
     assert rc == 0
     members = _zip_members(OUTPUT_PATH)
     for forbidden in (
-        "smo/client/data/shine_map.json",
-        "smo/client/data/capture_map.json",
-        "smo/client/data/shine_map_review.json",
-        "smo/client/data/capture_map_review.json",
+        "meatballs/client/data/shine_map.json",
+        "meatballs/client/data/capture_map.json",
+        "meatballs/client/data/shine_map_review.json",
+        "meatballs/client/data/capture_map_review.json",
     ):
         assert forbidden not in members, (
             f"IP-blocked file leaked into zip: {forbidden}"
@@ -98,11 +98,11 @@ def test_default_install_includes_core_apworld(install_script_present) -> None:
     assert rc == 0
     members = _zip_members(OUTPUT_PATH)
     for required in (
-        "smo/__init__.py",
-        "smo/client/main.py",
-        "smo/client/maps.py",
-        "smo/data/items.json",
-        "smo/data/locations.json",
+        "meatballs/__init__.py",
+        "meatballs/client/main.py",
+        "meatballs/client/maps.py",
+        "meatballs/data/items.json",
+        "meatballs/data/locations.json",
     ):
         assert required in members, f"missing {required}"
 
@@ -114,8 +114,8 @@ def test_default_install_excludes_setup_bundle(install_script_present) -> None:
     assert rc == 0
     members = _zip_members(OUTPUT_PATH)
     for not_required in (
-        "smo/_setup/switch_mod/CMakeLists.txt",
-        "smo/_setup/scripts/extract_shine_map.py",
+        "meatballs/_setup/switch_mod/CMakeLists.txt",
+        "meatballs/_setup/scripts/extract_shine_map.py",
     ):
         assert not_required not in members, (
             f"{not_required} should NOT be in the default-build zip"
@@ -128,9 +128,9 @@ def test_bundle_mod_includes_switch_mod_sources(install_script_present) -> None:
     assert rc == 0, f"exit {rc}: stdout={out!r} stderr={err!r}"
     members = _zip_members(OUTPUT_PATH)
     for required in (
-        "smo/_setup/switch_mod/CMakeLists.txt",
-        "smo/_setup/switch_mod/src/main.cpp",
-        "smo/_setup/switch_mod/lunakit-vendor/cmake/toolchain.cmake",
+        "meatballs/_setup/switch_mod/CMakeLists.txt",
+        "meatballs/_setup/switch_mod/src/main.cpp",
+        "meatballs/_setup/switch_mod/lunakit-vendor/cmake/toolchain.cmake",
     ):
         assert required in members, f"missing {required}"
 
@@ -153,8 +153,8 @@ def test_bundle_scripts_includes_extractor(install_script_present) -> None:
     assert rc == 0
     members = _zip_members(OUTPUT_PATH)
     for required in (
-        "smo/_setup/scripts/extract_shine_map.py",
-        "smo/_setup/scripts/sync_capture_table.py",
+        "meatballs/_setup/scripts/extract_shine_map.py",
+        "meatballs/_setup/scripts/sync_capture_table.py",
     ):
         assert required in members, f"missing {required}"
 
@@ -167,14 +167,14 @@ def test_bundle_combined_produces_complete_release_zip(install_script_present) -
     assert rc == 0, f"exit {rc}: stdout={out!r} stderr={err!r}"
     members = _zip_members(OUTPUT_PATH)
     # Apworld core
-    assert "smo/__init__.py" in members
+    assert "meatballs/__init__.py" in members
     # Wizard
-    assert "smo/_setup/__init__.py" in members
-    assert "smo/_setup/wizard.py" in members or "smo/_setup/prereqs.py" in members
+    assert "meatballs/_setup/__init__.py" in members
+    assert "meatballs/_setup/wizard.py" in members or "meatballs/_setup/prereqs.py" in members
     # Switch mod sources
-    assert "smo/_setup/switch_mod/CMakeLists.txt" in members
+    assert "meatballs/_setup/switch_mod/CMakeLists.txt" in members
     # Extractor scripts
-    assert "smo/_setup/scripts/extract_shine_map.py" in members
+    assert "meatballs/_setup/scripts/extract_shine_map.py" in members
     # NO Nintendo content
-    assert "smo/client/data/shine_map.json" not in members
-    assert "smo/client/data/capture_map.json" not in members
+    assert "meatballs/client/data/shine_map.json" not in members
+    assert "meatballs/client/data/capture_map.json" not in members

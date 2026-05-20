@@ -38,7 +38,7 @@ Launcher entry.
 .\bridge\.venv\Scripts\python scripts\install_apworld.py
 ```
 
-If working in a `.claude/worktrees/<name>/` worktree AND the user launches SMOClient from the main checkout's Launcher, also `Copy-Item` the freshly-built zip to the main checkout's `vendor/Archipelago/custom_worlds/smo.apworld`. Symptom of skipping: `unknown message type from Switch: <type>` in bridge log. See the `smo-build` skill for the full Copy-Item form.
+If working in a `.claude/worktrees/<name>/` worktree AND the user launches SMOClient from the main checkout's Launcher, also `Copy-Item` the freshly-built zip to the main checkout's `vendor/Archipelago/custom_worlds/meatballs.apworld`. Symptom of skipping: `unknown message type from Switch: <type>` in bridge log. See the `smo-build` skill for the full Copy-Item form.
 
 ```pwsh
 # Generate test seed (one-time per apworld change)
@@ -99,7 +99,7 @@ For the loopback flow above, the fake-Switch driver (`switch_smoke_test.py`) sen
 SMO Client listens on `0.0.0.0:17777` by default. Override via `~/.archipelago/host.yaml`:
 
 ```yaml
-smo_options:
+meatballs_options:
   switch_listen_host: "0.0.0.0"
   switch_listen_port: 17777
   shine_map_path: ""          # empty falls back to client/data/shine_map.json
@@ -107,7 +107,7 @@ smo_options:
   deathlink_default: false
 ```
 
-Or per-launch: `--switch-port 17777`. The host.yaml key is `smo_options` (derived from the shipped apworld zip stem `smo`), NOT from the AP game name `Spicy Meatball Overdrive`.
+Or per-launch: `--switch-port 17777`. The host.yaml key is `meatballs_options` (derived from the shipped apworld zip stem `meatballs`), NOT from the AP game name `Spicy Meatball Overdrive`.
 
 ## Common gotchas
 

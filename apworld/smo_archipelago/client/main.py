@@ -158,12 +158,13 @@ async def main(args: argparse.Namespace) -> None:
     if apworld_data.exists():
         dp = DataPackage(apworld_data_dir=apworld_data)
     else:
-        # __package__ is "worlds.smo.client" (zip — Archipelago imports the
-        # apworld as `worlds.<zip_stem>`, and our zip is `smo.apworld`) or
-        # "smo_archipelago.client" (loose source on sys.path — the in-repo
-        # folder kept its historical name). Either way the parent is the
-        # apworld root that holds data/items.json + data/locations.json.
-        apworld_pkg = (__package__ or "client").rsplit(".", 1)[0] or "smo"
+        # __package__ is "worlds.meatballs.client" (zip — Archipelago imports
+        # the apworld as `worlds.<zip_stem>`, and our zip is
+        # `meatballs.apworld`) or "smo_archipelago.client" (loose source on
+        # sys.path — the in-repo folder kept its historical name). Either way
+        # the parent is the apworld root that holds data/items.json +
+        # data/locations.json.
+        apworld_pkg = (__package__ or "client").rsplit(".", 1)[0] or "meatballs"
         log.info(
             "apworld data dir %s not on filesystem; loading from package %r",
             apworld_data, apworld_pkg,

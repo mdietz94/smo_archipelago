@@ -91,10 +91,11 @@ class DataPackage:
             directory. Used for the loose-source dev path and unit tests.
 
           apworld_package: import path of the apworld package (e.g.
-            "worlds.smo" when running from the .apworld zip — Archipelago
-            derives the module name from the zip stem `smo.apworld`, or
-            "smo_archipelago" from a loose source on sys.path — the in-repo
-            folder kept its historical name). Loaded via importlib.resources
+            "worlds.meatballs" when running from the .apworld zip —
+            Archipelago derives the module name from the zip stem
+            `meatballs.apworld`, or "smo_archipelago" from a loose source on
+            sys.path — the in-repo folder kept its historical name). Loaded
+            via importlib.resources
             so it works whether the package is on the filesystem OR inside a
             zip — that's what the Launcher-spawned client needs because the
             apworld zip in custom_worlds/ isn't a real directory and
@@ -139,7 +140,7 @@ class DataPackage:
 
         Works for both loose-source (filesystem) and zipped apworld
         installations. The package argument is the import name of the
-        apworld root package (e.g. "worlds.smo").
+        apworld root package (e.g. "worlds.meatballs").
         """
         from importlib.resources import files
         try:

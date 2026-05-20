@@ -68,12 +68,12 @@ jobs:
       - name: Stage release artifacts + checksum
         run: |
           mkdir release-artifacts
-          cp vendor/Archipelago/custom_worlds/smo.apworld release-artifacts/
+          cp vendor/Archipelago/custom_worlds/meatballs.apworld release-artifacts/
           # The PopTracker zip filename has the version embedded; copy whatever
           # build_poptracker_pack.py produced.
           cp poptracker/build/smo-poptracker-v*.zip release-artifacts/
           cd release-artifacts
-          sha256sum smo.apworld > smo.apworld.sha256
+          sha256sum meatballs.apworld > meatballs.apworld.sha256
           sha256sum smo-poptracker-v*.zip > smo-poptracker.sha256
           ls -lah
 
@@ -83,7 +83,7 @@ jobs:
       - name: IP-discipline audit
         run: |
           set -e
-          if unzip -l release-artifacts/smo.apworld | grep -E '(shine|capture)_map(_review)?\.json'; then
+          if unzip -l release-artifacts/meatballs.apworld | grep -E '(shine|capture)_map(_review)?\.json'; then
             echo "FAIL: Nintendo-content map file leaked into the release zip"
             exit 1
           fi
@@ -91,7 +91,7 @@ jobs:
 
       - uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808  # v4
         with:
-          name: smo-apworld
+          name: meatballs-apworld
           path: release-artifacts/*
           if-no-files-found: error
 
@@ -108,7 +108,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
-          name: smo-apworld
+          name: meatballs-apworld
           path: dist/
 
       - name: Show artifacts to be published
@@ -140,7 +140,7 @@ jobs:
             ### Verifying the downloads
 
             ```
-            sha256sum -c smo.apworld.sha256
+            sha256sum -c meatballs.apworld.sha256
             sha256sum -c smo-poptracker.sha256
             ```
 
@@ -172,7 +172,7 @@ jobs:
       - name: Download release artifact (zip + .sha256)
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
-          name: smo-apworld
+          name: meatballs-apworld
           path: release-artifacts/
 
       - name: Compute changelog from commits since prior tag

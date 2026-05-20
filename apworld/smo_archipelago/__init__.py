@@ -24,7 +24,7 @@ from .DataValidation import runGenerationDataValidation, runPreFillDataValidatio
 from .Regions import create_regions
 from .Items import SMOItem
 from .Rules import set_rules
-from .Options import smo_options_data
+from .Options import meatballs_options_data
 from .Helpers import is_option_enabled, is_item_enabled, get_option_value
 
 from BaseClasses import ItemClassification, Tutorial, Item
@@ -42,16 +42,16 @@ from .hooks.Data import hook_interpret_slot_data
 
 class SMOSettings(settings.Group):
     """SMO Client settings. Lives in `~/.archipelago/host.yaml` under the
-    `smo_options:` key (Archipelago derives this from the apworld zip's
-    stem — our zip is `smo.apworld`, so the loaded module is `worlds.smo`
-    and the settings key is `smo_options`). NOT the AP game name
-    ("Spicy Meatball Overdrive") and NOT the in-repo source folder name
-    (`smo_archipelago/`). Auto-created with defaults on first load; users
-    edit to override.
+    `meatballs_options:` key (Archipelago derives this from the apworld
+    zip's stem — our zip is `meatballs.apworld`, so the loaded module is
+    `worlds.meatballs` and the settings key is `meatballs_options`). NOT
+    the AP game name ("Spicy Meatball Overdrive") and NOT the in-repo
+    source folder name (`smo_archipelago/`). Auto-created with defaults
+    on first load; users edit to override.
 
     Example yaml block:
 
-      smo_options:
+      meatballs_options:
         switch_listen_host: "0.0.0.0"
         switch_listen_port: 17777
         deathlink_default: false
@@ -89,7 +89,7 @@ class SMOWorld(World):
     game: str = game_name
     web = world_webworld
 
-    options_dataclass = smo_options_data
+    options_dataclass = meatballs_options_data
     settings: typing.ClassVar[SMOSettings]
     data_version = 2
     required_client_version = (0, 3, 4)
@@ -368,7 +368,7 @@ class SMOWorld(World):
         return slot_data
 
     def generate_output(self, output_directory: str):
-        # `.smoap` is the only per-player artifact this apworld ships. It's
+        # `.meatballsap` is the only per-player artifact this apworld ships. It's
         # the entry point the Launcher routes to launch_smo_client when
         # double-clicked, triggering either the first-run wizard or a
         # pre-filled SMOClient launch. See _setup/smoap_file.py for schema.
@@ -385,7 +385,7 @@ class SMOWorld(World):
             seed_name=str(getattr(self.multiworld, "seed_name", "") or ""),
             server_address="",
         )
-        smoap.write(Path(output_directory) / f"{base}.smoap")
+        smoap.write(Path(output_directory) / f"{base}.meatballsap")
 
     def write_spoiler(self, spoiler_handle):
         before_write_spoiler(self, self.multiworld, spoiler_handle)
@@ -459,10 +459,10 @@ from ._setup.launcher_errors import visible_errors as _visible_errors
 def launch_smo_client(*args):
     """Archipelago Launcher entry point for the SMO Client (real Switch).
 
-    Triggered by double-clicking a `.smoap` file (the Component's
-    `SuffixIdentifier('.smoap')` registers the extension globally) or by
+    Triggered by double-clicking a `.meatballsap` file (the Component's
+    `SuffixIdentifier('.meatballsap')` registers the extension globally) or by
     clicking the "SMO Client" button directly. Always launches SMOClient;
-    when a `.smoap` is provided its slot_name / server_address / password
+    when a `.meatballsap` is provided its slot_name / server_address / password
     are expanded into CLI overrides so the Connect bar lands pre-filled.
 
     The setup wizard (toolchain install, NSP extract, mod build + deploy)
@@ -474,15 +474,15 @@ def launch_smo_client(*args):
     Kept lazy-importing CommonClient / Kivy so headless gen hosts that
     never touch this function don't pay the import cost.
     """
-    smoap_path = next((a for a in args if a.endswith(".smoap")), None)
+    smoap_path = next((a for a in args if a.endswith(".meatballsap")), None)
     final_args = list(args)
     if smoap_path:
         try:
             from ._setup.smoap_file import parse_smoap, smoap_to_launch_args
             s = parse_smoap(Path(smoap_path))
-            # Drop the .smoap arg itself (SMOClient's argparser doesn't
+            # Drop the .meatballsap arg itself (SMOClient's argparser doesn't
             # know about it) and prepend the expanded credentials.
-            final_args = [a for a in final_args if not a.endswith(".smoap")]
+            final_args = [a for a in final_args if not a.endswith(".meatballsap")]
             final_args = smoap_to_launch_args(s) + final_args
         except Exception as e:
             # Don't block the launch — log and let SMOClient open with no
@@ -491,7 +491,7 @@ def launch_smo_client(*args):
                 "could not parse %s: %s; launching SMOClient without pre-fill",
                 smoap_path, e,
             )
-            final_args = [a for a in final_args if not a.endswith(".smoap")]
+            final_args = [a for a in final_args if not a.endswith(".meatballsap")]
 
     _run_smo_client_with_args(*final_args)
 
@@ -539,7 +539,7 @@ def add_client_to_launcher() -> None:
         "SMO Client",
         func=launch_smo_client,
         component_type=Type.CLIENT,
-        file_identifier=SuffixIdentifier('.smoap'),
+        file_identifier=SuffixIdentifier('.meatballsap'),
         game_name=game_name,
     ))
 

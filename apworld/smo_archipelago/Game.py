@@ -7,8 +7,9 @@ if 'creator' in game_table:
 # and in every AP wire `Connect` packet.
 #
 # Item / location ID derivation below keys off the raw `game_table` fields
-# ("SMO" / "archipelago") so changing this display name does NOT shift IDs
-# and is safe for in-flight seeds (item IDs are stable).
+# ("MEATBALLS" / "maxdietz") so changing this display name does NOT shift IDs
+# and is safe for in-flight seeds (item IDs are stable). The game_table seeds
+# themselves were last touched in the 2026-05-20 rename pass; see Data.py.
 game_name = "Spicy Meatball Overdrive"
 filler_item_name = game_table["filler_item_name"] if "filler_item_name" in game_table else "Filler"
 starting_items = game_table["starting_items"] if "starting_items" in game_table else None

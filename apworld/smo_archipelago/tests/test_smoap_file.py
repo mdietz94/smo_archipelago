@@ -1,4 +1,4 @@
-"""Tests for `_setup.smoap_file` — the .smoap-file format that triggers
+"""Tests for `_setup.smoap_file` — the .meatballsap-file format that triggers
 the first-run wizard or pre-fills SMOClient on subsequent runs."""
 
 from __future__ import annotations
@@ -20,9 +20,9 @@ from _setup.smoap_file import (
 
 
 def test_round_trip_minimal(tmp_path: Path) -> None:
-    """A fresh-AP-gen .smoap with only the slot name round-trips losslessly."""
+    """A fresh-AP-gen .meatballsap with only the slot name round-trips losslessly."""
     s = SmoapFile(slot_name="Mario")
-    p = tmp_path / "Mario_P1.smoap"
+    p = tmp_path / "Mario_P1.meatballsap"
     s.write(p)
 
     parsed = parse_smoap(p)
@@ -40,7 +40,7 @@ def test_round_trip_all_fields(tmp_path: Path) -> None:
         server_address="archipelago.gg:38281",
         password="hunter2",
     )
-    p = tmp_path / "Luigi_P2.smoap"
+    p = tmp_path / "Luigi_P2.meatballsap"
     s.write(p)
 
     parsed = parse_smoap(p)
@@ -51,10 +51,10 @@ def test_round_trip_all_fields(tmp_path: Path) -> None:
 
 
 def test_human_readable_field_order(tmp_path: Path) -> None:
-    """A human inspecting the .smoap should see `game` and `version` first
+    """A human inspecting the .meatballsap should see `game` and `version` first
     so they can tell what kind of file it is."""
     s = SmoapFile(slot_name="Mario")
-    p = tmp_path / "x.smoap"
+    p = tmp_path / "x.meatballsap"
     s.write(p)
 
     with zipfile.ZipFile(p) as zf:
@@ -70,7 +70,7 @@ def test_writes_zip_archive(tmp_path: Path) -> None:
     """The on-disk format is a ZIP — renaming to .zip and extracting works
     the same as for every other AP patch file."""
     s = SmoapFile(slot_name="Mario")
-    p = tmp_path / "x.smoap"
+    p = tmp_path / "x.meatballsap"
     s.write(p)
 
     assert p.read_bytes()[:2] == b"PK"
@@ -79,9 +79,9 @@ def test_writes_zip_archive(tmp_path: Path) -> None:
 
 
 def test_reads_legacy_bare_json(tmp_path: Path) -> None:
-    """Back-compat: a .smoap from a pre-zip alpha build (raw JSON on disk)
+    """Back-compat: a .meatballsap from a pre-zip alpha build (raw JSON on disk)
     still parses. Sniffs magic bytes, not extension."""
-    p = tmp_path / "legacy.smoap"
+    p = tmp_path / "legacy.meatballsap"
     p.write_text(
         json.dumps({"game": GAME_NAME, "version": 1, "slot_name": "Mario"}),
         encoding="utf-8",
@@ -93,7 +93,7 @@ def test_reads_legacy_bare_json(tmp_path: Path) -> None:
 def test_zip_missing_metadata_entry_raises(tmp_path: Path) -> None:
     """A ZIP that is missing the expected `metadata.json` entry must fail
     loudly rather than silently producing an empty SmoapFile."""
-    p = tmp_path / "broken.smoap"
+    p = tmp_path / "broken.meatballsap"
     with zipfile.ZipFile(p, "w") as zf:
         zf.writestr("something_else.json", "{}")
     with pytest.raises(ValueError, match="metadata.json"):
@@ -104,7 +104,7 @@ def test_zip_with_extra_entries_still_parses(tmp_path: Path) -> None:
     """Forward-compat: future versions may add files (icon, scout cache,
     ...) alongside metadata.json. The reader must ignore extras."""
     s = SmoapFile(slot_name="Mario")
-    p = tmp_path / "future.smoap"
+    p = tmp_path / "future.meatballsap"
     s.write(p)
     with zipfile.ZipFile(p, "a") as zf:
         zf.writestr("scout_cache.json", "{}")
@@ -143,7 +143,7 @@ def test_rejects_missing_version() -> None:
 
 
 def test_rejects_future_version() -> None:
-    """A .smoap from a future client should refuse to load, not silently
+    """A .meatballsap from a future client should refuse to load, not silently
     drop fields the older client doesn't know how to interpret."""
     bad = json.dumps({
         "game": GAME_NAME,
@@ -160,7 +160,7 @@ def test_rejects_non_json() -> None:
 
 
 def test_ignores_unknown_fields() -> None:
-    """Forward-compat: a future .smoap with extra fields should still load
+    """Forward-compat: a future .meatballsap with extra fields should still load
     on an older client as long as game+version are within range."""
     forward = json.dumps({
         "game": GAME_NAME,
@@ -174,7 +174,7 @@ def test_ignores_unknown_fields() -> None:
 
 def test_launch_args_minimal() -> None:
     """`--name` is always present; `--connect` and `--password` are
-    skipped when their .smoap field is empty."""
+    skipped when their .meatballsap field is empty."""
     s = SmoapFile(slot_name="Mario")
     assert smoap_to_launch_args(s) == ["--name", "Mario"]
 

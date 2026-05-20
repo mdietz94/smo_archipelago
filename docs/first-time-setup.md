@@ -22,7 +22,7 @@ Before you start, confirm all three:
 
 ## What you'll end up with
 
-- `smo.apworld` installed in your Archipelago install's `custom_worlds/`
+- `meatballs.apworld` installed in your Archipelago install's `custom_worlds/`
 - Moon + capture name tables extracted from your own SMO 1.0.0 NSP or XCI,
   sitting in `%APPDATA%/SMOArchipelago/data/`
 - A compiled Switch module (`subsdk9` + `main.npdm` + `ap_config.json`)
@@ -70,7 +70,7 @@ Setup is independent of any specific multiworld. Do it once; afterwards you
 can join any SMO Archipelago multiworld by opening SMO Client and connecting
 to it, exactly like every other AP client.
 
-1. **Download `smo.apworld`** from the
+1. **Download `meatballs.apworld`** from the
    [Releases page](https://github.com/mdietz94/smo_archipelago/releases).
 2. **Drop it into Archipelago's `custom_worlds/`** directory. On Windows the
    path is typically `%LOCALAPPDATA%\Archipelago\custom_worlds\` or

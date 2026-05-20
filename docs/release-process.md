@@ -10,20 +10,20 @@ git push origin v0.2.0
 ```
 
 `.github/workflows/release.yml` does the rest: builds the bundled
-`smo.apworld`, computes a SHA-256, creates a GitHub Release with both
+`meatballs.apworld`, computes a SHA-256, creates a GitHub Release with both
 files attached, auto-generates the release notes from commit messages.
 
 ## What gets shipped
 
-The release artifact is a single file, `smo.apworld`, plus a sidecar
-`smo.apworld.sha256` for download verification. The .apworld is a normal
+The release artifact is a single file, `meatballs.apworld`, plus a sidecar
+`meatballs.apworld.sha256` for download verification. The .apworld is a normal
 zip with three logical regions:
 
 | Inside the zip | Source | What for |
 |---|---|---|
-| `smo/...` | `apworld/smo_archipelago/` (default install) | The apworld itself — items, locations, regions, hooks, SMOClient |
-| `smo/_setup/switch_mod/...` | `switch-mod/` + lunakit-vendor + exlaunch submodules | C++ source tree the wizard compiles on the user's machine |
-| `smo/_setup/scripts/...` | `scripts/extract_shine_map.py` + `sync_capture_table.py` + `check_nso_symbols.py` | Extractor + helpers the wizard invokes |
+| `meatballs/...` | `apworld/smo_archipelago/` (default install) | The apworld itself — items, locations, regions, hooks, SMOClient |
+| `meatballs/_setup/switch_mod/...` | `switch-mod/` + lunakit-vendor + exlaunch submodules | C++ source tree the wizard compiles on the user's machine |
+| `meatballs/_setup/scripts/...` | `scripts/extract_shine_map.py` + `sync_capture_table.py` + `check_nso_symbols.py` | Extractor + helpers the wizard invokes |
 
 Size budget is about 25 MB compressed (most of it lunakit-vendor sources).
 
@@ -69,9 +69,9 @@ python scripts/sync_capture_table.py
 # Build the full release zip
 python scripts/install_apworld.py --bundle-mod --bundle-scripts
 
-# Output ends up at vendor/Archipelago/custom_worlds/smo.apworld
+# Output ends up at vendor/Archipelago/custom_worlds/meatballs.apworld
 # Inspect with:
-python -c "import zipfile; zipfile.ZipFile('vendor/Archipelago/custom_worlds/smo.apworld').printdir()"
+python -c "import zipfile; zipfile.ZipFile('vendor/Archipelago/custom_worlds/meatballs.apworld').printdir()"
 ```
 
 ## Pre-release checklist
@@ -109,8 +109,8 @@ add one in a future cleanup; see TODO note in
 python scripts/install_apworld.py --bundle-mod --bundle-scripts
 
 # Generate checksum
-$hash = (Get-FileHash vendor\Archipelago\custom_worlds\smo.apworld -Algorithm SHA256).Hash.ToLower()
-"$hash  smo.apworld" | Out-File -Encoding ascii smo.apworld.sha256
+$hash = (Get-FileHash vendor\Archipelago\custom_worlds\meatballs.apworld -Algorithm SHA256).Hash.ToLower()
+"$hash  meatballs.apworld" | Out-File -Encoding ascii meatballs.apworld.sha256
 
 # Tag + push
 git tag -a v0.2.0 -m "v0.2.0"
@@ -118,7 +118,7 @@ git push origin v0.2.0
 
 # Create the release manually with gh
 gh release create v0.2.0 `
-    vendor/Archipelago/custom_worlds/smo.apworld smo.apworld.sha256 `
+    vendor/Archipelago/custom_worlds/meatballs.apworld meatballs.apworld.sha256 `
     --title "v0.2.0" `
     --generate-notes
 ```

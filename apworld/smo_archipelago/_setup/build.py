@@ -120,7 +120,7 @@ def _find_apworld_zip(setup_root: Path) -> Path | None:
 
 def _extract_bundled_tree() -> Path:
     """Extract the bundled `scripts/` + `switch_mod/` trees from inside
-    `smo.apworld` to a real filesystem location, and return that location.
+    `meatballs.apworld` to a real filesystem location, and return that location.
 
     Necessary because:
       - AP loads `.apworld` files via Python's zipimporter. Code inside
@@ -171,20 +171,20 @@ def _extract_bundled_tree() -> Path:
         shutil.rmtree(dst, ignore_errors=True)
     dst.mkdir(parents=True, exist_ok=True)
 
-    # We extract two subtrees from inside `smo.apworld`:
-    #   smo/_setup/scripts/...  ->  <bundled>/scripts/...
-    #   smo/_setup/switch_mod/... -> <bundled>/switch_mod/...
-    #   smo/data/...            ->  <bundled>/data/...
+    # We extract two subtrees from inside `meatballs.apworld`:
+    #   meatballs/_setup/scripts/...  ->  <bundled>/scripts/...
+    #   meatballs/_setup/switch_mod/... -> <bundled>/switch_mod/...
+    #   meatballs/data/...            ->  <bundled>/data/...
     #
-    # The `smo/_setup/` ones are the cross-compile scripts + sources
-    # subprocesses invoke directly. The `smo/data/` ones are items.json
+    # The `meatballs/_setup/` ones are the cross-compile scripts + sources
+    # subprocesses invoke directly. The `meatballs/data/` ones are items.json
     # and locations.json, which the extractor reads on disk for
     # cross-validation against the SMO RomFS dump. (The rest of the
     # apworld — Python modules, client/, hooks/ — is loaded by zipimport
     # from inside the .apworld zip and doesn't need extraction.)
     prefixes = (
-        ("smo/_setup/", ""),     # extract sibling to "scripts/" + "switch_mod/"
-        ("smo/data/", "data/"),  # extract at <bundled>/data/<filename>
+        ("meatballs/_setup/", ""),     # extract sibling to "scripts/" + "switch_mod/"
+        ("meatballs/data/", "data/"),  # extract at <bundled>/data/<filename>
     )
     with zipfile.ZipFile(apworld_zip) as zf:
         for info in zf.infolist():

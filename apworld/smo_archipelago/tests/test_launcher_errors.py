@@ -1,7 +1,7 @@
 """Tests for `_setup.launcher_errors` — making swallowed launch-time
 crashes visible to the user.
 
-These exist because the original "click .smoap → nothing happened" report
+These exist because the original "click .meatballsap → nothing happened" report
 turned out to be a `multiprocessing.Process.start()` that fired, crashed,
 and exited with no console attached to print the traceback. The decorator
 in launcher_errors.py is the only thing standing between a future crash

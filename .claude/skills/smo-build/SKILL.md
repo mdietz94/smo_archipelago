@@ -98,16 +98,16 @@ If a Switch deploy ever causes the corruption icon: Settings → Data Management
 
 ## Worktree apworld-install gotcha (M6 phase D, 2026-05-17)
 
-If you're working in `.claude/worktrees/<name>/` and rebuilt the Switch mod with a new wire-protocol message type (e.g. `DepositMsg`), `scripts/install_apworld.py` writes to **the worktree's** `vendor/Archipelago/custom_worlds/smo.apworld` — NOT the main checkout.
+If you're working in `.claude/worktrees/<name>/` and rebuilt the Switch mod with a new wire-protocol message type (e.g. `DepositMsg`), `scripts/install_apworld.py` writes to **the worktree's** `vendor/Archipelago/custom_worlds/meatballs.apworld` — NOT the main checkout.
 
-The user launches SMOClient from the **main checkout's** Launcher, so the Launcher loads the stale main-checkout `smo.apworld`. Symptom: bridge log shows `unknown message type from Switch: <type>` even though the mod is current.
+The user launches SMOClient from the **main checkout's** Launcher, so the Launcher loads the stale main-checkout `meatballs.apworld`. Symptom: bridge log shows `unknown message type from Switch: <type>` even though the mod is current.
 
 **Fix every time you ship a wire-protocol change from a worktree**: after `python scripts/install_apworld.py` in the worktree, also overwrite the main checkout's zip:
 
 ```pwsh
 Copy-Item -Force `
-    C:\Users\maxwe\Documents\smo_archipelago\.claude\worktrees\<name>\vendor\Archipelago\custom_worlds\smo.apworld `
-    C:\Users\maxwe\Documents\smo_archipelago\vendor\Archipelago\custom_worlds\smo.apworld
+    C:\Users\maxwe\Documents\smo_archipelago\.claude\worktrees\<name>\vendor\Archipelago\custom_worlds\meatballs.apworld `
+    C:\Users\maxwe\Documents\smo_archipelago\vendor\Archipelago\custom_worlds\meatballs.apworld
 ```
 
 ## Subsdk slot

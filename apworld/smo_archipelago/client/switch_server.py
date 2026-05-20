@@ -853,7 +853,7 @@ class SwitchServer:
             elif order > 0:
                 advice = (
                     f"SMOClient is older than Switch mod. Install a later "
-                    f"smo.apworld into vendor/Archipelago/custom_worlds/ "
+                    f"meatballs.apworld into vendor/Archipelago/custom_worlds/ "
                     f"(needs to match {mod_ver})."
                 )
             else:
@@ -862,7 +862,7 @@ class SwitchServer:
                 # rebuild needed by default.
                 advice = (
                     f"Re-run /setup to rebuild and redeploy the Switch mod, "
-                    f"or install a matching smo.apworld."
+                    f"or install a matching meatballs.apworld."
                 )
             err = (
                 f"Version mismatch: SMOClient is {self._client_ver}, "

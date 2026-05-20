@@ -1,11 +1,11 @@
 """Make swallowed launch-time errors visible to the user.
 
 When the Archipelago Launcher is opened via a Windows file association
-(double-click a `.smoap`, or right-click → Open With → ArchipelagoLauncher),
+(double-click a `.meatballsap`, or right-click → Open With → ArchipelagoLauncher),
 its host process is the pythonw-style ArchipelagoLauncher.exe with no console
 attached. Any traceback printed by us — or by a subprocess we spawned via
 `launch_subprocess` — goes to a void, so an import-time exception in
-`_setup.wizard` or a missing `.smoap` file just looks like "nothing happened"
+`_setup.wizard` or a missing `.meatballsap` file just looks like "nothing happened"
 to the user.
 
 This module exports a `_visible_errors(context)` decorator that wraps the
