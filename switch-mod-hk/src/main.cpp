@@ -9,10 +9,30 @@
 
 namespace smoap::hooks {
 void installScenarioFlagHook();
+void installMoonGetHook();
+void installDeathHook();
+void installShineNumGetHook();
+void installShineNumByWorldGetHook();
 }  // namespace smoap::hooks
+
+namespace smoap::game {
+void installDepositKingdomLookupSymbol();
+void installPayShineSnapshotSymbol();
+}  // namespace smoap::game
 
 extern "C" void hkMain() {
     SMOAP_LOG_INFO("=== hkMain START ===");
+
+    SMOAP_LOG_INFO("resolving M6-phase-D current-kingdom lookup");
+    smoap::game::installDepositKingdomLookupSymbol();
+    SMOAP_LOG_INFO("resolving M6-phase-D getPayShineNum lookup");
+    smoap::game::installPayShineSnapshotSymbol();
+
     smoap::hooks::installScenarioFlagHook();
+    smoap::hooks::installMoonGetHook();
+    smoap::hooks::installDeathHook();
+    smoap::hooks::installShineNumGetHook();
+    smoap::hooks::installShineNumByWorldGetHook();
+
     SMOAP_LOG_INFO("=== hkMain END ===");
 }
