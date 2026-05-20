@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "package_version": "0.1.22-alpha",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.22-alpha/smo-poptracker-v0.1.22-alpha.zip",
+      "sha256": "fc0e022930918c05a18ee8530502edf376250e9d3ba7f317e686921ebe06a46f",
+      "changelog": [
+        "fix: read HintInfo::isGet directly instead of misusing isGotShine(uid)",
+        "fix: gate post-HELLO snapshot on Cappy dispatch, not scene_cache",
+        "PopTracker auto-update: add v0.1.20-alpha to versions.json"
+      ]
+    },
+    {
       "package_version": "0.1.20-alpha",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.20-alpha/smo-poptracker-v0.1.20-alpha.zip",
       "sha256": "ab1055b5fa516fbfea46a0b7603b10561aa4a03906c3ebe1a1fa0fe5831e4da8",
