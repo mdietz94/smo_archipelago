@@ -24,6 +24,7 @@ void installShineAppearanceHook();
 void installCreditsStartHook();
 void installCappyMessageTextHooks();
 void installCappyMessengerSymbols();
+void installSaveLoadHook();
 }  // namespace smoap::hooks
 
 namespace smoap::game {
@@ -78,6 +79,9 @@ extern "C" void hkMain() {
     smoap::hooks::installCappyMessageTextHooks();
     SMOAP_LOG_INFO("resolving CappyMessenger rs:: function pointers");
     smoap::hooks::installCappyMessengerSymbols();
+
+    SMOAP_LOG_INFO("installing SaveLoadHook (session-state reset + re-HELLO)");
+    smoap::hooks::installSaveLoadHook();
 
     SMOAP_LOG_INFO("=== hkMain END ===");
 }
