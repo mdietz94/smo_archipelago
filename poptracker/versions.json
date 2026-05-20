@@ -1,6 +1,15 @@
 {
   "versions": [
     {
+      "package_version": "0.1.21-alpha",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.21-alpha/smo-poptracker-v0.1.21-alpha.zip",
+      "sha256": "cee67dd04b7a51cca469cdff99956b403f0291fd33948991c592f9fe342ac579",
+      "changelog": [
+        "fix(extract): derive title.keys next to --keys, not from $HOME",
+        "feat: support XCI cartridge dumps in shine/capture map extractor"
+      ]
+    },
+    {
       "package_version": "0.1.19-alpha",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.19-alpha/smo-poptracker-v0.1.19-alpha.zip",
       "sha256": "b716260a5eb3c8d68ba518e3d749712c7c634cdc0af2663a41ccf8220fa672e4",
