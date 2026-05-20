@@ -419,17 +419,36 @@ def resolve_hactool(arg: Path | None) -> Path:
     )
 
 
+@dataclass
+class _HactoolResult:
+    """Outcome of one hactool invocation. Caller decides what's fatal.
+
+    section_corrupt_lines: every `Error: section X is corrupted!` line, in
+        order. hactool 1.4.0 prints these when the IVFC superblock hash check
+        fails on the decrypted section data — but it does NOT prevent hactool
+        from writing the (possibly partially-valid) files to disk. Trimmed
+        NSPs and partial downloads commonly produce extractable RomFS dumps
+        that fail this check; the files we actually need (~four SZS/MSBT
+        files) often survive. `extract_romfs` treats this as a non-fatal
+        warning and lets downstream oead parsing be the real integrity check.
+    """
+    section_corrupt_lines: list[str] = field(default_factory=list)
+    returncode: int = 0
+
+
 def _run_hactool(
     hactool: Path, keys: Path, *args: str, title_keys: Path | None = None,
-) -> None:
+) -> _HactoolResult:
     # hactool exits 0 even when it failed to decrypt: a missing titlekey
     # produces "[WARN] Unable to match rights id to titlekey. Update
     # title.keys?" followed by "Error: section 0 is corrupted!" lines, but
     # the process still returns 0 and we'd happily continue into a romfs
     # walk that then dies with FileNotFoundError on ShineInfo.szs. Capture
     # output line-by-line, forward it to our stderr (so the wizard log
-    # keeps showing the live hactool stream), and treat the WARN or any
-    # "Error:" line as a hard failure.
+    # keeps showing the live hactool stream), and treat unknown "Error:"
+    # lines or the WARN as a hard failure. `section X is corrupted` is
+    # the one Error: line we let through — see `_HactoolResult` and
+    # `extract_romfs` for the recovery flow.
     #
     # `title_keys`: if given AND the file exists, pass `--titlekey=` to
     # hactool. Without this, hactool defaults the title-keys lookup to
@@ -449,7 +468,8 @@ def _run_hactool(
         bufsize=1,
     )
     titlekey_missing = False
-    error_lines: list[str] = []
+    section_corrupt: list[str] = []
+    other_errors: list[str] = []
     assert proc.stdout is not None
     for raw in proc.stdout:
         line = raw.rstrip("\r\n")
@@ -457,7 +477,10 @@ def _run_hactool(
         if "Unable to match rights id to titlekey" in line:
             titlekey_missing = True
         if line.startswith("Error:"):
-            error_lines.append(line)
+            if "is corrupted" in line:
+                section_corrupt.append(line)
+            else:
+                other_errors.append(line)
     rc = proc.wait()
     if titlekey_missing:
         expected = title_keys if title_keys is not None else keys.parent / "title.keys"
@@ -470,11 +493,12 @@ def _run_hactool(
             "--titlekey) with the Super Mario Odyssey titlekey and rerun\n"
             "the extract."
         )
-    if error_lines:
-        joined = "\n  ".join(error_lines)
+    if other_errors:
+        joined = "\n  ".join(other_errors)
         sys.exit(f"ERROR: hactool reported failures while extracting:\n  {joined}")
     if rc != 0:
         sys.exit(f"ERROR: hactool exited {rc}")
+    return _HactoolResult(section_corrupt_lines=section_corrupt, returncode=rc)
 
 
 def extract_romfs(
@@ -509,14 +533,25 @@ def extract_romfs(
     romfs_dir.mkdir(parents=True, exist_ok=True)
 
     if dump_kind == "nsp":
-        _run_hactool(hactool, keys, "-t", "pfs0", f"--pfs0dir={work_dir}", str(dump),
-                     title_keys=title_keys)
+        container_result = _run_hactool(
+            hactool, keys, "-t", "pfs0", f"--pfs0dir={work_dir}", str(dump),
+            title_keys=title_keys)
     else:  # xci
         # `--securedir=` is the "actual game NCAs" partition. The XCI also
         # has a "normal" partition (mostly metadata) and an optional
         # "update" partition (FW deltas); we don't need either.
-        _run_hactool(hactool, keys, "-t", "xci", f"--securedir={work_dir}", str(dump),
-                     title_keys=title_keys)
+        container_result = _run_hactool(
+            hactool, keys, "-t", "xci", f"--securedir={work_dir}", str(dump),
+            title_keys=title_keys)
+    if container_result.section_corrupt_lines:
+        # Section-corrupt at the container layer is rare but plausible — the
+        # PFS0/HFS0 metadata hashes can fail on heavily modified dumps. Don't
+        # exit here; the NCA pick below will fail naturally if the work_dir
+        # is empty, and we want the corruption diagnostic to come from the
+        # NCA→RomFS step where the user can act on it.
+        print("[hactool] container reported section corruption; continuing "
+              "(NCA extraction will surface the real diagnostic)",
+              file=sys.stderr, flush=True)
 
     # Derive the title key from the .tik so we don't depend on a populated
     # title.keys. We always do this (rather than only as a fallback after a
@@ -557,8 +592,24 @@ def extract_romfs(
     program_nca = ncas[0]
     print(f"[romfs] program NCA: {program_nca.name} ({program_nca.stat().st_size/(1<<30):.2f} GB)",
           file=sys.stderr)
-    _run_hactool(hactool, keys, "-t", "nca", f"--romfsdir={romfs_dir}",
-                 *titlekey_args, str(program_nca), title_keys=title_keys)
+    romfs_result = _run_hactool(
+        hactool, keys, "-t", "nca", f"--romfsdir={romfs_dir}",
+        *titlekey_args, str(program_nca), title_keys=title_keys)
+    if romfs_result.section_corrupt_lines:
+        # hactool's IVFC check is over every 16KB block of the RomFS — a
+        # single bad block flips this even though hactool already wrote the
+        # extracted files to disk. We need only ~4 small files; if those
+        # extracted intact, the broader corruption is irrelevant. Defer the
+        # verdict to oead's parsing in main()'s try-block (which catches the
+        # exception and surfaces the actionable "re-dump" message).
+        joined = "\n  ".join(romfs_result.section_corrupt_lines)
+        print(
+            f"[romfs] hactool flagged section corruption:\n  {joined}\n"
+            "[romfs] this is a strict whole-section hash check; we only need\n"
+            "[romfs] ~4 SZS/MSBT files. Continuing — oead parsing will be the\n"
+            "[romfs] real integrity check.",
+            file=sys.stderr, flush=True,
+        )
 
     shutil.rmtree(work_dir, ignore_errors=True)
 
@@ -904,7 +955,24 @@ def main(argv: list[str] | None = None) -> int:
                       title_keys=title_keys)
         romfs = args.romfs_cache
 
-    resolved, review = extract(romfs)
+    try:
+        resolved, review = extract(romfs)
+    except Exception as e:
+        # Any parse failure here on a freshly-extracted romfs almost always
+        # means the source NSP/XCI was damaged — hactool's "section X is
+        # corrupted" warning (which we tolerate during extraction; see
+        # extract_romfs) is the most common upstream signal but a clean
+        # decrypt of a corrupt SZS would land here too. Surface an
+        # actionable diagnostic instead of letting oead's low-level error
+        # leak through.
+        return _fail(
+            f"failed to parse RomFS files ({type(e).__name__}: {e}).\n"
+            "  This usually means the dump is damaged, truncated, or has\n"
+            "  been modified (e.g. a trimmed NSP, an incomplete download,\n"
+            "  or an XCI→NSP conversion that broke section hashes).\n"
+            "  Re-dump SMO 1.0.0 with NXDumpTool from a clean retail source\n"
+            "  and rerun the extract."
+        )
     write_outputs(resolved, review, args.out, args.review)
 
     s = review.stats
@@ -919,7 +987,17 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  apworld unhit:      {s['apworld_unhit']}")
     print(f"review report:        {args.review}")
 
-    cap_entries, cap_review = extract_captures(romfs)
+    try:
+        cap_entries, cap_review = extract_captures(romfs)
+    except Exception as e:
+        # Same rationale as the moons extract() above — convert oead's
+        # low-level parse error into a "your dump is damaged" diagnostic.
+        return _fail(
+            f"failed to parse capture data ({type(e).__name__}: {e}).\n"
+            "  This usually means the dump is damaged, truncated, or has\n"
+            "  been modified. Re-dump SMO 1.0.0 with NXDumpTool from a\n"
+            "  clean retail source and rerun the extract."
+        )
     args.cap_out.parent.mkdir(parents=True, exist_ok=True)
     args.cap_out.write_text(json.dumps(cap_entries, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     args.cap_review.write_text(json.dumps(cap_review, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
