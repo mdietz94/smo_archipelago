@@ -56,8 +56,17 @@ SYMBOLS = [
     "_ZN2al21getStageMessageStringEPKNS_17IUseMessageSystemEPKcS4_",
     "_ZN2rs28tryShowCapMessagePriorityLowEPKN2al18IUseSceneObjHolderEPKcii",
     "_ZN2rs18isActiveCapMessageEPKN2al18IUseSceneObjHolderE",
-    # (M-color uses inline patches at fixed offsets inside Shine::init,
-    # not a symbol hook — see hooks/ShineAppearanceHook.cpp.)
+    # M-color (2026-05-20 rewrite): Shine::init trampoline + material-
+    # parameter override via al::set*MaterialParameter*. al::isExistModel
+    # is the null-safe model-keeper presence probe required before any
+    # other model-touching call (the rest of these crash on actors whose
+    # mModelKeeper is null — see Cascade scenario-reload crash 2026-05-20).
+    "_ZN5Shine4initERKN2al13ActorInitInfoE",
+    "_ZN2al23setMaterialProgrammableEPNS_9LiveActorE",
+    "_ZN2al29setModelMaterialParameterRgbaEPKNS_9LiveActorEPKcS4_RKN4sead7Color4fE",
+    "_ZN2al28setModelMaterialParameterF32EPKNS_9LiveActorEPKcS4_f",
+    "_ZN2al15isExistMaterialEPKNS_9LiveActorEPKc",
+    "_ZN2al12isExistModelEPKNS_9LiveActorE",
     # M6 phase D — moon-deposit debit (AP credit decremented on Odyssey toss).
     # Hook the GameDataFunction wrappers (not the inlined GameDataFile
     # members) — Phase 0 confirmed GameDataFile::addPayShine(s32) is fully

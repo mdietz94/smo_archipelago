@@ -143,10 +143,12 @@ using SetModelMaterialParameterRgbaFn = void (*)(
 using SetModelMaterialParameterF32Fn  = void (*)(
     const void* actor, const char* mat, const char* param, float v);
 using IsExistMaterialFn               = bool (*)(const void* actor, const char* name);
+using IsExistModelFn                  = bool (*)(const void* actor);
 SetMaterialProgrammableFn       s_setMaterialProgrammable       = nullptr;
 SetModelMaterialParameterRgbaFn s_setModelMaterialParameterRgba = nullptr;
 SetModelMaterialParameterF32Fn  s_setModelMaterialParameterF32  = nullptr;
 IsExistMaterialFn               s_isExistMaterial               = nullptr;
+IsExistModelFn                  s_isExistModel                  = nullptr;
 
 // Write the same tint into the gated + the ungated parameter slots that
 // the shine shader is known to sample. Each shine variant (uncollected,
@@ -197,6 +199,16 @@ HOOK_DEFINE_TRAMPOLINE(ShineInitColorOverride) {
             smoap::ap::ApState::instance().getShinePalette(unique_id);
         if (pal == smoap::ap::ApState::kNoPaletteOverride) return;
         const std::size_t pal_idx = pal < 5 ? pal : 0;
+
+        // Required model-presence guard. Some Shine::init paths complete
+        // without allocating mModelKeeper — confirmed for the linked-Shine
+        // inside AppearSwitchTimer when re-entering Cascade after the
+        // first multi-moon (scenario reload spawns the already-collected
+        // shine as a stub). isExistMaterial, setMaterialProgrammable, and
+        // setModelMaterialParameter* all deref the model keeper without a
+        // null check and crash. isExistModel is the canonical null-safe
+        // probe (used the same way in OdysseyDecomp's AppearSwitchTimer).
+        if (s_isExistModel == nullptr || !s_isExistModel(self)) return;
 
         const char* mat_name = shineMaterialNameForType(shine_type);
 
@@ -259,6 +271,8 @@ void installShineAppearanceHook() {
                   s_setModelMaterialParameterF32, "setModelMaterialParameterF32");
     resolveSymbol(smoap::sym::kAlIsExistMaterial,
                   s_isExistMaterial, "isExistMaterial");
+    resolveSymbol(smoap::sym::kAlIsExistModel,
+                  s_isExistModel, "isExistModel");
 
     if (s_setMaterialProgrammable != nullptr &&
         s_setModelMaterialParameterRgba != nullptr) {

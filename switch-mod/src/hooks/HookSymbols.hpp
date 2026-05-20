@@ -364,6 +364,17 @@ inline constexpr const char* kAlSetModelMaterialParameterF32 =
 inline constexpr const char* kAlIsExistMaterial =
     "_ZN2al15isExistMaterialEPKNS_9LiveActorEPKc";
 
+// al::isExistModel(const LiveActor*) — null-safe model-keeper presence
+// probe. Required GUARD before any model-touching call (isExistMaterial,
+// setMaterialProgrammable, setModelMaterialParameter*) — those derefs
+// mModelKeeper unconditionally and crash if the actor hasn't allocated
+// its model. Hit during Cascade reload after the first multi-moon: an
+// already-collected linked-Shine inside an AppearSwitchTimer is init'd
+// by rs::tryInitLinkShine without a model archive. OdysseyDecomp uses
+// this same probe in AppearSwitchTimer/CapTargetInfo for the same reason.
+inline constexpr const char* kAlIsExistModel =
+    "_ZN2al12isExistModelEPKNS_9LiveActorE";
+
 // =============================================================================
 // M7 Path A — fork-cinematic kingdom-order gate (two-layer architecture).
 // =============================================================================
