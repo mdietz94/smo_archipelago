@@ -428,7 +428,7 @@ TIMEOUT_RETURNCODE = 124
 # output from ninja" is a much sharper signal of deadlock than "an hour
 # of wall-clock". Bumped upward when a step has known long-silence
 # phases (extract: hactool decrypts ~5 GB of NCAs silently; build:
-# devkitA64's C++ template instantiations can compile for minutes
+# clang's C++ template instantiations can compile for minutes
 # without printing anything).
 _TIMEOUTS = {
     # Extractor needs to bootstrap a Python 3.12 venv on first run

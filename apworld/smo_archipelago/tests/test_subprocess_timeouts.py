@@ -12,7 +12,7 @@ On timeout the child is SIGTERM'd, then SIGKILL'd after 5s of
 non-cooperation, and the function returns BuildResult(ok=False,
 returncode=TIMEOUT_RETURNCODE=124, log=...). Tests use the host
 Python as a stand-in subprocess so they run cross-platform without
-needing devkitPro/hactool installed.
+needing the cross-compile toolchain or hactool installed.
 """
 
 from __future__ import annotations

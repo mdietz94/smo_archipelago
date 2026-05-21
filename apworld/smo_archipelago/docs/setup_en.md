@@ -4,7 +4,7 @@
 
 - A modded Nintendo Switch running Super Mario Odyssey 1.0.0 (FW 21.x with Atmosphere CFW), **or** an emulator.
 - A Windows PC on the same LAN as the Switch.
-- Archipelago + Python 3.12 + devkitPro + devkitA64 + CMake + Ninja + hactool + your Switch's `prod.keys` (XCI cartridge dumps also need `title.keys`).
+- Archipelago + Python 3.12 + LLVM 19 + WinLibs (mingw64) + CMake + Ninja + hactool + your Switch's `prod.keys` (XCI cartridge dumps also need `title.keys`). The setup wizard installs LLVM 19 and WinLibs for you if they're missing.
 
 See [`docs/first-time-setup.md`](https://github.com/mdietz94/smo_archipelago/blob/main/docs/first-time-setup.md) for the full prerequisite table with install links.
 
