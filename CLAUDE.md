@@ -70,7 +70,7 @@ The client owns AP-protocol complexity (websocket + deflate + TLS + reconnect, a
 
 ## Status
 
-Shipped as v0.1.x-alpha (see `git tag`). All planned milestones (M0 through M7) are complete and a real-Switch deploy has been validated end-to-end. The PopTracker pack ships alongside the apworld zip on every tagged release. M8 polish is partial — Cappy speech-bubble notifications shipped in place of an ImGui overlay, and per-classification moon recolor now covers all three shine variants (3D / 2D ShineDot / ShineGrand) via a `Shine::init` post-trampoline that writes the tint directly into the body material; uncapture-animation cleanup remains. Deep per-milestone narratives — including the exact provenance of every wire-protocol decision and the failed-iteration history — live in [docs/milestones.md](docs/milestones.md). The original implementation plan at `C:\Users\maxwe\.claude\plans\after-much-work-i-tender-thompson.md` is retained for historical reference.
+Shipped as v0.1.x-alpha (see `git tag`). All planned milestones (M0 through M7) are complete and a real-Switch deploy has been validated end-to-end. The PopTracker pack ships alongside the apworld zip on every tagged release. M8 polish is partial — Cappy speech-bubble notifications shipped in place of an ImGui overlay, per-classification moon recolor now covers all three shine variants (3D / 2D ShineDot / ShineGrand) via a `Shine::init` post-trampoline that writes the tint directly into the body material, and the M7 deny path was retimed 2026-05-20 to gate on `PlayerHackKeeper::isActiveHackStartDemo` (releases the moment the dive-in cinematic ends, no fixed delay) with `tryEscapeHack` for inanimate captures (no actor despawn). Deep per-milestone narratives — including the exact provenance of every wire-protocol decision and the failed-iteration history — live in [docs/milestones.md](docs/milestones.md). The original implementation plan at `C:\Users\maxwe\.claude\plans\after-much-work-i-tender-thompson.md` is retained for historical reference.
 
 Pattern invariants worth knowing even without reading the milestone narratives:
 
@@ -204,7 +204,13 @@ For anything not covered by a skill, [docs/milestones.md](docs/milestones.md) is
 ## Partial / deferred work for a future iteration
 
 - **HELLO `cap_table_hash` field** is empty — would close the Switch↔apworld cap-table drift detection loop. Hash the generated `capture_table.h` and compare on connect.
-- **Cleaner uncapture animation (M7 polish).** `PlayerHackKeeper::forceKillHack` despawns the captured enemy actor; the visual is jarring on big captures like T-Rex. Researched alternatives (`rs::endHack`, `PlayerHackKeeper::endHack`) carry non-trivial risk; see [docs/milestones.md#m7-phase-a--capture-lock](docs/milestones.md#m7-phase-a--capture-lock).
+<!-- 2026-05-20: M7 uncapture polish resolved — demo-end gate + tryEscapeHack
+     split for the 7 inanimate caps eliminated the fixed-delay timer tables
+     and the actor-despawn pop on those caps. See docs/milestones.md M7
+     phase A 2026-05-20 update. forceKillHack is still used for caps with
+     active intro state machines (T-Rex et al) since that's the failure
+     mode endHack/tryEscapeHack can't safely handle. -->
+
 - **`getGotShineNum` semantics quirk.** Per OdysseyDecomp the int param is `file_id` (save slot, default -1), not a world id — the function returns global lifetime collected from that slot, and SMO's per-kingdom HUD uses a different (inlined field-access) path. Our hook returns `sumAllKingdomCredits()` so AP credit lands correctly in save-slot summary contexts. Kingdom-progression gating ended up handled by M7 Path A's substitution hooks rather than an explicit AP-driven unlock; `unlockWorld`/`ItemKind::Kingdom` were dropped 2026-05-18.
 - **Dedicated AP-credit overlay.** M6 phase A's `getCurrentShineNum`/`getGotShineNum` hooks return AP-credit-only counts so the natural HUD shows AP credit — visually weird because a locally collected moon doesn't bump the counter even though the shine appears in the shine list. Cappy speech bubbles smoothed most of this, but a dedicated ImGui-style AP overlay (à la lunakit devgui) would be cleaner.
 

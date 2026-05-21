@@ -208,28 +208,33 @@ public:
     bool goal_sent = false;
     bool synthetic_grant_this_frame = false;
 
-    // M7: set immediately before we invoke PlayerHackKeeper::forceKillHack
-    // from the deferred-kill tick. Defense-in-depth — today nothing observes
-    // the kill, but if a future hook lands on the post-cancel path it can
-    // check this flag and skip outbound reporting so we don't echo a
-    // synthetic "Mario un-captured" event back to AP.
+    // M7: set immediately before we invoke the deferred capture-release
+    // (PlayerHackKeeper::forceKillHack or tryEscapeHack) from the deferred-
+    // kill tick. Defense-in-depth — today nothing observes the kill, but if
+    // a future hook lands on the post-cancel path it can check this flag and
+    // skip outbound reporting so we don't echo a synthetic "Mario un-captured"
+    // event back to AP.
     bool synthetic_uncapture_this_frame = false;
 
-    // M7 deferred kill — CaptureStartHook's deny branch sets these instead of
-    // calling forceKillHack inline; smoap::hooks::tickPendingUncapture()
-    // drains them from drawMain ~1s later. The delay serves two purposes:
-    //   (1) cancel/forceKillHack appears to be a no-op when invoked from
-    //       inside startHack — playtest 2026-05-16 showed cancelHack ran
-    //       cleanly but Mario stayed captured. By the time the hack demo has
-    //       run its course, the keeper is in a state where teardown sticks.
+    // M7 deferred kill — CaptureStartHook's deny branch sets this instead of
+    // calling the release inline; smoap::hooks::tickPendingUncapture() drains
+    // it from drawMain after PlayerHackKeeper::isActiveHackStartDemo() returns
+    // false (i.e. the capture-entry "dive in" cinematic has ended). The gate
+    // serves two purposes:
+    //   (1) firing inline from startHack is a no-op — the hack state machine
+    //       hasn't fully entered the dive-in demo yet, so cancelHack /
+    //       forceKillHack don't actually release Mario in that window
+    //       (playtest 2026-05-16). Polling isActiveHackStartDemo per frame
+    //       (matches the gate KGamer77's SuperMarioOdysseyArchipelago uses in
+    //       Mod/source/main.cpp:73) catches the earliest safe moment.
     //   (2) it's funnier UX — the player runs around as the captured enemy
-    //       for a beat before being yanked back to Mario.
-    // Both fields touched only from the frame thread (CaptureStartHook fires
-    // inline from game code during frame processing, drawMain runs there
-    // too). Atomic for paranoid cross-frame visibility / consistency with
-    // the surrounding state fields.
+    //       for the duration of the dive-in cinematic before being yanked
+    //       back to Mario.
+    // Touched only from the frame thread (CaptureStartHook fires inline from
+    // game code during frame processing, drawMain runs there too). Atomic
+    // for paranoid cross-frame visibility / consistency with the surrounding
+    // state fields.
     std::atomic<void*> pending_kill_keeper{nullptr};
-    std::atomic<std::int64_t> pending_kill_at_ms{0};
 
     // Set by SaveLoadHook around Orig(initializeData) so the dictionary-
     // write filter (AddHackDictionaryHook) lets SMO rehydrate the

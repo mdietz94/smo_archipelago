@@ -20,11 +20,16 @@ SYMBOLS = [
     "_ZN2al5Scene7endInitERKNS_13ActorInitInfoE",
     "_ZN12GameDataFile11setGotShineEPK9ShineInfo",
     "_ZN16PlayerHackKeeper9startHackEPN2al9HitSensorES2_PNS0_9LiveActorE",
-    # M7: capture lock deny path — forceKillHack runs immediately after
-    # startHack when AP hasn't unlocked the capture. (cancelHack was tried
-    # first but proved to be a no-op when called from within the startHack
-    # callback — see HookSymbols.hpp for the rationale.)
+    # M7: capture lock deny path — forceKillHack runs after the capture-entry
+    # cinematic ends (gated on isActiveHackStartDemo) when AP hasn't unlocked
+    # the capture. tryEscapeHack is the gentler release used for the 7
+    # inanimate captures (Cactus, BazookaElectric, Tree, RockForest,
+    # Guidepost, Manhole, HackFork) that have no intro state machine.
+    # (cancelHack was tried first but proved to be a no-op when called from
+    # within the startHack callback — see HookSymbols.hpp for the rationale.)
     "_ZN16PlayerHackKeeper13forceKillHackEv",
+    "_ZN16PlayerHackKeeper13tryEscapeHackEv",
+    "_ZNK16PlayerHackKeeper21isActiveHackStartDemoEv",
     "_ZN12GameDataFile17setMainScenarioNoEi",
     "_ZN12GameDataFile14initializeDataEv",
     # M6: shine-counter hooks (HUD substitution for AP credit display).
