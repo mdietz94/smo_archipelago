@@ -2,7 +2,13 @@ set(LINKFLAGS -nodefaultlibs)
 set(LLDFLAGS --no-demangle --gc-sections)
 
 set(OPTIMIZE_OPTIONS_DEBUG -O2 -gdwarf-4)
-set(OPTIMIZE_OPTIONS_RELEASE -O3 -ffast-math -flto)
+# Conservative codegen — -O3 + -ffast-math + -flto with LLVM 19 emits
+# aggressive instruction sequences (vectorized atomics, SIMD math) that
+# ARMeilleure (Ryujinx's JIT) may mistranslate, producing 0xC0000005
+# faults during long-running gameplay. Production exlaunch builds with
+# older devkitA64 + libstdc++ at -O2 and doesn't hit this. Re-enable
+# aggressive flags after Ryujinx parity is proven on real Switch.
+set(OPTIMIZE_OPTIONS_RELEASE -O2 -fno-strict-aliasing)
 set(WARN_OPTIONS -Werror=return-type -Wno-invalid-offsetof)
 
 set(INCLUDES include)
