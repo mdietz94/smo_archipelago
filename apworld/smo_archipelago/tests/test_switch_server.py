@@ -1643,3 +1643,128 @@ async def _drain_messages(reader: asyncio.StreamReader, n: int, timeout: float) 
 
     await asyncio.wait_for(_pump(), timeout=timeout)
     return out
+
+
+# ---------- Talkatoo% pool clear-on-dropout (Phase 5) ----------
+
+
+@pytest.mark.asyncio
+async def test_talkatoo_pool_clears_dropped_kingdoms():
+    """Phase 5 follow-up: when a kingdom drops out of set_talkatoo_pool
+    between pushes (e.g. cursor advanced past the kingdom's last entry,
+    or the seed swapped), the bridge must ship an empty-moons clear so
+    the Switch's ApState::talkatoo_pools[bit] doesn't retain stale data.
+
+    Without the clear, Talkatoo would keep re-suggesting moons from the
+    last-shipped pool (which by then are all collected for case-1, or
+    belong to a different seed for case-2).
+    """
+    state = BridgeState()
+    sw = SwitchServer("127.0.0.1", 0, state,
+                      on_check=lambda _msg: None,
+                      on_goal=lambda: None)
+
+    sent: list[dict] = []
+
+    async def fake_send(msg):
+        sent.append(msg)
+
+    sw._send = fake_send  # type: ignore[assignment]
+
+    # First push: Cascade + Sand each get 3 entries.
+    sw.set_talkatoo_pool(True, {
+        "Cascade": ["A", "B", "C"],
+        "Sand": ["X", "Y", "Z"],
+    })
+    await sw.push_talkatoo_pool()
+    talkatoo_messages_1 = [m for m in sent if m.t == "talkatoo_pool"]
+    assert len(talkatoo_messages_1) == 2
+    assert {m.kingdom for m in talkatoo_messages_1} == {"Cascade", "Sand"}
+    # All non-empty.
+    assert all(m.moons for m in talkatoo_messages_1)
+    sent.clear()
+
+    # Second push: Sand has been exhausted (cursor past end → window empty
+    # → kingdom dropped from build). Only Cascade in the new dict.
+    sw.set_talkatoo_pool(True, {"Cascade": ["A", "B", "C"]})
+    await sw.push_talkatoo_pool()
+    talkatoo_messages_2 = [m for m in sent if m.t == "talkatoo_pool"]
+    # Two messages: a clear for Sand, then the Cascade push.
+    assert len(talkatoo_messages_2) == 2
+    sand_msg = next(m for m in talkatoo_messages_2 if m.kingdom == "Sand")
+    assert sand_msg.moons == []
+    assert sand_msg.enabled is True
+    cascade_msg = next(m for m in talkatoo_messages_2 if m.kingdom == "Cascade")
+    assert cascade_msg.moons == ["A", "B", "C"]
+
+
+@pytest.mark.asyncio
+async def test_talkatoo_pool_no_redundant_clears():
+    """When the same kingdoms appear in two consecutive pushes, the
+    bridge must NOT send spurious clear messages — just the per-kingdom
+    pool. Wire traffic stays minimal."""
+    state = BridgeState()
+    sw = SwitchServer("127.0.0.1", 0, state,
+                      on_check=lambda _msg: None,
+                      on_goal=lambda: None)
+
+    sent: list[dict] = []
+
+    async def fake_send(msg):
+        sent.append(msg)
+
+    sw._send = fake_send  # type: ignore[assignment]
+
+    sw.set_talkatoo_pool(True, {"Cascade": ["A", "B", "C"]})
+    await sw.push_talkatoo_pool()
+    sent.clear()
+
+    # Cursor advanced — same kingdom, different contents.
+    sw.set_talkatoo_pool(True, {"Cascade": ["B", "C", "D"]})
+    await sw.push_talkatoo_pool()
+    talkatoo_messages = [m for m in sent if m.t == "talkatoo_pool"]
+    # Exactly one message — the Cascade update. No spurious clear.
+    assert len(talkatoo_messages) == 1
+    assert talkatoo_messages[0].kingdom == "Cascade"
+    assert talkatoo_messages[0].moons == ["B", "C", "D"]
+
+
+@pytest.mark.asyncio
+async def test_talkatoo_disable_resets_tracker():
+    """When the bridge sends a `enabled=False` disable message, the
+    Switch wipes its entire Talkatoo state. The bridge's tracker should
+    forget too — so a subsequent re-enable doesn't try to clear kingdoms
+    the Switch already forgot about (would be a no-op on the Switch
+    but burns wire bandwidth)."""
+    state = BridgeState()
+    sw = SwitchServer("127.0.0.1", 0, state,
+                      on_check=lambda _msg: None,
+                      on_goal=lambda: None)
+
+    sent: list[dict] = []
+
+    async def fake_send(msg):
+        sent.append(msg)
+
+    sw._send = fake_send  # type: ignore[assignment]
+
+    sw.set_talkatoo_pool(True, {"Cascade": ["A"], "Sand": ["X"]})
+    await sw.push_talkatoo_pool()
+    sent.clear()
+
+    # Disable.
+    sw.set_talkatoo_pool(False, {})
+    await sw.push_talkatoo_pool()
+    disable_messages = [m for m in sent if m.t == "talkatoo_pool"]
+    assert len(disable_messages) == 1
+    assert disable_messages[0].enabled is False
+    assert sw._talkatoo_ever_shipped == set()
+    sent.clear()
+
+    # Re-enable with one kingdom — no spurious clears for Sand because
+    # the disable wiped Switch-side state already.
+    sw.set_talkatoo_pool(True, {"Cascade": ["A", "B"]})
+    await sw.push_talkatoo_pool()
+    talkatoo_messages = [m for m in sent if m.t == "talkatoo_pool"]
+    assert len(talkatoo_messages) == 1
+    assert talkatoo_messages[0].kingdom == "Cascade"
