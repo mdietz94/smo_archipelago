@@ -90,16 +90,10 @@ public:
     // when tryPump fires), the wallclock counter blocks if the game runs
     // faster than 60fps in catch-up mode. The MAX of the two is correct in
     // both cases.
-    // 1800 frames (~30s @ 60fps effective) + 30s wallclock. Production
-    // exlaunch uses 600/10s and works on real Switch + Ryujinx. Hakkun
-    // build hits a Ryujinx ARMeilleure crash at the dispatch path with
-    // 600/10s — likely an LLVM-19 codegen pattern the JIT mistranslates
-    // (gcc-built production avoids it). Tripling the settle window gives
-    // SMO's SceneObjHolder generous time to register under GPU stress.
-    // Worst case visible cost: 30s delay before the first balloon shows
-    // after a scene transition. Items queue cleanly in the meantime.
-    static constexpr std::uint32_t kSceneSettleFrames = 1800;
-    static constexpr std::int64_t  kSceneSettleMs     = 30000;
+    // RVPROBE: small settle to reach the dispatch path quickly. 600/10s
+    // matches production exlaunch.
+    static constexpr std::uint32_t kSceneSettleFrames = 600;
+    static constexpr std::int64_t  kSceneSettleMs     = 10000;
 
     // On-screen duration. Passed as the THIRD positional arg to
     // rs::tryShowCapMessagePriorityLow (which the decompiler signature

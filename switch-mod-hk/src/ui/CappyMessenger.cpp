@@ -138,11 +138,20 @@ void CappyMessenger::tryPump(const void* scene) {
         const bool frames_ok = settle_frames_ >= kSceneSettleFrames;
         const bool time_ok   = elapsed_ms     >= kSceneSettleMs;
         if (!frames_ok || !time_ok) {
-            // No log here; phase 19's stable build had the gate-body log
-            // silenced and we may be re-introducing the JIT trigger with
-            // a frame-rate log call here.
             return;
         }
+    }
+
+    static bool s_logged_gate_lift = false;
+    if (!s_logged_gate_lift) {
+        s_logged_gate_lift = true;
+        SMOAP_LOG_INFO("[cappy-rvprobe] gate LIFTED (frames=%u, wallclock=%lld ms); "
+                       "scene=%p s_tryShow=%p s_isActive=%p",
+                       static_cast<unsigned>(settle_frames_),
+                       static_cast<long long>(smoap::ap::ApState::nowMs() - scene_change_ms_),
+                       scene,
+                       reinterpret_cast<void*>(s_tryShow),
+                       reinterpret_cast<void*>(s_isActive));
     }
 
     // Don't rotate the buffer while a balloon is on screen — SMO is reading
@@ -160,15 +169,12 @@ void CappyMessenger::tryPump(const void* scene) {
         SMOAP_LOG_INFO("[cappy] balloon released; buffer free");
     }
 
-    // Idle pre-flight isActive check: this is the FIRST call into rs::
-    // territory for a brand-new dispatch. Bracket with DEBUG logs — this
-    // runs every frame while items are queued and CapMessage is busy, so
-    // INFO would flood the sink and the wire-forward path. The meaningful
-    // transitions (`dispatched`, `dropping head after N frames`, `balloon
-    // released`) are logged at INFO separately.
-    SMOAP_LOG_DEBUG("[cappy] >> isActive(scene=%p) [pre-flight]", scene);
+    // Idle pre-flight isActive check. RVPROBE: upgraded brackets to INFO so
+    // the next crash log shows whether the trigger is before, inside, or
+    // after this indirect call.
+    SMOAP_LOG_INFO("[cappy-rvprobe] >> isActive(scene=%p)", scene);
     const bool nintendo_active = s_isActive(scene);
-    SMOAP_LOG_DEBUG("[cappy] << isActive returned %d", nintendo_active);
+    SMOAP_LOG_INFO("[cappy-rvprobe] << isActive returned %d", nintendo_active);
 
     // If isActive is true for any *other* reason (Nintendo CapMessage in
     // flight), back off to next frame. Also bump retry counter so a stuck
