@@ -27,7 +27,7 @@ See [`docs/first-time-setup.md`](docs/first-time-setup.md) for the full prereq t
 1. **Download `meatballs.apworld`** from the [Releases page](../../releases).
 2. **Drop it into your Archipelago install's `custom_worlds/`** directory.
 3. **Open the Archipelago Launcher and click "SMO Client"** in the Clients list.
-4. **Run `/setup`** in the SMO Client command bar. The setup wizard walks you through prereq checks → SMO NSP pick → moon/capture extraction → your PC's LAN IP → Switch-mod compile → deploy to SD card (or Ryujinx). You only need to do this **once per machine** (or again if your PC's LAN IP changes, or after upgrading to a new SMO Archipelago release).
+4. **Run `/setup`** in the SMO Client command bar. The setup wizard walks you through prereq checks → SMO NSP pick → moon/capture extraction → Switch-mod compile → deploy to SD card (or Ryujinx). You only need to do this **once per machine** (or again after upgrading to a new SMO Archipelago release). Your PC's LAN IP is auto-detected and baked in as a fallback; runtime UDP discovery handles routine IP changes automatically.
 5. **Boot SMO.** The mod loads on game start and dials your PC every couple seconds until SMO Client is listening.
 6. **Join a multiworld.** Type the host/port and your slot name into the Connect bar in SMO Client and click *Connect* — exactly like any other Archipelago client.
 
@@ -135,9 +135,11 @@ rebuild-vs-no-rebuild matrix.
 
 ### Changing your PC's LAN IP
 
-**Does require a rebuild** (the IP is baked into the Switch module at
-compile time — retail Switch firmware can't read runtime config from SD).
-Type `/setup` in SMO Client to re-run the wizard.
+**Usually handled automatically.** The Switch mod probes for SMO Client
+over UDP on every boot (loopback → LAN broadcast → baked-in fallback), so
+a new DHCP lease or moving between LANs typically Just Works. Only re-run
+`/setup` if UDP discovery is blocked on your new network (firewall,
+corporate LAN) AND the baked-in fallback IP is no longer reachable.
 
 ## Credits
 

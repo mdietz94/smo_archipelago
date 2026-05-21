@@ -60,11 +60,10 @@ back-and-forth:
 
 > ⚠️ **Why so many tools?** SMO Archipelago is "play your own Switch", not
 > "play an emulated ROM". The mod that talks to AP runs inside SMO on the
-> Switch itself, which means it has to be cross-compiled per-user with the
-> LAN IP of your PC (where SMO Client runs) baked in. Pre-built binaries
-> can't ship because they'd incorporate Nintendo SDK derivations. The
-> wizard automates as much of the build as it can, but the toolchain
-> itself has to live on your machine.
+> Switch itself, which means it has to be cross-compiled per-user.
+> Pre-built binaries can't ship because they'd incorporate Nintendo SDK
+> derivations. The wizard automates as much of the build as it can, but
+> the toolchain itself has to live on your machine.
 
 ## The flow
 
@@ -80,9 +79,9 @@ to it, exactly like every other AP client.
 3. **Open the Archipelago Launcher and click "SMO Client"** in the Clients
    list. The SMO Client window opens.
 4. **Type `/setup` in the SMO Client command bar.** The setup wizard opens
-   in a fresh window. This is also how you re-run the wizard later (LAN
-   IP change, apworld update, switching deploy targets) — SMO Client
-   never auto-spawns the wizard.
+   in a fresh window. This is also how you re-run the wizard later
+   (apworld update, switching deploy targets) — SMO Client never
+   auto-spawns the wizard.
 5. **Walk the wizard.** Seven pages, in order:
    1. Welcome — read the overview.
    2. Prerequisites — wizard checks the table above; click "Install..." for
@@ -127,9 +126,10 @@ to it, exactly like every other AP client.
 
 Joining additional multiworlds works exactly like every other Archipelago
 client — open SMO Client from the Archipelago Launcher and connect. The
-wizard does not need to run again unless your PC's LAN IP changes or you
-upgrade to a new SMO Archipelago release; run `/setup` from the SMO Client
-command bar in those cases.
+wizard does not need to run again unless you upgrade to a new SMO
+Archipelago release (or, rarely, if your network blocks the runtime UDP
+discovery and the baked-in fallback IP no longer matches your PC). Run
+`/setup` from the SMO Client command bar in those cases.
 
 ## Troubleshooting
 
@@ -189,5 +189,6 @@ Remove-Item -Recurse -Force "$env:APPDATA\SMOArchipelago"
 Or, from inside a running SMO Client, type `/setup` in the command bar —
 that spawns the wizard in a fresh window without wiping anything; the
 wizard's pages remember what's already been done so you can re-run only
-the steps you actually changed (e.g. only the PC-IP and Build pages
-if you just moved to a new LAN).
+the steps you actually changed (e.g. only the Build and Deploy pages if
+you're rebuilding to refresh the fallback IP after UDP discovery turned
+out to be blocked).
