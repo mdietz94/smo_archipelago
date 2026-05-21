@@ -146,6 +146,7 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
     from kivy.uix.checkbox import CheckBox
     from kivy.uix.gridlayout import GridLayout
     from kivy.uix.label import Label
+    from kivy.uix.popup import Popup
     from kivy.uix.progressbar import ProgressBar
     from kivy.uix.screenmanager import Screen, ScreenManager
     from kivy.uix.scrollview import ScrollView
@@ -296,6 +297,32 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
         root = BoxLayout(orientation="vertical", padding=20, spacing=12)
         root.add_widget(_h1("Prerequisites"))
 
+        # Mode toggle: "auto" silently installs missing prereqs via winget
+        # / direct installer; "manual" surfaces today's install-page links
+        # and Browse buttons. Both modes share the underlying detector +
+        # winget-path probing, so a manual-mode user who runs `winget
+        # install` in a separate terminal still has Re-check turn rows
+        # green without restarting the wizard. Default to auto; persist
+        # the choice across wizard restarts.
+        persisted_mode = saved_state.get("prereq_mode", "auto")
+        mode_state: dict[str, str] = {"mode": persisted_mode}
+        mode_row = BoxLayout(orientation="horizontal", size_hint_y=None,
+                             height=40, spacing=8)
+        auto_cb = CheckBox(group="prereq_mode",
+                           active=(persisted_mode == "auto"),
+                           size_hint_x=None, width=30)
+        mode_row.add_widget(auto_cb)
+        mode_row.add_widget(_label(
+            "Install them for me (recommended)",
+            size_hint_x=None, width=300,
+        ))
+        manual_cb = CheckBox(group="prereq_mode",
+                             active=(persisted_mode == "manual"),
+                             size_hint_x=None, width=30)
+        mode_row.add_widget(manual_cb)
+        mode_row.add_widget(_label("I'll install them myself"))
+        root.add_widget(mode_row)
+
         rows_box = BoxLayout(orientation="vertical", spacing=4, size_hint_y=None)
         rows_box.bind(minimum_height=rows_box.setter("height"))
         scroller = ScrollView()
@@ -303,6 +330,9 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
         root.add_widget(scroller)
 
         next_btn_holder: dict[str, Any] = {}
+        # Hold the most-recent results so a mode change can re-render
+        # without re-running the detectors (which can take ~1 s).
+        render_state: dict[str, Any] = {"last_results": []}
 
         def open_picker_for(r: PrereqResult) -> None:
             """Open the native file dialog for the given prereq via
@@ -324,8 +354,119 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
                 save_setup_state(state)
             do_check()
 
+        def run_installer_popup(keys: list[str], *, preflight: bool) -> None:
+            """Spawn a worker thread that runs `_setup.installers` for the
+            given prereq keys, streaming output into a modal popup.
+
+            `preflight=True` runs `check_internet` (always) and `check_winget`
+            (if any winget-installable key is in the batch) before kicking
+            off the first installer. Used by the "Install all missing"
+            button. Per-row Auto-install bypasses preflight to keep the
+            single-tool case snappy."""
+            log_widget = TextInput(text="", readonly=True, size_hint=(1, 1))
+            popup_box = BoxLayout(orientation="vertical", spacing=8)
+            popup_box.add_widget(log_widget)
+            close_btn = Button(text="Installing... (close button enabled when done)",
+                               size_hint_y=None, height=40, disabled=True)
+            popup_box.add_widget(close_btn)
+            popup = Popup(
+                title=f"Installing {', '.join(keys)}",
+                content=popup_box,
+                size_hint=(0.9, 0.85),
+                auto_dismiss=False,
+            )
+            close_btn.bind(on_release=lambda _i: popup.dismiss())
+            popup.open()
+
+            log_lines: list[str] = []
+
+            def append_log(line: str) -> None:
+                log_lines.append(line)
+                if len(log_lines) > 2000:
+                    del log_lines[:1000]
+                log_widget.text = "\n".join(log_lines[-400:])
+
+            def on_line(line: str) -> None:
+                from kivy.clock import Clock as _Clock
+                _Clock.schedule_once(lambda dt: append_log(line))
+
+            def worker() -> None:
+                # Lazy-import installers — pulls in urllib + ctypes + the
+                # GitHub-API JSON parser, none of which the apworld layer
+                # should drag onto a headless gen host.
+                from .installers import (
+                    INSTALLERS, check_internet, check_winget,
+                )
+                if preflight:
+                    on_line("[wizard] preflight: checking internet...")
+                    r = check_internet(on_line)
+                    if not r.ok:
+                        on_line("[wizard] preflight failed; aborting.")
+                        from kivy.clock import Clock as _Clock
+                        _Clock.schedule_once(
+                            lambda dt: (
+                                setattr(close_btn, "disabled", False),
+                                setattr(close_btn, "text", "Close (install failed)"),
+                            ),
+                        )
+                        return
+                    if any(k in {"cmake", "ninja", "python312"} for k in keys):
+                        on_line("[wizard] preflight: checking winget...")
+                        r = check_winget(on_line)
+                        if not r.ok:
+                            on_line("[wizard] preflight failed; aborting.")
+                            from kivy.clock import Clock as _Clock
+                            _Clock.schedule_once(
+                                lambda dt: (
+                                    setattr(close_btn, "disabled", False),
+                                    setattr(close_btn, "text", "Close (install failed)"),
+                                ),
+                            )
+                            return
+                any_failed = False
+                for key in keys:
+                    fn = INSTALLERS.get(key)
+                    if fn is None:
+                        on_line(f"[wizard] no installer registered for {key!r}; skipping")
+                        continue
+                    on_line(f"[wizard] === starting installer for {key!r} ===")
+                    try:
+                        result = fn(on_line)
+                    except Exception as e:  # pragma: no cover — surface to UI
+                        import traceback
+                        on_line(f"[wizard] installer for {key!r} crashed: "
+                                f"{type(e).__name__}: {e}")
+                        on_line(traceback.format_exc())
+                        any_failed = True
+                        break
+                    on_line(
+                        f"[wizard] installer {key!r}: ok={result.ok} "
+                        f"detail={result.detail!r}"
+                    )
+                    if not result.ok:
+                        any_failed = True
+                        on_line(f"[wizard] stopping install run after {key!r} failure")
+                        break
+                on_line("[wizard] === install run complete; re-running prereq check ===")
+                from kivy.clock import Clock as _Clock
+
+                def finish(_dt):
+                    close_btn.disabled = False
+                    close_btn.text = (
+                        "Close" if not any_failed
+                        else "Close (some installs failed — see log above)"
+                    )
+                    # Always re-check after install regardless of failure —
+                    # rows that DID succeed still need their green flip.
+                    do_check()
+                _Clock.schedule_once(finish)
+
+            threading.Thread(target=worker, daemon=True).start()
+
         def render(results: list[PrereqResult]) -> None:
+            render_state["last_results"] = results
             rows_box.clear_widgets()
+            current_mode = mode_state["mode"]
             for r in results:
                 row = BoxLayout(orientation="horizontal", size_hint_y=None, height=36, spacing=8)
                 mark = "[color=00aa00][b]OK[/b][/color]" if r.ok else "[color=cc0000][b]X[/b][/color]"
@@ -338,10 +479,26 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
                     row.add_widget(pick)
                 else:
                     row.add_widget(Label(text="", size_hint_x=0.1))
-                if not r.ok and r.install_url:
-                    link = Button(text="Install...", size_hint_x=0.1)
-                    link.bind(on_release=lambda _i, url=r.install_url: webbrowser.open(url))
-                    row.add_widget(link)
+                # Mode-dependent action button: Auto-install in auto mode
+                # (when the detector is auto-installable), Install link in
+                # manual mode or as a fallback when no auto-install path
+                # exists. The Browse button above is mode-independent —
+                # users can still drop a hand-installed binary into place.
+                if not r.ok:
+                    if current_mode == "auto" and r.auto_installable:
+                        auto_btn = Button(text="Auto-install", size_hint_x=0.1)
+                        auto_btn.bind(
+                            on_release=lambda _i, key=r.key: run_installer_popup(
+                                [key], preflight=False,
+                            ),
+                        )
+                        row.add_widget(auto_btn)
+                    elif r.install_url:
+                        link = Button(text="Install...", size_hint_x=0.1)
+                        link.bind(on_release=lambda _i, url=r.install_url: webbrowser.open(url))
+                        row.add_widget(link)
+                    else:
+                        row.add_widget(Label(text="", size_hint_x=0.1))
                 else:
                     row.add_widget(Label(text="", size_hint_x=0.1))
                 rows_box.add_widget(row)
@@ -405,8 +562,49 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
 
             threading.Thread(target=worker, daemon=True).start()
 
+        # "Install all missing" — auto mode only. Disabled (greyed out) in
+        # manual mode so the UI element stays visible (users can see it
+        # exists, understand what auto-mode would give them) without
+        # accidentally firing it.
+        def on_install_all_missing(_i) -> None:
+            from .installers import INSTALL_ORDER
+            results = render_state.get("last_results", [])
+            failed_keys = {
+                r.key for r in results if not r.ok and r.auto_installable
+            }
+            ordered = [k for k in INSTALL_ORDER if k in failed_keys]
+            if not ordered:
+                wizard_log("Install all missing: no failed auto-installable rows")
+                return
+            wizard_log(f"Install all missing: {ordered}")
+            run_installer_popup(ordered, preflight=True)
+
+        install_all_btn = Button(
+            text="Install all missing (requires UAC consent for devkitPro; ~700 MB total)",
+            size_hint_y=None, height=40,
+            disabled=(persisted_mode != "auto"),
+        )
+        install_all_btn.bind(on_release=on_install_all_missing)
+        root.add_widget(install_all_btn)
+
         recheck.bind(on_release=lambda _i: do_check())
         root.add_widget(recheck)
+
+        def on_mode_change(_inst, _val) -> None:
+            new_mode = "auto" if auto_cb.active else "manual"
+            if new_mode == mode_state["mode"]:
+                return
+            mode_state["mode"] = new_mode
+            state = load_setup_state()
+            state["prereq_mode"] = new_mode
+            save_setup_state(state)
+            install_all_btn.disabled = (new_mode != "auto")
+            # Re-render without re-running detectors so button swap is
+            # instant. The cached results are still authoritative because
+            # a mode change doesn't affect detection.
+            render(render_state.get("last_results", []))
+        auto_cb.bind(active=on_mode_change)
+        manual_cb.bind(active=on_mode_change)
 
         nav, _, next_btn = _nav_row(lambda: goto("welcome"), lambda: goto("nsp"))
         next_btn.disabled = True

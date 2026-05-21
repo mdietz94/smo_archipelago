@@ -20,8 +20,9 @@ Subsequent runs skip 1-2 if the venv and RomFS cache already exist (~5 s total).
 
 Prereqs the user must have:
   - Python 3.12 on the `py` launcher (`winget install -e --id Python.Python.3.12`)
-  - hactool on PATH or at C:/Users/maxwe/Desktop/Switch/hactool.exe
-  - prod.keys at C:/Users/maxwe/.switch/prod.keys (override with --keys)
+  - hactool on PATH, or at %APPDATA%/SMOArchipelago/bundled/hactool.exe
+    (where the setup wizard's auto-installer drops it), or explicitly via --hactool
+  - prod.keys at ~/.switch/prod.keys (override with --keys)
   - SMO 1.0.0 NSP **or** XCI file (override location with --nsp / --xci)
   - For XCI dumps: title.keys *alongside* prod.keys (i.e. derived from
     --keys's parent dir) with the SMO entry. Override the auto-derived
@@ -39,6 +40,7 @@ print(f"[extract] script invoked: __file__={__file__!r}", file=sys.stderr, flush
 print(f"[extract] python={sys.executable!r} argv={sys.argv!r}", file=sys.stderr, flush=True)
 
 import argparse
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -49,7 +51,20 @@ VENV_PY = VENV_DIR / "Scripts" / "python.exe"
 
 DEFAULT_NSP = Path(r"C:\Users\maxwe\Desktop\Switch\SMO_1.0.0.nsp")
 DEFAULT_KEYS = Path.home() / ".switch" / "prod.keys"
-DEFAULT_HACTOOL_FALLBACK = Path(r"C:\Users\maxwe\Desktop\Switch\hactool.exe")
+# The wizard's auto-install path drops hactool.exe at this location
+# (`_setup.installers.install_hactool` writes here; `_setup.prereqs.
+# bundled_hactool_path()` is the single source of truth). Keeping the
+# fallback in sync means a direct CLI invocation of this script without
+# `--hactool` Just Works on a machine where the wizard ran. The wizard
+# itself always passes `--hactool` explicitly from setup_state.json, so
+# this constant only matters for hand-invoked runs.
+_APPDATA = os.environ.get("APPDATA")
+if _APPDATA:
+    DEFAULT_HACTOOL_FALLBACK = Path(_APPDATA) / "SMOArchipelago" / "bundled" / "hactool.exe"
+else:
+    DEFAULT_HACTOOL_FALLBACK = (
+        Path.home() / ".local" / "share" / "SMOArchipelago" / "bundled" / "hactool.exe"
+    )
 DEFAULT_ROMFS_CACHE = REPO_ROOT / ".romfs-cache"
 DEFAULT_OUT = REPO_ROOT / "bridge" / "smo_ap_bridge" / "data" / "shine_map.json"
 DEFAULT_REVIEW = REPO_ROOT / "bridge" / "smo_ap_bridge" / "data" / "shine_map_review.json"

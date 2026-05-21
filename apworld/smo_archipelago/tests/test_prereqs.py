@@ -48,25 +48,58 @@ def fake_run(monkeypatch):
 
 # ---------- check_python312 ----------
 
-def test_python312_found_via_py_launcher(fake_run) -> None:
+def test_python312_found_via_py_launcher(fake_run, monkeypatch) -> None:
+    monkeypatch.setattr(prereqs, "_winget_python312_commands", lambda: [])
     fake_run({"py -3.12 --version": (0, "Python 3.12.7\n", "")})
     r = check_python312()
     assert r.ok
     assert "3.12.7" in r.detail
+    assert r.auto_installable
 
 
-def test_python312_falls_back_to_python312_command(fake_run) -> None:
+def test_python312_falls_back_to_python312_command(fake_run, monkeypatch) -> None:
+    monkeypatch.setattr(prereqs, "_winget_python312_commands", lambda: [])
     fake_run({"python3.12 --version": (0, "Python 3.12.3\n", "")})
     r = check_python312()
     assert r.ok
     assert "3.12.3" in r.detail
 
 
-def test_python312_missing(fake_run) -> None:
+def test_python312_missing(fake_run, monkeypatch) -> None:
+    monkeypatch.setattr(prereqs, "_winget_python312_commands", lambda: [])
     fake_run({})
     r = check_python312()
     assert not r.ok
     assert r.install_url.startswith("https://")
+    assert r.auto_installable
+
+
+def test_python312_found_at_winget_path_even_when_not_on_path(
+    monkeypatch, tmp_path, fake_run,
+) -> None:
+    """Counterpart to the Ninja winget-path test: a manual-mode user
+    `winget install Python.Python.3.12`s in a separate terminal,
+    clicks Re-check, and gets a green row without restarting the
+    wizard. The deterministic path also prepends to PATH so the
+    extract step's `_python_invoker` finds `py.exe` for bare-name
+    `shutil.which("py")` lookup."""
+    launcher_dir = tmp_path / "Programs" / "Python" / "Launcher"
+    launcher_dir.mkdir(parents=True)
+    py_exe = launcher_dir / "py.exe"
+    py_exe.write_text("")
+    monkeypatch.setattr(
+        prereqs, "_winget_python312_commands",
+        lambda: [[str(py_exe), "-3.12", "--version"]],
+    )
+    fake_run({f"{py_exe} -3.12 --version": (0, "Python 3.12.7\n", "")})
+    monkeypatch.setenv("PATH", "")
+
+    r = check_python312()
+    assert r.ok
+    assert "3.12.7" in r.detail
+    assert str(py_exe) in r.detail
+    import os
+    assert str(launcher_dir) in os.environ["PATH"].split(os.pathsep)
 
 
 # ---------- check_devkitpro ----------
@@ -306,10 +339,19 @@ def test_cmake_rejects_msys2_path_fallback(monkeypatch, fake_run) -> None:
     # beneath the row — losing it from the note would silently degrade the
     # error from "here's the fix" back to "go figure out CMake yourself".
     assert "winget install Kitware.CMake" in r.note
-    assert "CLOSE and REOPEN" in r.note, (
-        "PATH-refresh reminder is critical: winget finishes, user clicks "
-        "Re-check, wizard still sees msys2 cmake because the running "
-        "process inherited the old PATH"
+    # The note must point the user at the wizard's auto-install path OR
+    # explain that the wizard now probes the install dir directly (no
+    # shell restart needed). Earlier versions of the note relied on a
+    # "CLOSE and REOPEN this app" reminder because the wizard couldn't
+    # see winget-installed cmake without a PATH refresh; that's no
+    # longer true now that `_CMAKE_DEFAULT_PATHS` is probed ahead of PATH.
+    note_lower = r.note.lower()
+    assert ("auto-install" in note_lower
+            or "probes" in note_lower
+            or "no shell restart" in note_lower), (
+        "note must surface either the auto-install path or the direct-probe "
+        "fact so the user knows their remediation options without a wizard "
+        f"restart. got: {r.note!r}"
     )
     assert prereqs.resolved_cmake() == "cmake", (
         "no working cmake was found, so resolved_cmake() should fall "
@@ -326,23 +368,60 @@ def test_resolved_cmake_defaults_to_bare_name_when_check_not_run(monkeypatch) ->
 
 # ---------- check_ninja ----------
 
-def test_ninja_present(fake_run) -> None:
+def test_ninja_present(fake_run, monkeypatch) -> None:
+    # No winget-deterministic install — fall through to PATH probe.
+    monkeypatch.setattr(prereqs, "_winget_ninja_paths", lambda: [])
     fake_run({"ninja --version": (0, "1.12.1\n", "")})
     r = check_ninja()
     assert r.ok
     assert "1.12.1" in r.detail
+    assert r.auto_installable
 
 
-def test_ninja_missing(fake_run) -> None:
+def test_ninja_missing(fake_run, monkeypatch) -> None:
+    monkeypatch.setattr(prereqs, "_winget_ninja_paths", lambda: [])
     fake_run({})
     r = check_ninja()
     assert not r.ok
-    # The Windows-easy install path and the restart-after-install
-    # reminder must be load-bearing in the failure surface: PATH
-    # changes don't reach an already-running wizard process, so
-    # silently dropping either string would make Ninja a UX dead-end.
+    assert r.auto_installable
+    # The Windows-easy install path must be load-bearing in the failure
+    # surface; the Auto-install reminder is the new equivalent of the
+    # earlier restart-reminder (we no longer require a wizard restart
+    # because the detector probes the winget install dir directly).
     assert "winget install Ninja-build.Ninja" in r.note
-    assert "REOPEN" in r.note or "reopen" in r.note.lower()
+    assert "Auto-install" in r.note or "auto-install" in r.note.lower()
+
+
+def test_ninja_found_at_winget_path_even_when_not_on_path(
+    monkeypatch, tmp_path, fake_run,
+) -> None:
+    """Regression test for the one-click-installer flow: a manual-mode
+    user runs `winget install Ninja-build.Ninja` in a separate terminal,
+    then clicks Re-check in the wizard. Without the deterministic-path
+    probe, the wizard's already-running process has a stale PATH and
+    `_safe_run(["ninja", "--version"])` returns "not found" even though
+    winget just installed it. With the probe, the row turns green
+    immediately and the parent dir gets prepended to PATH so the
+    downstream `cmake --build` step finds ninja too."""
+    # Fake winget install dir with ninja.exe.
+    pkg_dir = tmp_path / "Ninja-build.Ninja_winget_x64"
+    pkg_dir.mkdir(parents=True)
+    ninja = pkg_dir / "ninja.exe"
+    ninja.write_text("")
+    monkeypatch.setattr(prereqs, "_winget_ninja_paths", lambda: [ninja])
+    fake_run({f"{ninja} --version": (0, "1.12.1\n", "")})
+    # Explicitly empty PATH — proves the detector doesn't need the dir
+    # on PATH to find the binary.
+    monkeypatch.setenv("PATH", "")
+
+    r = check_ninja()
+    assert r.ok, f"detector should find ninja at winget path; detail={r.detail!r}"
+    assert "1.12.1" in r.detail
+    assert str(ninja) in r.detail
+    # Side effect: parent dir must have been prepended to PATH for
+    # downstream subprocess invocations (cmake's bare-name `ninja` spawn).
+    import os
+    assert str(pkg_dir) in os.environ["PATH"].split(os.pathsep)
 
 
 # ---------- check_hactool ----------

@@ -70,6 +70,14 @@ class PrereqResult:
     invocations + the build / extract subprocesses can pick it up. Useful
     for tools that aren't really "installed" on Windows (hactool — a
     bare .exe most users drop into a folder of their choosing).
+
+    `auto_installable` opts the row into the wizard's auto-install path
+    (the "Install them for me" mode). The wizard's installer registry
+    (`_setup.installers`) maps `key` → install function; setting True here
+    tells the wizard to render an "Auto-install" button instead of just
+    the "Install page..." link. Detectors with no silent-install path
+    (notably prod.keys — the user has to dump from their own hardware)
+    leave this False.
     """
     key: str
     name: str
@@ -84,6 +92,7 @@ class PrereqResult:
     # changes don't reach an already-running process so the wizard needs
     # to be restarted after installing.
     note: str = ""
+    auto_installable: bool = False
 
 
 def _run(cmd: list[str], *, timeout: float = 10.0) -> tuple[int, str, str]:
@@ -119,6 +128,47 @@ def _safe_run(cmd: list[str]) -> tuple[int, str, str] | None:
         return (1, "", "timeout")
 
 
+def _winget_python312_commands() -> list[list[str]]:
+    """`--version` invocations for Python at winget's deterministic install
+    paths.
+
+    `winget install Python.Python.3.12` lands py.exe at
+    `%LOCALAPPDATA%/Programs/Python/Launcher/py.exe` and the 3.12
+    interpreter itself at `%LOCALAPPDATA%/Programs/Python/Python312/python.exe`.
+    Neither dir lands on PATH for an already-running process, so a
+    manual-mode user who runs winget in their terminal and clicks
+    Re-check would otherwise still see "not found" until they restart
+    the wizard. Probing these paths directly fixes that.
+    """
+    localapp = os.environ.get("LOCALAPPDATA")
+    if not localapp:
+        return []
+    cmds: list[list[str]] = []
+    py = Path(localapp) / "Programs" / "Python" / "Launcher" / "py.exe"
+    if py.is_file():
+        cmds.append([str(py), "-3.12", "--version"])
+    python = Path(localapp) / "Programs" / "Python" / "Python312" / "python.exe"
+    if python.is_file():
+        cmds.append([str(python), "--version"])
+    return cmds
+
+
+def _prepend_path(dir_path: Path) -> None:
+    """Prepend `dir_path` to `os.environ["PATH"]` for the current process.
+
+    Used after a detector resolves a tool via a winget-deterministic path
+    that isn't on PATH yet — downstream subprocess invocations (cmake →
+    ninja, extract → py.exe) need to find the tool by bare name. Mirrors
+    `check_devkitpro`'s os.environ mutation pattern. Mutation is process-
+    local; nothing persists to the user's environment.
+    """
+    cur = os.environ.get("PATH", "")
+    s = str(dir_path)
+    if s in cur.split(os.pathsep):
+        return
+    os.environ["PATH"] = s + os.pathsep + cur if cur else s
+
+
 def check_python312() -> PrereqResult:
     """Python 3.12 launcher availability.
 
@@ -126,10 +176,31 @@ def check_python312() -> PrereqResult:
     a Python 3.12 venv because `oead` (the BYML/MSBT parser) has no wheel
     for Python 3.13+. The wizard inherits this requirement.
 
-    On Windows we look for the `py -3.12` launcher first (standard on a
-    full Python install), and fall back to plain `python3.12` for users
-    whose installer didn't register the launcher.
+    Probe order:
+      1. winget's deterministic install paths (`%LOCALAPPDATA%/Programs/
+         Python/{Launcher/py.exe, Python312/python.exe}`). Lets a
+         manual-mode user run `winget install Python.Python.3.12` in a
+         separate terminal and immediately hit Re-check without
+         restarting the wizard.
+      2. `py -3.12` on PATH (standard on a full Python install).
+      3. Plain `python3.12` for users whose installer didn't register
+         the launcher.
+
+    Side effect: when a winget-deterministic path resolves, its parent dir
+    is prepended to `os.environ["PATH"]` so the build step's bare-name
+    `shutil.which("py")` lookup finds it without a shell restart.
     """
+    for cmd in _winget_python312_commands():
+        r = _safe_run(cmd)
+        if r is None:
+            continue
+        rc, out, err = r
+        if rc == 0:
+            _prepend_path(Path(cmd[0]).parent)
+            ver = (out + err).strip()
+            return PrereqResult("python312", "Python 3.12", True,
+                                f"{ver} ({cmd[0]})",
+                                auto_installable=True)
     for cmd in (["py", "-3.12", "--version"], ["python3.12", "--version"]):
         r = _safe_run(cmd)
         if r is None:
@@ -137,12 +208,14 @@ def check_python312() -> PrereqResult:
         rc, out, err = r
         if rc == 0:
             ver = (out + err).strip()
-            return PrereqResult("python312", "Python 3.12", True, ver)
+            return PrereqResult("python312", "Python 3.12", True, ver,
+                                auto_installable=True)
     return PrereqResult(
         "python312", "Python 3.12", False,
         "not found (the moon/capture extractor needs Python 3.12 because "
         "`oead` has no 3.13 wheel)",
         INSTALL_URLS["python312"],
+        auto_installable=True,
     )
 
 
@@ -216,6 +289,7 @@ def check_devkitpro() -> PrereqResult:
         "devkitpro", "devkitPro / devkitA64", False,
         f"aarch64-none-elf-g++ not found at any of: {'; '.join(tried)}",
         INSTALL_URLS["devkitpro"],
+        auto_installable=True,
     )
 
 
@@ -228,11 +302,13 @@ def _verify_devkitpro_gxx(gxx: Path, root: str) -> PrereqResult:
         return PrereqResult(
             "devkitpro", "devkitPro / devkitA64", True,
             f"{root} ({first_line})",
+            auto_installable=True,
         )
     return PrereqResult(
         "devkitpro", "devkitPro / devkitA64", False,
         f"DEVKITPRO={root}; binary exists but failed to run --version",
         INSTALL_URLS["devkitpro"],
+        auto_installable=True,
     )
 
 
@@ -341,6 +417,7 @@ def check_cmake() -> PrereqResult:
         return PrereqResult(
             "cmake", f"CMake {MIN_CMAKE[0]}.{MIN_CMAKE[1]}+", True,
             f"{ver[0]}.{ver[1]}.{ver[2]} ({cand})",
+            auto_installable=True,
         )
 
     # Nothing usable — emit a failure detail that's specific to what we
@@ -362,12 +439,12 @@ def check_cmake() -> PrereqResult:
                 "(`C:\\…` → `/cwd/C:/…`) and breaks the switch-mod build. "
                 "Easiest install on Windows:\n"
                 "    winget install Kitware.CMake\n"
-                "Or use the MSI from cmake.org/download (the Install... "
-                "button on the right). Then CLOSE and REOPEN this app "
-                "before re-checking. Windows only refreshes PATH for "
-                "newly-spawned processes, so an already-running wizard "
-                "won't see the new install."
+                "Or click Auto-install above if you've switched to "
+                "\"Install them for me\" mode. The wizard probes the MSI's "
+                "canonical install location directly on Re-check, so no "
+                "shell restart is needed after winget finishes."
             ),
+            auto_installable=True,
         )
     r = _safe_run(["cmake", "--version"])
     if r is None or r[0] != 0:
@@ -375,6 +452,7 @@ def check_cmake() -> PrereqResult:
             "cmake", f"CMake {MIN_CMAKE[0]}.{MIN_CMAKE[1]}+", False,
             "not found on PATH",
             INSTALL_URLS["cmake"],
+            auto_installable=True,
         )
     ver = _parse_cmake_version(r[1] or r[2])
     if ver is None:
@@ -382,16 +460,51 @@ def check_cmake() -> PrereqResult:
             "cmake", f"CMake {MIN_CMAKE[0]}.{MIN_CMAKE[1]}+", False,
             "found, but couldn't parse `cmake --version` output",
             INSTALL_URLS["cmake"],
+            auto_installable=True,
         )
     return PrereqResult(
         "cmake", f"CMake {MIN_CMAKE[0]}.{MIN_CMAKE[1]}+", False,
         f"{ver[0]}.{ver[1]}.{ver[2]} too old (need "
         f"{MIN_CMAKE[0]}.{MIN_CMAKE[1]}+)",
         INSTALL_URLS["cmake"],
+        auto_installable=True,
     )
 
 
+def _winget_ninja_paths() -> list[Path]:
+    """Probe winget's deterministic install location for Ninja.
+
+    `winget install Ninja-build.Ninja` drops the binary at
+    `%LOCALAPPDATA%/Microsoft/WinGet/Packages/Ninja-build.Ninja_*/ninja.exe`
+    (the trailing `_*` is winget's source/architecture tag, currently
+    e.g. `Microsoft.Winget.Source_8wekyb3d8bbwe`). Probing this directly
+    before the bare-name PATH lookup means a manual-mode user can pop
+    Re-check immediately after `winget install` without restarting the
+    wizard's shell.
+    """
+    localapp = os.environ.get("LOCALAPPDATA")
+    if not localapp:
+        return []
+    base = Path(localapp) / "Microsoft" / "WinGet" / "Packages"
+    if not base.is_dir():
+        return []
+    return sorted(base.glob("Ninja-build.Ninja_*/ninja.exe"))
+
+
 def check_ninja() -> PrereqResult:
+    # Try the winget-deterministic path first so a manual-mode user
+    # whose terminal PATH is stale still gets a green row on Re-check.
+    # Side effect: prepends the dir to PATH so cmake's bare-name `ninja`
+    # spawn inside `cmake --build` finds it without a shell restart.
+    for candidate in _winget_ninja_paths():
+        r = _safe_run([str(candidate), "--version"])
+        if r is None or r[0] != 0:
+            continue
+        _prepend_path(candidate.parent)
+        ver = (r[1] or r[2]).strip()
+        return PrereqResult("ninja", "Ninja", True,
+                            f"{ver} ({candidate})",
+                            auto_installable=True)
     r = _safe_run(["ninja", "--version"])
     if r is None or r[0] != 0:
         return PrereqResult(
@@ -401,31 +514,46 @@ def check_ninja() -> PrereqResult:
             note=(
                 "Easiest install on Windows:\n"
                 "    winget install Ninja-build.Ninja\n"
-                "Then CLOSE and REOPEN this app before re-checking. "
-                "Windows only refreshes PATH for newly-spawned processes, "
-                "so an already-running wizard won't see Ninja even after "
-                "winget finishes."
+                "Or click Auto-install above if you've switched to "
+                "\"Install them for me\" mode. The wizard now also probes "
+                "winget's install dir directly on Re-check, so if you "
+                "run winget yourself in a separate terminal you no "
+                "longer need to restart the wizard for it to be picked up."
             ),
+            auto_installable=True,
         )
     ver = (r[1] or r[2]).strip()
-    return PrereqResult("ninja", "Ninja", True, ver)
+    return PrereqResult("ninja", "Ninja", True, ver, auto_installable=True)
+
+
+def bundled_hactool_path() -> Path:
+    """Where the wizard's auto-installer writes hactool, and where the
+    extractor's fallback constant points. Single source of truth so the
+    installer + the detector + the extractor agree."""
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        return Path(appdata) / "SMOArchipelago" / "bundled" / "hactool.exe"
+    return Path.home() / ".local" / "share" / "SMOArchipelago" / "bundled" / "hactool.exe"
 
 
 def check_hactool(override_path: Path | None = None) -> PrereqResult:
     """`hactool` for unpacking the user's SMO NSP during map extraction.
 
     The extractor script (`scripts/extract_shine_map.py`) calls hactool
-    to extract program NCA → RomFS. It is NOT bundled (Switch-tooling
-    license + the extractor already accepts an explicit `--hactool` path
-    override).
+    to extract program NCA → RomFS. Auto-mode users get it from a wizard
+    download into `%APPDATA%/SMOArchipelago/bundled/`; manual-mode users
+    can still drop their own .exe wherever they like and point the
+    "Browse..." button at it.
 
     Detection order:
       1. `override_path` if provided (typically read from
          setup_state.json's `hactool_path` key — set when the user
          pointed the wizard's "Browse..." button at a hactool.exe).
-      2. PATH lookup via `shutil.which`.
+      2. The wizard's bundled cache location (`%APPDATA%/SMOArchipelago/
+         bundled/hactool.exe`) — populated by `installers.install_hactool`.
+      3. PATH lookup via `shutil.which`.
 
-    Fails open (returns not-ok with picker_label set) when neither works,
+    Fails open (returns not-ok with picker_label set) when none work,
     so the wizard can surface a "Browse..." button. hactool is unusual
     among our prereqs because Windows users don't typically "install" it
     — they download a single .exe and drop it somewhere of their choosing
@@ -436,13 +564,24 @@ def check_hactool(override_path: Path | None = None) -> PrereqResult:
             return PrereqResult(
                 "hactool", "hactool", True,
                 f"{override_path} (user-picked)",
+                auto_installable=True,
             )
-        # Fall through to PATH lookup — the persisted path may have moved
-        # since the user picked it; we should not silently lock them out.
+        # Fall through to bundled / PATH lookup — the persisted path may
+        # have moved since the user picked it; we should not silently
+        # lock them out.
+
+    bundled = bundled_hactool_path()
+    if bundled.is_file():
+        return PrereqResult(
+            "hactool", "hactool", True,
+            f"{bundled} (auto-installed)",
+            auto_installable=True,
+        )
 
     exe = shutil.which("hactool") or shutil.which("hactool.exe")
     if exe:
-        return PrereqResult("hactool", "hactool", True, exe)
+        return PrereqResult("hactool", "hactool", True, exe,
+                            auto_installable=True)
 
     detail = "not found on PATH (needed to extract RomFS from your SMO NSP)"
     if override_path is not None:
@@ -456,6 +595,7 @@ def check_hactool(override_path: Path | None = None) -> PrereqResult:
         INSTALL_URLS["hactool"],
         picker_label="Select hactool executable",
         picker_filter=("hactool*", "*.exe", "*"),
+        auto_installable=True,
     )
 
 
