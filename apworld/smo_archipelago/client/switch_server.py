@@ -1,8 +1,16 @@
 """Asyncio TCP server for the Switch.
 
-One Switch connection at a time (extras are rejected). On HELLO we replay the
-full received-items history and the set of locations already checked, so the
-Switch module always re-applies state idempotently after a reboot.
+Accepts N parallel Switch connections (e.g. real hardware + Ryujinx on
+the same LAN). Exactly one is the "active" Switch at a time — the one
+forwarding telemetry to AP and receiving items / replays. Others are
+parked with a `KickMsg(reason="inactive")` until the user toggles
+active in the SMOClient UI; the previously-active is then KICKed with
+reason="unbound".
+
+On every HELLO (and on every active-toggle), we replay the full
+received-items history and the set of locations already checked, so
+the Switch module always re-applies state idempotently after a reboot
+or after being newly promoted to active.
 """
 
 from __future__ import annotations
@@ -11,16 +19,19 @@ import asyncio
 import logging
 import socket
 import time
+from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 from . import protocol
 from .protocol import (
+    ActivateMsg,
     ApStateMsg,
     CappyMsg,
     CheckedReplayMsg,
     ErrMsg,
     HelloAckMsg,
     ItemMsg,
+    KickMsg,
     KillMsg,
     MoonLabelMsg,
     OutstandingMsg,
@@ -95,6 +106,26 @@ ReconcileItemBuilder = Callable[[int], "ItemMsg | None"]
 # player either checked it live or saw it announced on a previous reconnect).
 # Implemented in SMOContext as `lambda: set(self.locations_checked)`.
 AlreadyCheckedProvider = Callable[[], "set[int]"]
+# UI notification — fired whenever the set of connected Switches OR the
+# active selection changes. Synchronous callback (typically schedules a
+# Kivy refresh on the next polling tick). Wired by SMOContext / gui.py.
+SwitchesChangedHandler = Callable[[], None]
+
+
+@dataclass
+class _SwitchConn:
+    """Per-Switch connection record. One per TCP socket; lifecycle owned
+    by `_handle_client`.
+
+    `writer_lock` serializes writes to this writer specifically (different
+    Switches can be written to in parallel). `hello` retains the parsed
+    HELLO dict for diagnostics + the active-toggle replay path.
+    """
+    device_id: str
+    peer_ip: str
+    writer: asyncio.StreamWriter
+    writer_lock: asyncio.Lock
+    hello: dict
 
 
 def _compare_versions(a: str, b: str) -> int:
@@ -195,21 +226,23 @@ class SwitchServer:
         self._on_switch_ready = on_switch_ready
         self._on_pay_snapshot = on_pay_snapshot
         self._get_outstanding = get_outstanding_entries
-        # SMOClient version baked at apworld build time. Compared at HELLO
-        # against the Switch mod's `mod_ver` field; mismatch -> refuse the
-        # connection with a hello_ack carrying ok=false + err describing
-        # both halves of the version pair. Empty string disables the check
-        # (used by tests that don't care about version policing).
         self._client_ver = client_ver
-        # Default True (fail-safe = current behavior, AP-granted captures
-        # only). SMOContext flips this from slot_data on AP Connected.
         self._capturesanity_enabled = capturesanity_enabled
         self._get_all_captures = get_all_captures
         self._is_ap_ready = is_ap_ready
         self._build_reconcile_cappy_item = build_reconcile_cappy_item
         self._get_already_checked = get_already_checked_loc_ids
-        self._writer: asyncio.StreamWriter | None = None
-        self._writer_lock = asyncio.Lock()
+        # Per-device_id connection registry. Replaces the legacy single
+        # `_writer` slot. Exactly one entry's id is in `_active_device_id`
+        # at any time; that one forwards telemetry to AP and receives
+        # items / replays.
+        self._connections: dict[str, _SwitchConn] = {}
+        self._active_device_id: str | None = None
+        # Notified whenever connections or the active selection changes.
+        # Used by the GUI to refresh the Switches popup. Synchronous —
+        # the callback should not block (typically schedules a Kivy
+        # refresh on the next polling tick).
+        self._on_switches_changed: SwitchesChangedHandler | None = None
         self._server: asyncio.AbstractServer | None = None
         # M6 phase C reconcile — entries buffered when state_end arrived but
         # AP wasn't ready yet (datapackage not loaded → report_check can't
@@ -241,7 +274,8 @@ class SwitchServer:
         self._deathlink_enabled = bool(enabled)
 
     async def push_deathlink_helloack(self) -> None:
-        """Re-send HelloAckMsg with the current `_deathlink_enabled`.
+        """Re-send HelloAckMsg with the current `_deathlink_enabled` to
+        the active Switch.
 
         The Switch's `hello_ack` handler is idempotent for the other fields
         (local_slot, conn=Ready, bridge_connected=true), so a second ack
@@ -250,11 +284,12 @@ class SwitchServer:
         forces a fresh HELLO — and inbound kills would keep being dropped
         by ApState::maybeApplyInboundKill (`if (!deathlink_enabled)` gate).
 
-        No-op when no Switch is attached.
+        No-op when no active Switch is attached.
         """
-        if self._writer is None or self._writer.is_closing():
+        conn = self._active_conn()
+        if conn is None or conn.writer.is_closing():
             return
-        await self._send(HelloAckMsg(
+        await self._send_to_conn(conn, HelloAckMsg(
             ok=True,
             seed=self._state.seed,
             slot=self._state.slot,
@@ -274,18 +309,14 @@ class SwitchServer:
         self._capturesanity_enabled = bool(enabled)
 
     async def push_capturesanity_replay(self) -> None:
-        """Synthesize all-captures-unlocked ItemMsgs for the connected
+        """Synthesize all-captures-unlocked ItemMsgs for the active
         Switch. No-op if capturesanity is enabled (AP-granted captures
-        only) or if no captures provider is wired. Idempotent — the
-        Switch's bit.set() is a no-op on already-set bits, so re-runs
-        across reconnects don't break anything.
+        only), if no captures provider is wired, or if there is no
+        active Switch.
 
-        Called from two paths: (1) the tail of HELLO replay, so a fresh
-        Switch session lands with bits set; (2) SMOContext on AP
-        Connected, so a Switch that already HELLO'd before slot_data
-        arrived (the SNI-style two-stage gate makes this the common
-        case for the first connect) gets unlocked without waiting for
-        the next save-load to force a re-HELLO."""
+        Called from two paths: (1) the tail of HELLO replay (against
+        the active Switch); (2) SMOContext on AP Connected.
+        """
         if self._capturesanity_enabled or self._get_all_captures is None:
             return
         for cap_name, hack_name in self._get_all_captures():
@@ -299,11 +330,38 @@ class SwitchServer:
                 from_="",
             ))
 
+    def set_on_switches_changed(self, cb: SwitchesChangedHandler | None) -> None:
+        """Register a callback fired when the Switches set / active
+        selection changes. Used by the GUI to refresh the selector
+        popup. Synchronous — caller must not block."""
+        self._on_switches_changed = cb
+
+    def _notify_switches_changed(self) -> None:
+        if self._on_switches_changed is None:
+            return
+        try:
+            self._on_switches_changed()
+        except Exception:
+            log.exception("on_switches_changed callback raised")
+
+    def _active_conn(self) -> _SwitchConn | None:
+        if self._active_device_id is None:
+            return None
+        return self._connections.get(self._active_device_id)
+
     def is_connected(self) -> bool:
-        """True iff a Switch is currently attached and the socket is open.
-        Used by SMOContext to gate the AP dial on Switch presence."""
-        w = self._writer
-        return w is not None and not w.is_closing()
+        """True iff an active Switch is currently attached and the socket
+        is open. Used by SMOContext to gate the AP dial on Switch presence.
+        Inactive (registered-but-idle) Switches don't count — the AP slot
+        is bound to the active one only."""
+        conn = self._active_conn()
+        return conn is not None and not conn.writer.is_closing()
+
+    def get_active_device_id(self) -> str | None:
+        return self._active_device_id
+
+    def get_connected_device_ids(self) -> list[str]:
+        return list(self._connections.keys())
 
     async def start(self) -> None:
         self._server = await asyncio.start_server(self._handle_client, self._host, self._port)
@@ -311,29 +369,57 @@ class SwitchServer:
         log.info("switch server listening on %s", addrs)
 
     async def stop(self) -> None:
-        # Close the active Switch connection FIRST. Python 3.12+'s
+        # Close every Switch connection FIRST. Python 3.12+'s
         # Server.wait_closed() waits for both the listener and every active
         # client task to finish; _handle_client is parked in reader.read()
         # so the connection task never returns on its own — the listener
         # closing doesn't kick connected clients. Without this teardown,
-        # a clean window-close hangs forever whenever the Switch (or
-        # Ryujinx) is still connected.
-        async with self._writer_lock:
-            w = self._writer
-            self._writer = None
-        if w is not None:
+        # a clean window-close hangs forever whenever any Switch is still
+        # connected.
+        conns = list(self._connections.values())
+        self._connections.clear()
+        self._active_device_id = None
+        log.info("stop: closing %d Switch connections", len(conns))
+
+        async def _close_one(conn: _SwitchConn) -> None:
             try:
-                w.close()
-                await w.wait_closed()
+                conn.writer.close()
+                # Each connection gets a bounded grace window — a real
+                # Switch over LAN normally ACKs the FIN in <100ms, but a
+                # half-dead emulator NAT or a dropped Wi-Fi link can stall
+                # wait_closed for the full TCP_KEEPALIVE timeout. We'd
+                # rather drop the connection abruptly than block the
+                # entire shutdown path.
+                await asyncio.wait_for(conn.writer.wait_closed(), timeout=1.0)
+            except asyncio.TimeoutError:
+                log.warning(
+                    "stop: %r writer.wait_closed timed out; dropping anyway",
+                    conn.device_id,
+                )
             except Exception:
                 pass
+
+        # Parallel close — sequential `await` per-conn previously meant a
+        # slow peer stacked on top of every faster one. With gather, the
+        # whole bunch takes ~max(per-conn-close) instead of sum().
+        if conns:
+            await asyncio.gather(
+                *(_close_one(c) for c in conns), return_exceptions=True,
+            )
         if self._server is not None:
             self._server.close()
             try:
-                await self._server.wait_closed()
+                # Same defensive timeout — if a _handle_client task is
+                # blocked inside an async callback (e.g. an AP send that
+                # can't drain because the websocket is also shutting down),
+                # waiting forever serves nobody.
+                await asyncio.wait_for(self._server.wait_closed(), timeout=2.0)
+            except asyncio.TimeoutError:
+                log.warning("stop: server.wait_closed timed out")
             except Exception:
                 pass
             self._server = None
+        log.info("stop: done")
 
     # ---- broadcast: bridge -> switch ----
 
@@ -356,7 +442,7 @@ class SwitchServer:
         await self._send(msg)
 
     async def send_outstanding(self, msg: OutstandingMsg) -> None:
-        """Push the derived per-kingdom balance to the Switch.
+        """Push the derived per-kingdom balance to the active Switch.
 
         Called from context.py whenever the inputs to compute_outstanding
         change (Moon item arrival from AP, or PaySnapshotMsg from Switch).
@@ -365,7 +451,7 @@ class SwitchServer:
         await self._send(msg)
 
     async def send_shine_scouts(self, palette: dict[int, int]) -> None:
-        """Push (shine_uid -> palette) to the Switch, chunked.
+        """Push (shine_uid -> palette) to the active Switch, chunked.
 
         Caller is responsible for filtering zero-palette entries if it
         considers them noise; we send everything so the Switch can
@@ -381,119 +467,430 @@ class SwitchServer:
             ]))
 
     async def _send(self, msg: Any) -> None:
-        async with self._writer_lock:
-            w = self._writer
-            if w is None or w.is_closing():
+        """Send to the active Switch. No-op if there is none."""
+        conn = self._active_conn()
+        if conn is None:
+            return
+        await self._send_to_conn(conn, msg)
+
+    async def _send_to_conn(self, conn: _SwitchConn, msg: Any) -> None:
+        async with conn.writer_lock:
+            w = conn.writer
+            if w.is_closing():
                 return
             try:
                 w.write(protocol.encode(msg))
                 await w.drain()
             except (ConnectionResetError, BrokenPipeError):
-                log.warning("switch write failed; closing")
+                log.warning("switch write failed (%s); closing", conn.device_id)
                 try:
                     w.close()
                 except Exception:
                     pass
-                self._writer = None
+
+    # ---- selector ----
+
+    async def set_active(self, device_id: str | None) -> bool:
+        """Promote a connected Switch to active. Returns True on success.
+
+        On rebind: send `KickMsg(reason="unbound")` to the previously-active
+        Switch and run the full post-HELLO replay sequence against the
+        newly-active one (OutstandingMsg + non-Moon ItemMsg backlog +
+        shine palette + ApStateMsg + capturesanity unlocks). Re-fires
+        `_on_switch_ready` so a pending two-stage AP dial (SNI-style)
+        re-engages with the new active.
+
+        device_id=None unbinds the current active (rare; mostly for tests
+        and shutdown paths).
+
+        No-op if device_id is already active, or doesn't correspond to any
+        connected Switch.
+        """
+        if device_id is not None and device_id not in self._connections:
+            log.warning("set_active: unknown device_id %r", device_id)
+            return False
+        if device_id == self._active_device_id:
+            return True
+        old_id = self._active_device_id
+        old_conn = self._connections.get(old_id) if old_id else None
+        new_conn = self._connections.get(device_id) if device_id else None
+
+        # Demote old first so a transient race in the replay path can't
+        # bleed item replays to the wrong Switch.
+        self._active_device_id = device_id
+        self._state.set_active_switch(device_id)
+        if old_conn is not None:
+            await self._send_to_conn(old_conn, KickMsg(reason="unbound"))
+        if new_conn is not None:
+            await self._send_to_conn(new_conn, ActivateMsg())
+            await self._run_post_hello_replay(new_conn)
+        self._notify_switches_changed()
+        return True
 
     # ---- per-connection handler ----
 
+    def _resolve_device_id(self, raw_id: str, peer_ip: str) -> str:
+        """Pick an effective device_id given a HELLO + peer IP.
+
+        Same id + same peer_ip = reconnect (caller will replace the
+        existing entry in `_connections`). Same id + different peer_ip =
+        collision — synthesize a peer-IP-suffixed id so both Switches
+        can coexist in the registry.
+        """
+        existing = self._connections.get(raw_id)
+        if existing is None or existing.peer_ip == peer_ip:
+            return raw_id
+        # Collision — try the peer's last octet first, then the full IP.
+        for tail in (peer_ip.rsplit(".", 1)[-1], peer_ip.replace(".", "-")):
+            candidate = f"{raw_id}-{tail}"
+            other = self._connections.get(candidate)
+            if other is None or other.peer_ip == peer_ip:
+                return candidate
+        return f"{raw_id}-{peer_ip}"
+
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         peer = writer.get_extra_info("peername")
+        peer_ip = peer[0] if peer else "?"
+        # Aggressive TCP keepalive surfaces a dead Wi-Fi link inside
+        # ~10s instead of hanging on the OS-default ~2h. Imported from
+        # main; safe to call on every accepted socket regardless of
+        # whether the connection becomes the active Switch.
         _enable_tcp_keepalive(writer)
-        if self._writer is not None and not self._writer.is_closing():
-            # A Switch Wi-Fi blip can leave us with a half-open writer: the
-            # Switch's TCP layer closed its side, but the FIN never reached
-            # us (link was down at the time), so reader.read() in the old
-            # handler stays parked indefinitely. Without intervention, the
-            # Switch's reconnect attempts would be rejected with ErrMsg(busy)
-            # until our writer eventually surfaces EPIPE on a write attempt.
-            # If the new connection's peer IP matches the existing writer's,
-            # assume the old socket is dead and take over — two distinct
-            # Switches racing for the same SMOClient is so rare we treat
-            # peer-IP match as conclusive evidence of a reconnect.
-            existing_peer = self._writer.get_extra_info("peername")
-            same_host = (
-                peer is not None and existing_peer is not None
-                and peer[0] == existing_peer[0]
-            )
-            if same_host:
-                log.info(
-                    "Switch reconnecting from %s; replacing stale writer (was %s)",
-                    peer, existing_peer,
-                )
-                try:
-                    self._writer.close()
-                except Exception:
-                    pass
-                # Don't await wait_closed — the old handler's reader.read()
-                # will surface EOF and its finally block will tear down. We
-                # null self._writer here so the old finally's
-                # `self._writer is writer` check skips state mutation; the
-                # new handler below claims ownership immediately.
-                self._writer = None
-            else:
-                log.warning(
-                    "rejecting extra Switch connection from %s (one already "
-                    "active from %s)", peer, existing_peer,
-                )
-                try:
-                    writer.write(protocol.encode(ErrMsg(code="busy", ctx="connect")))
-                    await writer.drain()
-                finally:
-                    writer.close()
-                return
+        log.info("switch connecting from %s", peer)
 
-        log.info("switch connected from %s", peer)
-        self._writer = writer
-        self._state.set_switch_conn("connecting")
-
+        # Read until HELLO arrives. Any non-HELLO messages in the same
+        # TCP burst are buffered for re-dispatch after the connection is
+        # registered. In normal operation the Switch waits for HelloAck
+        # before sending anything else, but be defensive.
         buffer = bytearray()
+        hello_msg: dict | None = None
+        leftover_msgs: list[dict] = []
         try:
-            while True:
+            while hello_msg is None:
                 chunk = await reader.read(4096)
                 if not chunk:
-                    log.info("switch disconnected (EOF)")
-                    break
+                    log.info("switch from %s disconnected before HELLO", peer)
+                    try:
+                        writer.close()
+                        await writer.wait_closed()
+                    except Exception:
+                        pass
+                    return
                 buffer.extend(chunk)
                 for line in protocol.iter_lines(buffer):
                     try:
-                        msg = protocol.decode(line)
-                        await self._dispatch(msg)
+                        m = protocol.decode(line)
                     except Exception:
-                        log.exception("error handling message: %r", line[:200])
-                        await self._send(ErrMsg(code="bad_message", ctx="rx"))
+                        log.exception("bad message before HELLO from %s: %r",
+                                      peer, line[:200])
+                        continue
+                    if hello_msg is None and m.get("t") == "hello":
+                        hello_msg = m
+                    else:
+                        leftover_msgs.append(m)
         except (ConnectionResetError, BrokenPipeError):
-            log.info("switch connection reset")
-        finally:
-            # If we've been replaced (same-host takeover above), skip the
-            # state mutation — the new handler has already updated
-            # set_switch_conn to "connecting"/"ready" and a stray
-            # "disconnected" here would flicker the bridge UI.
-            is_active = self._writer is writer
-            if is_active:
-                self._state.set_switch_conn("disconnected")
+            log.info("switch from %s reset before HELLO", peer)
+            return
+
+        # Determine effective device_id and register the connection.
+        raw_id = str(hello_msg.get("device_id") or "").strip()
+        if not raw_id:
+            # Legacy / fallback identifier from peer IP suffix. Stays in
+            # SSO range on the Switch side too.
+            tail = peer_ip.rsplit(".", 1)[-1] if peer_ip else "?"
+            raw_id = f"sw-{tail}"
+        effective_id = self._resolve_device_id(raw_id, peer_ip)
+
+        existing = self._connections.get(effective_id)
+        if existing is not None:
+            # Same-id reconnect: close the previous writer. Its handler
+            # task will see EOF on its reader.read() and tear down in its
+            # own finally block; our registration below replaces the dict
+            # entry so the old finally's identity check skips the
+            # unregister step.
+            log.info(
+                "switch %r reconnecting from %s; replacing previous writer",
+                effective_id, peer,
+            )
+            try:
+                existing.writer.close()
+            except Exception:
+                pass
+
+        conn = _SwitchConn(
+            device_id=effective_id,
+            peer_ip=peer_ip,
+            writer=writer,
+            writer_lock=asyncio.Lock(),
+            hello=hello_msg,
+        )
+        self._connections[effective_id] = conn
+        self._state.register_switch(
+            device_id=effective_id,
+            peer_ip=peer_ip,
+            mod_ver=str(hello_msg.get("mod_ver") or ""),
+            smo_ver=str(hello_msg.get("smo_ver") or ""),
+        )
+
+        # Version policing — apply before auto-bind so a mismatched
+        # connection never becomes active.
+        if not await self._policy_check_version(conn, hello_msg):
+            if self._connections.get(effective_id) is conn:
+                del self._connections[effective_id]
+                self._state.unregister_switch(effective_id)
+                self._notify_switches_changed()
             try:
                 writer.close()
                 await writer.wait_closed()
             except Exception:
                 pass
-            if is_active:
-                self._writer = None
+            return
 
-    async def _dispatch(self, msg: dict) -> None:
+        # Active-slot decision.
+        is_first = self._active_device_id is None
+        if is_first:
+            self._active_device_id = effective_id
+            self._state.set_active_switch(effective_id)
+            self._state.set_switch_conn("connecting")
+            log.info("switch %r connected from %s (active)", effective_id, peer)
+            await self._send_hello_ack(conn)
+            self._state.set_switch_conn("ready")
+            await self._run_post_hello_replay(conn, fire_on_ready=True)
+        else:
+            log.info(
+                "switch %r connected from %s (inactive — active is %r)",
+                effective_id, peer, self._active_device_id,
+            )
+            await self._send_hello_ack(conn)
+            await self._send_to_conn(conn, KickMsg(reason="inactive"))
+        self._notify_switches_changed()
+
+        # Re-dispatch buffered pre-HELLO leftovers (rare).
+        for m in leftover_msgs:
+            try:
+                await self._dispatch_from(conn, m)
+            except Exception:
+                log.exception("error handling buffered pre-HELLO message: %r", m)
+
+        # Main dispatch loop.
+        try:
+            while True:
+                chunk = await reader.read(4096)
+                if not chunk:
+                    log.info("switch %r disconnected (EOF)", effective_id)
+                    break
+                buffer.extend(chunk)
+                for line in protocol.iter_lines(buffer):
+                    try:
+                        msg = protocol.decode(line)
+                        await self._dispatch_from(conn, msg)
+                    except Exception:
+                        log.exception("error handling message: %r", line[:200])
+                        await self._send_to_conn(conn, ErrMsg(code="bad_message", ctx="rx"))
+        except (ConnectionResetError, BrokenPipeError):
+            log.info("switch %r connection reset", effective_id)
+        finally:
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except Exception:
+                pass
+            # Only mutate state if our connection is still the registered
+            # one — a faster reconnect may have already replaced it (see
+            # the `existing is not None` branch above).
+            if self._connections.get(effective_id) is conn:
+                del self._connections[effective_id]
+                self._state.unregister_switch(effective_id)
+                if self._active_device_id == effective_id:
+                    self._active_device_id = None
+                    self._state.set_active_switch(None)
+                    # Auto-promote another connection if any remain. Keeps
+                    # the AP slot bound even when the user is shuffling
+                    # devices.
+                    promoted = next(iter(self._connections), None)
+                    if promoted is not None:
+                        log.info(
+                            "active %r dropped; auto-promoting %r",
+                            effective_id, promoted,
+                        )
+                        await self.set_active(promoted)
+                    else:
+                        self._state.set_switch_conn("disconnected")
+                self._notify_switches_changed()
+
+    async def _policy_check_version(self, conn: _SwitchConn, msg: dict) -> bool:
+        """Refuse the connection on mod_ver / SMOClient mismatch.
+
+        Returns True when the connection is OK to proceed, False when we
+        already sent a HelloAck(ok=false) and the caller should tear down.
+        """
+        mod_ver = str(msg.get("mod_ver") or "")
+        smo_ver = str(msg.get("smo_ver") or "")
+        log.info(
+            "switch HELLO: device=%r mod=%s smo=%s (client=%s)",
+            conn.device_id, mod_ver, smo_ver, self._client_ver or "(unchecked)",
+        )
+        if not (self._client_ver and mod_ver and mod_ver != self._client_ver):
+            return True
+        order = _compare_versions(mod_ver, self._client_ver)
+        if order < 0:
+            advice = (
+                f"Switch mod is older than SMOClient. Re-run /setup to "
+                f"rebuild and redeploy the Switch mod at {self._client_ver}."
+            )
+        elif order > 0:
+            advice = (
+                f"SMOClient is older than Switch mod. Install a later "
+                f"meatballs.apworld into vendor/Archipelago/custom_worlds/ "
+                f"(needs to match {mod_ver})."
+            )
+        else:
+            advice = (
+                f"Re-run /setup to rebuild and redeploy the Switch mod, "
+                f"or install a matching meatballs.apworld."
+            )
+        err = (
+            f"Version mismatch: SMOClient is {self._client_ver}, "
+            f"Switch mod is {mod_ver}. {advice}"
+        )
+        log.error("[version] refusing Switch connection — %s", err)
+        self._state.add_log(f"[version mismatch] {err}")
+        await self._send_to_conn(conn, HelloAckMsg(
+            ok=False,
+            seed=self._state.seed,
+            slot=self._state.slot,
+            cap_table_hash=msg.get("cap_table_hash", ""),
+            deathlink_enabled=self._deathlink_enabled,
+            client_ver=self._client_ver,
+            err=err,
+        ))
+        return False
+
+    async def _send_hello_ack(self, conn: _SwitchConn) -> None:
+        await self._send_to_conn(conn, HelloAckMsg(
+            ok=True,
+            seed=self._state.seed,
+            slot=self._state.slot,
+            cap_table_hash=conn.hello.get("cap_table_hash", ""),
+            deathlink_enabled=self._deathlink_enabled,
+            client_ver=self._client_ver or None,
+        ))
+
+    async def _run_post_hello_replay(
+        self,
+        conn: _SwitchConn,
+        *,
+        fire_on_ready: bool = False,
+    ) -> None:
+        """Replay state to a newly-active Switch.
+
+        Same sequence as the legacy `_on_hello` tail (M6-D outstanding,
+        non-Moon ItemMsg replay, capturesanity flush, shine palette,
+        ApStateMsg). Idempotent — re-running on rebind is safe because
+        OutstandingMsg carries authoritative per-kingdom balance and
+        non-Moon items skip on the mod side via dedupe.
+
+        `fire_on_ready=True` invokes the `_on_switch_ready` callback at
+        the end so a deferred AP dial (SNI-style two-stage gate) promotes.
+        The active-toggle path skips it because AP is typically already
+        up at that point (and `_on_switch_ready` is a no-op when so).
+        """
+        # M6 phase D — push authoritative per-kingdom balance BEFORE the
+        # item replay, but only if compute_outstanding has a reading.
+        if (
+            self._get_outstanding is not None
+            and self._state.compute_outstanding() is not None
+        ):
+            try:
+                entries = self._get_outstanding()
+            except Exception:
+                log.exception("get_outstanding_entries failed during HELLO")
+                entries = []
+            await self._send_to_conn(conn, OutstandingMsg(entries=entries))
+
+        # Replay snapshots so the Switch can re-apply state idempotently.
+        replay_ids = [evt.item for evt in self._state.all_checked_locations()]
+        await self._send_to_conn(conn, CheckedReplayMsg(ids=replay_ids))
+        for evt in self._state.all_received_items():
+            # M6 phase D — skip Moon items in replay; OutstandingMsg above
+            # is authoritative for per-kingdom moon credit.
+            if evt.item.kind == "moon":
+                continue
+            await self._send_to_conn(conn, ItemMsg(
+                kind=evt.item.kind,
+                kingdom=evt.item.kingdom,
+                shine_id=evt.item.shine_id,
+                cap=evt.item.cap,
+                name=evt.item.name,
+                # Live-path Cappy suppression decision (gameplay self-finds
+                # collapse to "").
+                from_=evt.cappy_from,
+                hack_name=evt.item.hack_name,
+                classification=evt.item.classification,
+            ))
+
+        await self.push_capturesanity_replay()
+        # Shine palette replay (per-uid). Routed through _send so it
+        # targets the active conn — but during the post-HELLO sequence we
+        # may be replaying to a connection that's about to become active.
+        # Send directly to avoid a window where active hasn't been set yet.
+        palette = self._state.all_shine_palette()
+        if palette:
+            items = list(palette.items())
+            for i in range(0, len(items), _SCOUT_CHUNK_SIZE):
+                chunk = items[i : i + _SCOUT_CHUNK_SIZE]
+                await self._send_to_conn(conn, ShineScoutsMsg(entries=[
+                    {"shine_uid": uid, "palette": p} for uid, p in chunk
+                ]))
+        await self._send_to_conn(conn, ApStateMsg(conn=self._state.ap_conn))
+
+        # Fire the post-HELLO callback last (auto-bind only). SMOContext
+        # uses it to promote a pending AP dial (SNI-style two-stage gate).
+        if fire_on_ready and self._on_switch_ready is not None:
+            try:
+                await self._on_switch_ready()
+            except Exception:
+                log.exception("on_switch_ready callback failed")
+
+    async def _dispatch_from(self, conn: _SwitchConn, msg: dict) -> None:
+        """Route a message from a specific Switch.
+
+        Active Switch: full dispatch. Inactive Switch: only safe / read-only
+        message kinds are processed (ping/pong, log surfacing); AP-mutating
+        kinds (check, goal, death, state_*, pay_snapshot) are dropped to
+        keep AP state authoritative against the user's chosen active.
+        """
+        is_active = (conn.device_id == self._active_device_id)
         t = msg.get("t")
+
+        # Messages always safe regardless of active state.
         if t == "hello":
-            await self._on_hello(msg)
-        elif t == "check":
-            # M6 phase C reconcile — live `check` messages also race AP
-            # connect: the Switch's outbound-check ring drains queued offline
-            # collects the moment the bridge accepts the TCP socket, which
-            # is ~1.4s before SMOContext finishes the AP handshake. Without
-            # buffering, report_check sees an empty dp.location_name_to_id
-            # and drops the entry with "no AP id for location ...". Same
-            # gate as the snapshot path: defer when AP isn't ready, then
-            # drain on Connected.
+            # Duplicate HELLO on an already-established connection. Ignore.
+            log.debug("duplicate HELLO from %r; ignoring", conn.device_id)
+            return
+        if t == "ping":
+            await self._send_to_conn(conn, PongMsg(
+                ts_ms=msg.get("ts_ms", int(time.time() * 1000)),
+            ))
+            return
+        if t == "log":
+            level = str(msg.get("level", "info"))
+            text = str(msg.get("msg", ""))
+            self._state.add_log(f"[switch:{conn.device_id}:{level}] {text}")
+            _switch_log.log(
+                _SWITCH_LEVEL_MAP.get(level, logging.INFO),
+                "[switch:%s:%s] %s", conn.device_id, level, text,
+            )
+            return
+
+        # Everything below mutates AP / per-slot state — gate on active.
+        if not is_active:
+            log.debug(
+                "dropping %s from inactive Switch %r", t, conn.device_id,
+            )
+            return
+
+        if t == "check":
             if self._is_ap_ready is not None and not self._is_ap_ready():
                 self._pending_live_checks.append(msg)
                 log.info(
@@ -503,30 +900,15 @@ class SwitchServer:
                 return
             await self._dispatch_check(msg)
         elif t == "goal":
-            log.info("switch reported goal completion")
+            log.info("switch %r reported goal completion", conn.device_id)
             await self._on_goal()
         elif t == "death":
             ts_ms = int(msg.get("ts_ms") or 0)
-            log.info("switch reported death ts_ms=%d", ts_ms)
+            log.info("switch %r reported death ts_ms=%d", conn.device_id, ts_ms)
             if self._on_death is not None:
                 await self._on_death(ts_ms)
         elif t == "status":
-            log.debug("switch status: %s", msg)
-        elif t == "ping":
-            await self._send(PongMsg(ts_ms=msg.get("ts_ms", int(time.time() * 1000))))
-        elif t == "log":
-            level = str(msg.get("level", "info"))
-            text = str(msg.get("msg", ""))
-            # Snapshot feed (web-tracker `recent_messages`) — pre-existing.
-            self._state.add_log(f"[switch:{level}] {text}")
-            # Surface in the Kivy "Switch" tab via Archipelago's LogtoUI
-            # handler attached to logger "SMO". Prefix the message so a
-            # reader can tell forwarded Switch lines apart from PC-side
-            # SMO diagnostics in the same tab.
-            _switch_log.log(
-                _SWITCH_LEVEL_MAP.get(level, logging.INFO),
-                "[switch:%s] %s", level, text,
-            )
+            log.debug("switch %r status: %s", conn.device_id, msg)
         elif t == "state_begin":
             self._state.begin_snapshot(save_slot=msg.get("save_slot"))
             log.info("snapshot begin: mod_ver=%s save_slot=%s",
@@ -546,17 +928,13 @@ class SwitchServer:
             await self._on_pay_snapshot_msg(msg)
         else:
             log.warning("unknown message type from Switch: %s", t)
-            await self._send(ErrMsg(code="unknown_kind", ctx=str(t)))
+            await self._send_to_conn(conn, ErrMsg(code="unknown_kind", ctx=str(t)))
 
     async def _on_pay_snapshot_msg(self, msg: dict) -> None:
-        """M6 phase D — Switch reported authoritative per-kingdom PayShineNum.
+        """M6 phase D — active Switch reported PayShineNum per kingdom.
 
-        Parses the entries list (Switch-form kingdoms with `pay` int
-        readings), translates each kingdom to AP form, and hands off to
-        the configured handler. The handler folds the totals into
-        BridgeState and re-derives outstanding. No ack: the snapshot is
-        idempotent and the next snapshot supersedes whatever the bridge
-        currently believes.
+        Parses the entries list, translates each kingdom to AP form, and
+        hands off to the configured handler.
         """
         if self._on_pay_snapshot is None:
             log.debug("pay_snapshot dropped: no handler wired")
@@ -595,52 +973,13 @@ class SwitchServer:
     async def _dispatch_check(self, msg: dict, *, from_snapshot: bool = False) -> "int | None":
         """Forward a check (live or snapshot-derived) to AP and record locally.
 
-        BridgeState.add_checked_location dedupes via the full ItemRef identity,
-        so snapshot replays don't grow the list (or trigger spurious tracker
-        increments) on every reconnect.
-
-        M6 phase A.5: if the Switch sent a non-zero `seq` and AP returned a
-        resolved location_id and Channel A is wired, synthesize a
-        MoonLabelMsg in the same TCP push (Nagle-batched) so it arrives
-        before the cutscene fires.
-
-        Capturesanity capture-checks have no cutscene to label; instead we
-        route the composed text into a CappyMsg so the speech bubble
-        surfaces what the check yielded ("Got Goomba!" / "Sent Frog ->
-        Player2"). No seq for the Cappy path — the bubble queue is FIFO
-        and there's no cutscene-timing race to dedupe against.
-
-        Capture-bubble suppression for already-known checks: captures fire
-        many times in normal gameplay (a Goomba in Cap Kingdom is captured
-        every time the player walks back through the area), so a bubble on
-        every re-capture would be noise. Moons keep firing the label on
-        re-collect because (1) SMO itself prevents re-collection within a
-        save file, so this only ever fires when loading a different save
-        slot where the moon hasn't been collected yet, and (2) the cutscene
-        is already playing — overwriting "Power Moon" with the real item
-        name is useful.
-
-        Snapshot-derived captures (`from_snapshot=True`) also skip the
-        Cappy path here. The Switch will receive an inbound ItemMsg for
-        whatever the location yielded — either right now via the
-        M6-phase-C reconcile-Cappy machinery (deferred drains) or
-        moments later when AP echoes ReceivedItems back from the
-        LocationChecks we just sent (immediate drains). Either way the
-        Switch's enqueue() path formats and shows the bubble. Firing
-        CappyMsg from here too would pop the same "Got Cascade Power
-        Moon!" twice (once via this path, once via the inbound ItemMsg).
+        Behaves exactly as before: dedup via BridgeState.add_checked_location,
+        M6-A.5 MoonLabelMsg for the same TCP push, capturesanity CappyMsg
+        bubble, snapshot-derived suppression.
 
         Returns the resolved AP `loc_id` (or None when unresolvable) so the
-        snapshot drain can distinguish fresh vs already-known checks for the
-        reconcile-Cappy path.
+        snapshot drain can distinguish fresh vs already-known checks.
         """
-        # Snapshot pre-call so we can tell "newly-checked this dispatch"
-        # apart from "already-known" — gates the capture-Cappy suppression
-        # below. report_check still returns loc_id for already-known checks
-        # (so the moon-label path can re-label re-collected moons), so
-        # post-call membership doesn't help. Falls back to empty (treats
-        # every check as fresh) when the wiring isn't present — matches
-        # legacy behavior for callers that don't care.
         already_checked = (
             set(self._get_already_checked()) if self._get_already_checked is not None
             else set()
@@ -681,13 +1020,6 @@ class SwitchServer:
     async def _on_state_end(self) -> None:
         entries, goal_reached = self._state.end_snapshot()
         log.info("snapshot end: %d entries goal=%s", len(entries), goal_reached)
-        # M6 phase C — dispatch races AP connect. The Switch HELLO can arrive
-        # before SMOContext.connect() has finished the AP handshake (≈ 1.4s
-        # gap observed in real-world tests). If we dispatched now, report_check
-        # would see an empty `dp.location_name_to_id` and log every entry as
-        # "no AP id for location ..." — the snapshot would be silently lost.
-        # Buffer instead; SMOContext.drain_pending_snapshot() runs the loop
-        # below from the Connected handler once dp is loaded.
         if self._is_ap_ready is not None and not self._is_ap_ready():
             self._pending_snapshot_entries = list(entries)
             self._pending_snapshot_goal = bool(goal_reached)
@@ -704,56 +1036,18 @@ class SwitchServer:
         goal_reached: bool,
         from_reconcile: bool,
     ) -> None:
-        """Common dispatch path for snapshot entries (immediate or deferred).
-
-        When `from_reconcile=True`, freshly-checked loc_ids are queued on
-        `_reconcile_cappy_pending` so try_fire_reconcile_cappy() can pop a
-        Cappy speech bubble for each one whose scout has landed. We compute
-        "freshly checked" against the set captured BEFORE the dispatch loop
-        starts — using `self._on_check`'s post-call state would race against
-        the dispatch itself when AP echoes ReceivedItems back in the same
-        burst.
-        """
-        # Capture the pre-drain "already-checked" set. report_check adds to
-        # ctx.locations_checked when it successfully sends a LocationCheck.
-        # We snapshot the set before drain so post-drain
-        # `loc_id NOT in pre_set` is the right freshness check.
-        # Without the callback, every dispatched entry counts as "fresh" —
-        # matches the legacy behavior for callers that don't care about Cappy.
         pre_checked: set[int] = set()
         if from_reconcile and self._get_already_checked is not None:
             try:
                 pre_checked = set(self._get_already_checked())
             except Exception:
                 log.exception("get_already_checked_loc_ids failed; assuming empty")
-        # Per-drain queue of fresh loc_ids destined for Cappy. Held separately
-        # from `_reconcile_cappy_pending` so we can apply the burst threshold
-        # below without affecting any entries already pending from a previous
-        # drain.
         fresh_this_drain: set[int] = set()
         for entry in entries:
-            # Drop ALL snapshot capture entries. The Switch builds
-            # _meta.captures by walking SMO's hack dictionary, which is
-            # populated by being ALLOWED to use a capture — every
-            # addHackDictionary call (AP grant, baseline pre-populate,
-            # prior-session /grant REPL, save-file edits, manual capture)
-            # lands an entry. So a dict-derived snapshot would ALWAYS
-            # credit every AP-granted capture as a manual check on the
-            # next reload, even when the player never actually captured
-            # that enemy in-game. Confirmed live 2026-05-18: granting
-            # T-Rex on a save with 6 leftover dict entries from prior
-            # testing fired 6 phantom AP check-credits the moment the
-            # bridge reconnected.
-            #
-            # Live CaptureStartHook is the only authoritative signal —
-            # it fires reportCaptureChecked directly (not via snapshot),
-            # so manual captures still credit. The Switch's outbound
-            # check ring drains queued live captures on reconnect, so
-            # brief disconnects are covered. The only window this drops
-            # is a manual capture done during a disconnect followed by
-            # a Switch reboot before the ring drains — rare, and the
-            # player can re-capture in seconds vs. an AP server credited
-            # with locations they never earned.
+            # See the original M7-era note for the rationale on dropping
+            # snapshot captures: dict-derived snapshots aren't a
+            # manual-capture signal — live CaptureStartHook is the only
+            # authoritative source.
             if entry.get("kind") == "capture":
                 log.info(
                     "snapshot: dropping capture-check for hack=%r "
@@ -762,12 +1056,6 @@ class SwitchServer:
                 )
                 continue
             synthetic = {"t": "check", **entry}
-            # Always mark snapshot-derived dispatches so _dispatch_check
-            # suppresses its CappyMsg path. Whether this drain is
-            # immediate (from_reconcile=False) or deferred
-            # (from_reconcile=True), the Switch's inbound-ItemMsg path
-            # will fire the bubble for whatever the location yielded;
-            # firing here too would double it up.
             loc_id = await self._dispatch_check(synthetic, from_snapshot=True)
             if (
                 from_reconcile
@@ -781,11 +1069,6 @@ class SwitchServer:
             await self._on_goal()
         if from_reconcile and fresh_this_drain:
             if len(fresh_this_drain) > RECONCILE_CAPPY_BURST_THRESHOLD:
-                # Bulk reconcile (first connect / fresh AP slot / long offline
-                # binge): suppress Cappy for the whole drain rather than queue
-                # a flood the CappyMessenger ring can only partially deliver.
-                # Counts still went through dispatch — AP knows about every
-                # check; the player just doesn't get a per-item bubble.
                 log.info(
                     "[reconcile] %d fresh entries exceeds Cappy burst threshold (%d) — "
                     "suppressing bubbles for this drain",
@@ -793,28 +1076,10 @@ class SwitchServer:
                 )
             else:
                 self._reconcile_cappy_pending |= fresh_this_drain
-                # Best-effort first pass: scouts may already be loaded for some
-                # entries (warmup scout is racing the drain itself); fire what
-                # we can immediately, leave the rest for LocationInfo
-                # absorption.
                 await self.try_fire_reconcile_cappy()
 
     async def drain_pending_snapshot(self) -> None:
-        """Drain anything buffered by `_dispatch` / `_on_state_end` because
-        AP wasn't ready: the state snapshot AND any live `check` messages
-        that arrived during the same handshake window.
-
-        Called by SMOContext from the `Connected` handler once the datapackage
-        is loaded. Both buffers route through the reconcile-Cappy queue so
-        an offline-collected moon shows its bubble whether it arrived via
-        the snapshot enumerate path or the Switch's outbound check ring
-        drain. Idempotent — no-op when both buffers are empty.
-        """
-        # Drain live checks first so they get the same "from_reconcile"
-        # treatment as snapshot entries. Live checks may also include moons
-        # the player just collected mid-handshake; treating them identically
-        # is what makes the Cappy bubble fire regardless of which channel
-        # carried the report.
+        """Drain anything buffered because AP wasn't ready."""
         live_checks = self._pending_live_checks
         self._pending_live_checks = []
         if live_checks:
@@ -832,17 +1097,7 @@ class SwitchServer:
         await self._dispatch_snapshot_entries(entries, goal_reached, from_reconcile=True)
 
     async def try_fire_reconcile_cappy(self) -> None:
-        """Pump pending reconciled loc_ids through the Cappy speech bubble.
-
-        For each loc_id where the scout cache now resolves to an item routed
-        to our slot, synthesize an ItemMsg with `from_="(offline)"` so the
-        Switch's `shouldShowCappyMsg` filter passes (it suppresses on
-        `from == local_slot`; "(offline)" is a sentinel that never matches a
-        real player name) and the speech bubble fires.
-
-        Called from SMOContext on every LocationInfo absorption so late-
-        arriving scouts get retried until the cache catches up.
-        """
+        """Pump pending reconciled loc_ids through the Cappy speech bubble."""
         if not self._reconcile_cappy_pending or self._build_reconcile_cappy_item is None:
             return
         fired: list[int] = []
@@ -851,12 +1106,9 @@ class SwitchServer:
                 item = self._build_reconcile_cappy_item(loc_id)
             except Exception:
                 log.exception("build_reconcile_cappy_item failed for loc_id=%s", loc_id)
-                # Drop on hard error — don't retry-loop forever on a bad item.
                 fired.append(loc_id)
                 continue
             if item is None:
-                # Scout not loaded yet, or item isn't a moon, or not for self.
-                # Leave pending; the next LocationInfo absorption will retry.
                 continue
             log.info(
                 "[reconcile] firing Cappy for loc_id=%d name=%r kingdom=%r",
@@ -869,154 +1121,3 @@ class SwitchServer:
             fired.append(loc_id)
         for loc_id in fired:
             self._reconcile_cappy_pending.discard(loc_id)
-
-    async def _on_hello(self, msg: dict) -> None:
-        mod_ver = str(msg.get("mod_ver") or "")
-        smo_ver = str(msg.get("smo_ver") or "")
-        log.info(
-            "switch HELLO: mod=%s smo=%s (client=%s)",
-            mod_ver, smo_ver, self._client_ver or "(unchecked)",
-        )
-
-        # Version policing: the Switch mod and SMOClient ship in lockstep
-        # (mod_ver in switch-mod/CMakeLists.txt tracks client/__init__.py's
-        # __version__). A mismatch here means the user updated one half
-        # without rebuilding/redeploying the other; refuse the connection
-        # so AP traffic doesn't get applied with stale wire-format
-        # assumptions. The two-stage AP gate stays parked because we
-        # never fire on_switch_ready below.
-        if self._client_ver and mod_ver and mod_ver != self._client_ver:
-            order = _compare_versions(mod_ver, self._client_ver)
-            if order < 0:
-                advice = (
-                    f"Switch mod is older than SMOClient. Re-run /setup to "
-                    f"rebuild and redeploy the Switch mod at {self._client_ver}."
-                )
-            elif order > 0:
-                advice = (
-                    f"SMOClient is older than Switch mod. Install a later "
-                    f"meatballs.apworld into vendor/Archipelago/custom_worlds/ "
-                    f"(needs to match {mod_ver})."
-                )
-            else:
-                # Versions differ as strings but compare equal numerically
-                # (e.g. "0.1.0" vs "0.1.0+abc"). Treat as Switch-side
-                # rebuild needed by default.
-                advice = (
-                    f"Re-run /setup to rebuild and redeploy the Switch mod, "
-                    f"or install a matching meatballs.apworld."
-                )
-            err = (
-                f"Version mismatch: SMOClient is {self._client_ver}, "
-                f"Switch mod is {mod_ver}. {advice}"
-            )
-            log.error("[version] refusing Switch connection — %s", err)
-            self._state.add_log(f"[version mismatch] {err}")
-            await self._send(HelloAckMsg(
-                ok=False,
-                seed=self._state.seed,
-                slot=self._state.slot,
-                cap_table_hash=msg.get("cap_table_hash", ""),
-                deathlink_enabled=self._deathlink_enabled,
-                client_ver=self._client_ver,
-                err=err,
-            ))
-            # Close the writer so the Switch sees EOF and reconnects with
-            # backoff. On every retry we re-check — a rebuilt-and-redeployed
-            # Switch mod (or a re-installed apworld + restarted client)
-            # recovers automatically.
-            async with self._writer_lock:
-                w = self._writer
-                if w is not None:
-                    try:
-                        w.close()
-                    except Exception:
-                        pass
-                    self._writer = None
-            self._state.set_switch_conn("disconnected")
-            return
-
-        await self._send(HelloAckMsg(
-            ok=True,
-            seed=self._state.seed,
-            slot=self._state.slot,
-            cap_table_hash=msg.get("cap_table_hash", ""),
-            deathlink_enabled=self._deathlink_enabled,
-            client_ver=self._client_ver or None,
-        ))
-        self._state.set_switch_conn("ready")
-
-        # M6 phase D — push authoritative per-kingdom balance to the Switch
-        # BEFORE replaying items, BUT only if we have a snapshot to derive
-        # from. compute_outstanding returns None until the first
-        # PaySnapshotMsg arrives (Switch on title screen). The Switch's
-        # post-HELLO sendSnapshot ships its own PaySnapshotMsg the same
-        # connection cycle; we get a second chance via the snapshot handler
-        # to push OutstandingMsg with real values then.
-        if (
-            self._get_outstanding is not None
-            and self._state.compute_outstanding() is not None
-        ):
-            try:
-                entries = self._get_outstanding()
-            except Exception:
-                log.exception("get_outstanding_entries failed during HELLO")
-                entries = []
-            await self._send(OutstandingMsg(entries=entries))
-
-        # Replay snapshots so the Switch can re-apply state idempotently.
-        replay_ids = [evt.item for evt in self._state.all_checked_locations()]
-        await self._send(CheckedReplayMsg(ids=replay_ids))
-        for evt in self._state.all_received_items():
-            # M6 phase D — skip Moon items in the replay loop. OutstandingMsg
-            # above is authoritative for per-kingdom moon credit; the
-            # ItemMsg-apply path on the mod side would also fetch_add to
-            # ap_moons_kingdom[], double-counting every grant on every
-            # reconnect. Captures + kingdoms + others still replay (they're
-            # persistent unlocks, not spendable balances).
-            if evt.item.kind == "moon":
-                continue
-            await self._send(ItemMsg(
-                kind=evt.item.kind,
-                kingdom=evt.item.kingdom,
-                shine_id=evt.item.shine_id,
-                cap=evt.item.cap,
-                name=evt.item.name,
-                # Use the live-path's Cappy-suppression decision (gameplay
-                # self-finds collapse to ""). evt.sender stays populated for
-                # logging / web tracker but must NOT drive the bubble — a
-                # self-find item that was silent live would otherwise pop a
-                # bubble on every save reload / Switch reconnect.
-                from_=evt.cappy_from,
-                # M6 phase B: hack_name was resolved bridge-side when the item
-                # was first received; carry it through replay so the Switch
-                # mod can grant the capture after reconnect without needing
-                # bridge to re-resolve.
-                hack_name=evt.item.hack_name,
-                classification=evt.item.classification,
-            ))
-
-        # Capturesanity OFF: no Capture items will ever arrive from AP, so
-        # the Switch's captures_unlocked bitset would stay all-zero and
-        # CaptureStartHook would block every capture for the entire seed.
-        # Push synthetic unlocks. No-op when capturesanity is on, or when
-        # AP Connected hasn't flipped the flag yet (in which case SMOContext
-        # calls this again from its Connected handler).
-        await self.push_capturesanity_replay()
-
-        # Replay the shine-palette scout map so a Switch reconnect after the
-        # bridge has already received LocationInfo doesn't lose colors.
-        await self.send_shine_scouts(self._state.all_shine_palette())
-
-        await self._send(ApStateMsg(conn=self._state.ap_conn))
-
-        # Fire the post-HELLO callback last so SMOContext can promote a
-        # pending AP-connect (SNI-style two-stage gate): the user clicked
-        # Connect earlier but the AP dial was deferred until the Switch
-        # was up. Sending the HelloAck/replay first means the new AP
-        # connection has already had its state pushed when it lands.
-        if self._on_switch_ready is not None:
-            try:
-                await self._on_switch_ready()
-            except Exception:
-                log.exception("on_switch_ready callback failed")

@@ -81,7 +81,7 @@ to it, exactly like every other AP client.
    in a fresh window. This is also how you re-run the wizard later (LAN
    IP change, apworld update, switching deploy targets) — SMO Client
    never auto-spawns the wizard.
-5. **Walk the wizard.** Eight pages, in order:
+5. **Walk the wizard.** Seven pages, in order:
    1. Welcome — read the overview.
    2. Prerequisites — wizard checks the table above; click "Install..." for
       anything missing, install it, click "Re-check".
@@ -89,12 +89,12 @@ to it, exactly like every other AP client.
    4. Extract maps — wizard runs the extractor (~30s the first time
       because it sets up a Python 3.12 venv with `oead`, then faster on
       re-runs). Outputs land in `%APPDATA%/SMOArchipelago/data/`.
-   5. PC LAN IP — wizard pre-fills the IP it thinks your Switch should
-      use to reach this PC. Confirm or override. This IP is baked into the
-      Switch module — changing it later requires re-running setup.
-   6. Build Switch module — wizard configures and runs the cross-compile
-      with your PC's IP baked in. Takes about a minute end to end.
-   7. Deploy target — usually **Real Switch (SD card)**:
+   5. Build Switch module — wizard configures and runs the cross-compile.
+      The PC's LAN IP is auto-detected and baked into the mod as a
+      fallback; runtime UDP discovery is the primary path that lets the
+      Switch find your PC even if the LAN IP changes later. Takes about
+      a minute end to end.
+   6. Deploy target — usually **Real Switch (SD card)**:
       - **SD card:** wizard auto-detects mounted drives with an
         `atmosphere/` directory; pick yours or browse to it. Files land
         at `<drive>:\atmosphere\contents\0100000000010000\`. Eject the
@@ -107,7 +107,7 @@ to it, exactly like every other AP client.
         `%APPDATA%/Ryujinx/mods/contents/...`. (Ryujinx itself is no
         longer publicly distributed; the wizard works with whichever
         copy you already have.)
-   8. Done — wizard closes and returns control to SMO Client.
+   7. Done — wizard closes and returns control to SMO Client.
 6. **Boot SMO.** On your Switch (or in Ryujinx, if that's where you
    deployed) — the mod loads on game start. It dials your PC every
    couple seconds until SMO Client is listening (port 17777 by default);
@@ -157,9 +157,12 @@ prereq check verifies the cross-compiler binary, not just the env var.
 
 Check the mod log on the SD card / Ryujinx sd folder at
 `atmosphere/contents/0100000000010000/smoap.log`. Most often the cause is
-your PC's firewall blocking inbound port 17777, or the IP baked into the
-mod doesn't match your PC's current IP (LAN reassignment). Use `/setup`
-in SMO Client to re-run the wizard with the new IP.
+your PC's firewall blocking inbound TCP 17777 or UDP 17776 (the discovery
+probe port). The mod tries discovery first (UDP probe on loopback, then
+LAN broadcast); if discovery fails, it falls back to the IP baked in at
+setup time. If your LAN IP has changed AND discovery is broken (e.g.
+firewall is dropping UDP), re-run `/setup` to rebuild with the current
+fallback IP.
 
 ### "Wizard launched but window doesn't show up"
 

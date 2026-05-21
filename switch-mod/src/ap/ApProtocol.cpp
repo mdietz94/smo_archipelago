@@ -68,8 +68,9 @@ void encodeHello(LineBuffer& line, const Hello& h) {
         .key("t").value("hello")
         .key("mod_ver").value(h.mod_ver)
         .key("smo_ver").value(h.smo_ver)
-        .key("cap_table_hash").value(h.cap_table_hash)
-     .endObject();
+        .key("cap_table_hash").value(h.cap_table_hash);
+    if (h.device_id[0]) e.key("device_id").value(h.device_id);
+    e.endObject();
     line.append('\n');
 }
 

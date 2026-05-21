@@ -251,27 +251,28 @@ async def test_log_message_routes_to_switch_logger_and_state(caplog):
             await writer.drain()
             await asyncio.sleep(0.1)
 
-        # (a) snapshot-feed assertion — pre-existing prefix format.
+        # (a) snapshot-feed assertion — multi-Switch prefix carries the
+        # device_id so the UI can attribute lines to the right device.
+        # HelloMsg() above had no device_id, so the bridge invents one
+        # from the loopback peer's last octet ("sw-1" on 127.0.0.1).
         assert any(
-            "[switch:warn] [moon_label] no LayoutActor" in line
+            "[switch:sw-1:warn] [moon_label] no LayoutActor" in line
             for line in state.last_messages
         )
         assert any(
-            "[switch:info] [hook] installed" in line for line in state.last_messages
+            "[switch:sw-1:info] [hook] installed" in line for line in state.last_messages
         )
         assert any(
-            "[switch:error] bad thing happened" in line for line in state.last_messages
+            "[switch:sw-1:error] bad thing happened" in line for line in state.last_messages
         )
-        assert any("[switch:exotic] oddball" in line for line in state.last_messages)
+        assert any("[switch:sw-1:exotic] oddball" in line for line in state.last_messages)
 
         # (b) caplog assertion — Python logging channel got the records.
         switch_records = [r for r in caplog.records if r.name == "SMO"]
-        # All forwarded records carry the [switch:LEVEL] prefix so a reader
-        # can tell them apart from PC-side SMO diagnostics in the tab.
         formatted = [r.getMessage() for r in switch_records]
-        assert any("[switch:warn] [moon_label]" in m for m in formatted)
-        assert any("[switch:info] [hook] installed" in m for m in formatted)
-        assert any("[switch:error] bad thing happened" in m for m in formatted)
+        assert any("[switch:sw-1:warn] [moon_label]" in m for m in formatted)
+        assert any("[switch:sw-1:info] [hook] installed" in m for m in formatted)
+        assert any("[switch:sw-1:error] bad thing happened" in m for m in formatted)
         # Level mapping: warn -> WARNING, info -> INFO, error -> ERROR, and
         # "exotic" (unknown) falls back to INFO.
         levels_seen = {r.levelno for r in switch_records}
@@ -279,7 +280,7 @@ async def test_log_message_routes_to_switch_logger_and_state(caplog):
         assert logging.INFO in levels_seen
         assert logging.ERROR in levels_seen
         info_msgs = [r.getMessage() for r in switch_records if r.levelno == logging.INFO]
-        assert any("[switch:exotic] oddball" in m for m in info_msgs)
+        assert any("[switch:sw-1:exotic] oddball" in m for m in info_msgs)
     finally:
         writer.close()
         try:
@@ -352,45 +353,62 @@ async def test_same_host_reconnect_takes_over_stale_writer():
 
 
 @pytest.mark.asyncio
-async def test_different_host_rejected_busy():
-    """A second connection from a DIFFERENT peer IP is still rejected.
+async def test_second_switch_accepted_as_inactive():
+    """A second Switch connection is now ACCEPTED (no busy rejection).
 
-    The takeover-on-same-IP heuristic protects the common Switch reconnect
-    case without trampling the "two distinct Switches racing for the same
-    SMOClient" case (rare in practice — typically one SMOClient instance
-    per LAN — but we want the explicit error rather than silently swapping
-    the active session).
+    The first to HELLO becomes the active Switch (gets HelloAck + the
+    full post-HELLO replay). A second connection — even from a different
+    peer IP — is accepted, gets its own HelloAck, and is parked with a
+    `KickMsg(reason="inactive")` so the Switch UI shows an idle overlay
+    until the user toggles it active via the selector popup.
+
+    This replaces the legacy ErrMsg(busy) rejection. The takeover-on-
+    same-id reconnect path (test_same_host_reconnect_takes_over_stale_writer)
+    still applies for the common Switch Wi-Fi blip case.
     """
-    from unittest.mock import AsyncMock, MagicMock
-
     state = BridgeState()
 
     async def on_check(_): ...
     async def on_goal(): ...
 
     sw = SwitchServer("127.0.0.1", 0, state, on_check, on_goal)
-    # Pretend a Switch from a different LAN IP is already connected. Mock
-    # the writer just enough for the busy-rejection path (peer-IP read,
-    # closing check, and the stop() cleanup).
-    fake = MagicMock(spec=asyncio.StreamWriter)
-    fake.is_closing.return_value = False
-    fake.get_extra_info.return_value = ("10.0.0.42", 12345)
-    fake.wait_closed = AsyncMock()
-    sw._writer = fake
-
     server = await asyncio.start_server(sw._handle_client, "127.0.0.1", 0)
     sw._server = server
     port = server.sockets[0].getsockname()[1]
 
-    r, w = await asyncio.open_connection("127.0.0.1", port)
+    # First connection — Mario. Auto-bound as active.
+    r1, w1 = await asyncio.open_connection("127.0.0.1", port)
     try:
-        msgs = await _drain_messages(r, n=1, timeout=2.0)
-        assert msgs[0]["t"] == "err"
-        assert msgs[0]["code"] == "busy"
-    finally:
-        w.close()
+        w1.write(protocol.encode(HelloMsg(device_id="mario")))
+        await w1.drain()
+        msgs1 = await _drain_messages(r1, n=3, timeout=2.0)
+        assert msgs1[0]["t"] == "hello_ack"
+        assert msgs1[0]["ok"] is True
+        assert sw.get_active_device_id() == "mario"
+
+        # Second connection — Luigi. Accepted as inactive.
+        r2, w2 = await asyncio.open_connection("127.0.0.1", port)
         try:
-            await w.wait_closed()
+            w2.write(protocol.encode(HelloMsg(device_id="luigi")))
+            await w2.drain()
+            msgs2 = await _drain_messages(r2, n=2, timeout=2.0)
+            kinds = [m["t"] for m in msgs2]
+            assert kinds == ["hello_ack", "kick"], msgs2
+            assert msgs2[0]["ok"] is True
+            assert msgs2[1]["reason"] == "inactive"
+            # Both connected; mario still active.
+            assert sorted(sw.get_connected_device_ids()) == ["luigi", "mario"]
+            assert sw.get_active_device_id() == "mario"
+        finally:
+            w2.close()
+            try:
+                await w2.wait_closed()
+            except Exception:
+                pass
+    finally:
+        w1.close()
+        try:
+            await w1.wait_closed()
         except Exception:
             pass
         await sw.stop()
@@ -451,15 +469,17 @@ async def test_stop_returns_promptly_with_active_switch_connection():
     port = sw._server.sockets[0].getsockname()[1]
 
     # Connect a fake Switch and wait until _handle_client has accepted +
-    # captured the writer (otherwise stop() may run before the server has
-    # registered the connection at all).
+    # registered the connection (otherwise stop() may run before the
+    # server has any connection at all).
     reader, writer = await asyncio.open_connection("127.0.0.1", port)
     try:
+        writer.write(protocol.encode(HelloMsg()))
+        await writer.drain()
         for _ in range(50):
-            if sw._writer is not None:
+            if sw.is_connected():
                 break
             await asyncio.sleep(0.01)
-        assert sw._writer is not None, "server never registered the connection"
+        assert sw.is_connected(), "server never registered the connection"
 
         # The actual regression: this should not hang. Cap at 2s — the
         # bug exhibited as an indefinite block, so even a few hundred ms
@@ -1327,6 +1347,13 @@ async def test_accepted_socket_has_tcp_keepalive_enabled():
     """SO_KEEPALIVE must be set on accepted Switch sockets so Windows'
     2h default keepalive doesn't strand the same-host-takeover path
     behind a half-open writer (see SMOClient_2026_05_21_09_46_11.txt).
+
+    The multi-Switch refactor moved per-connection writer storage from
+    `sw._writer` into the keyed `sw._connections` dict, populated only
+    AFTER a HELLO completes. _enable_tcp_keepalive runs before that on
+    the raw accepted socket, so we still send a HELLO here to make the
+    accepted writer accessible through the public is_connected path —
+    the keepalive itself is independent of HELLO.
     """
     import socket as _socket
 
@@ -1342,13 +1369,15 @@ async def test_accepted_socket_has_tcp_keepalive_enabled():
 
     reader, writer = await asyncio.open_connection("127.0.0.1", port)
     try:
-        # Wait until _handle_client has assigned self._writer (post-keepalive).
+        writer.write(protocol.encode(HelloMsg(device_id="ka")))
+        await writer.drain()
         for _ in range(50):
-            if sw._writer is not None:
+            if sw.is_connected():
                 break
             await asyncio.sleep(0.01)
-        assert sw._writer is not None, "server never accepted the connection"
-        accepted_sock = sw._writer.get_extra_info("socket")
+        assert sw.is_connected(), "server never accepted the connection"
+        accepted_writer = sw._connections[sw.get_active_device_id()].writer
+        accepted_sock = accepted_writer.get_extra_info("socket")
         assert accepted_sock is not None
         assert accepted_sock.getsockopt(_socket.SOL_SOCKET, _socket.SO_KEEPALIVE) == 1
     finally:
@@ -1373,6 +1402,221 @@ def test_compare_versions():
     # Metadata suffixes ignored.
     assert _compare_versions("0.1.0+abc", "0.1.0") == 0
     assert _compare_versions("0.1.0-dev", "0.1.0") == 0
+
+
+# ---------------------------------------------------------------------------
+# Multi-Switch selector — active toggle, telemetry routing, replay on rebind
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_active_toggle_kicks_old_activates_new_and_replays():
+    """When the user picks a new active Switch via the selector popup:
+    1. the previously-active receives KickMsg(reason="unbound"),
+    2. the newly-active receives ActivateMsg, then
+    3. the newly-active sees the full post-HELLO replay (checked_replay
+       + non-Moon ItemMsg backlog + ap_state — same shape as a fresh
+       HELLO).
+    """
+    state = BridgeState()
+    state.slot = "Mario"
+    state.seed = "TEST"
+    state.add_received_item(ItemEvent(
+        item=ItemRef(kind=ItemKind.CAPTURE.value, cap="Frog"),
+        sender="Bob", cappy_from="Bob",
+    ))
+
+    async def on_check(_): return None
+    async def on_goal(): ...
+
+    sw = SwitchServer("127.0.0.1", 0, state, on_check, on_goal)
+    server = await asyncio.start_server(sw._handle_client, "127.0.0.1", 0)
+    sw._server = server
+    port = server.sockets[0].getsockname()[1]
+
+    r1, w1 = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        w1.write(protocol.encode(HelloMsg(device_id="mario")))
+        await w1.drain()
+        # mario is auto-bound active: hello_ack + checked_replay + item +
+        # ap_state.
+        msgs1 = await _drain_messages(r1, n=4, timeout=2.0)
+        assert [m["t"] for m in msgs1] == [
+            "hello_ack", "checked_replay", "item", "ap_state",
+        ]
+
+        r2, w2 = await asyncio.open_connection("127.0.0.1", port)
+        try:
+            w2.write(protocol.encode(HelloMsg(device_id="luigi")))
+            await w2.drain()
+            # luigi inactive: hello_ack + kick.
+            msgs2 = await _drain_messages(r2, n=2, timeout=2.0)
+            assert [m["t"] for m in msgs2] == ["hello_ack", "kick"]
+            assert msgs2[1]["reason"] == "inactive"
+
+            # Toggle: luigi becomes active.
+            await sw.set_active("luigi")
+
+            # mario sees Kick(unbound).
+            kick_msgs = await _drain_messages(r1, n=1, timeout=2.0)
+            assert kick_msgs[0]["t"] == "kick"
+            assert kick_msgs[0]["reason"] == "unbound"
+
+            # luigi sees Activate + post-HELLO replay (checked_replay +
+            # item + ap_state).
+            activation = await _drain_messages(r2, n=4, timeout=2.0)
+            kinds = [m["t"] for m in activation]
+            assert kinds == ["activate", "checked_replay", "item", "ap_state"]
+            assert activation[2]["cap"] == "Frog"
+
+            assert sw.get_active_device_id() == "luigi"
+        finally:
+            w2.close()
+            try:
+                await w2.wait_closed()
+            except Exception:
+                pass
+    finally:
+        w1.close()
+        try:
+            await w1.wait_closed()
+        except Exception:
+            pass
+        await sw.stop()
+
+
+@pytest.mark.asyncio
+async def test_inactive_switch_telemetry_dropped():
+    """A check sent by an inactive Switch MUST NOT reach the AP-bound
+    on_check handler. The active Switch is the sole source of truth for
+    AP location forwarding while it's bound."""
+    state = BridgeState()
+    seen: list[dict] = []
+
+    async def on_check(msg):
+        seen.append(msg)
+        return None
+
+    async def on_goal(): ...
+
+    sw = SwitchServer("127.0.0.1", 0, state, on_check, on_goal)
+    server = await asyncio.start_server(sw._handle_client, "127.0.0.1", 0)
+    sw._server = server
+    port = server.sockets[0].getsockname()[1]
+
+    r1, w1 = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        w1.write(protocol.encode(HelloMsg(device_id="mario")))
+        await w1.drain()
+        await _drain_messages(r1, n=3, timeout=2.0)  # hello_ack + checked_replay + ap_state
+
+        r2, w2 = await asyncio.open_connection("127.0.0.1", port)
+        try:
+            w2.write(protocol.encode(HelloMsg(device_id="luigi")))
+            await w2.drain()
+            await _drain_messages(r2, n=2, timeout=2.0)  # hello_ack + kick
+
+            # Inactive luigi sends a check; on_check should NOT see it.
+            w2.write(protocol.encode(protocol.CheckMsg(
+                kind=ItemKind.MOON.value, kingdom="Sand", shine_id="ShouldDrop",
+            )))
+            await w2.drain()
+
+            # Active mario sends one; on_check SHOULD see it.
+            w1.write(protocol.encode(protocol.CheckMsg(
+                kind=ItemKind.MOON.value, kingdom="Cascade", shine_id="ShouldFire",
+            )))
+            await w1.drain()
+            await asyncio.sleep(0.1)
+            assert len(seen) == 1
+            assert seen[0]["kingdom"] == "Cascade"
+            assert seen[0]["shine_id"] == "ShouldFire"
+        finally:
+            w2.close()
+            try:
+                await w2.wait_closed()
+            except Exception:
+                pass
+    finally:
+        w1.close()
+        try:
+            await w1.wait_closed()
+        except Exception:
+            pass
+        await sw.stop()
+
+
+@pytest.mark.asyncio
+async def test_active_disconnect_auto_promotes_remaining_switch():
+    """If the active Switch disconnects and another is still attached,
+    the bridge auto-promotes the remaining one so the AP slot stays
+    bound."""
+    state = BridgeState()
+
+    async def on_check(_): return None
+    async def on_goal(): ...
+
+    sw = SwitchServer("127.0.0.1", 0, state, on_check, on_goal)
+    server = await asyncio.start_server(sw._handle_client, "127.0.0.1", 0)
+    sw._server = server
+    port = server.sockets[0].getsockname()[1]
+
+    r1, w1 = await asyncio.open_connection("127.0.0.1", port)
+    r2, w2 = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        w1.write(protocol.encode(HelloMsg(device_id="mario")))
+        await w1.drain()
+        await _drain_messages(r1, n=3, timeout=2.0)
+        w2.write(protocol.encode(HelloMsg(device_id="luigi")))
+        await w2.drain()
+        await _drain_messages(r2, n=2, timeout=2.0)
+
+        assert sw.get_active_device_id() == "mario"
+
+        # Drop mario.
+        w1.close()
+        try:
+            await w1.wait_closed()
+        except Exception:
+            pass
+        w1 = None  # so finally doesn't double-close
+
+        # Wait briefly for the disconnect to propagate + auto-promote.
+        for _ in range(50):
+            if sw.get_active_device_id() == "luigi":
+                break
+            await asyncio.sleep(0.02)
+        assert sw.get_active_device_id() == "luigi"
+
+        # luigi receives Activate + post-HELLO replay since it was just
+        # auto-promoted.
+        replay = await _drain_messages(r2, n=1, timeout=2.0)
+        assert replay[0]["t"] == "activate"
+    finally:
+        if w1 is not None:
+            w1.close()
+            try:
+                await w1.wait_closed()
+            except Exception:
+                pass
+        w2.close()
+        try:
+            await w2.wait_closed()
+        except Exception:
+            pass
+        await sw.stop()
+
+
+@pytest.mark.asyncio
+async def test_set_active_unknown_id_is_noop():
+    state = BridgeState()
+    async def on_check(_): return None
+    async def on_goal(): ...
+
+    sw = SwitchServer("127.0.0.1", 0, state, on_check, on_goal)
+    ok = await sw.set_active("never-connected")
+    assert ok is False
+    assert sw.get_active_device_id() is None
 
 
 async def _drain_messages(reader: asyncio.StreamReader, n: int, timeout: float) -> list[dict]:

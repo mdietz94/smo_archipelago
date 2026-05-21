@@ -30,6 +30,7 @@
 // links against the assembly stubs.
 #include "lib/nx/nx.h"
 
+#include "ApDiscovery.hpp"
 #include "ApProtocol.hpp"
 #include "ApState.hpp"
 #include "../game/CaptureGate.hpp"
@@ -356,6 +357,24 @@ void ApClient::threadMain() {
         if (socket_fd_ < 0) {
             connected_at_ms = 0;
             ApState::instance().conn.store(ConnState::Connecting);
+            // Runtime bridge discovery via UDP. On success, target_ is
+            // overwritten with the discovered host:port for this connect
+            // cycle. On failure (no UDP reply on any of loopback /
+            // broadcast / fallback-unicast), target_ retains whatever the
+            // wizard baked in as -DBRIDGE_HOST and the TCP connectOnce
+            // below tries that directly (step 4 — TCP-fallback).
+            //
+            // The discovery probe + reply round-trip is bounded by the
+            // probe timeouts in ApDiscovery.cpp (~3 sec worst case if
+            // every step fails); cheap relative to the existing
+            // exponential-backoff reconnect cadence.
+            {
+                BridgeTarget discovered{};
+                if (resolveBridge(discovered, target_)) {
+                    target_.host = discovered.host;
+                    target_.port = discovered.port;
+                }
+            }
             if (!connectOnce()) {
                 SMOAP_LOG_WARN("connect failed; sleeping %u ms before retry", backoff_ms);
                 svcSleepThread(static_cast<s64>(backoff_ms) * 1'000'000);  // ms -> ns
@@ -608,6 +627,14 @@ void ApClient::sendHello() {
     Hello hello;
     hello.mod_ver = SMO_AP_MOD_VERSION_STRING;
     hello.smo_ver = SMO_VERSION_STRING;
+    // hello.device_id is left empty in v1. The bridge synthesizes a
+    // disambiguator from the peer IPv4 (`sw-<last-octet>`) so the
+    // selector popup still shows distinct entries for two Switches on
+    // the same LAN. Future enhancement: wire `nn::settings::Get
+    // DeviceNickname` via HookSymbols.hpp + nn::ro::LookupSymbol so the
+    // user's Switch nickname shows up here (verify symbol with
+    // scripts/check_nso_symbols.py first — it may live in an SDK sysmod
+    // rather than main.nso).
     smoap::util::json::LineBuffer line;
     encodeHello(line, hello);
     SMOAP_LOG_INFO("[conn] sending HELLO (%zu bytes)", line.size());

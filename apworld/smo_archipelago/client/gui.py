@@ -43,8 +43,12 @@ from kivy.clock import Clock
 from kivy.core.text import LabelBase
 from kivy.metrics import dp
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
 from kivy.uix.label import Label
+from kivy.uix.popup import Popup
 from kivy.uix.scrollview import ScrollView
+
+from .net_util import detect_lan_ip
 
 if typing.TYPE_CHECKING:  # pragma: no cover
     from .context import SMOContext
@@ -203,8 +207,9 @@ class SmoManager(GameManager):
     def __init__(self, ctx: "SMOContext"):
         super().__init__(ctx)
         self._odyssey_label: _LiveLabel | None = None
-        self._switch_pill: Label | None = None
+        self._switch_pill: Button | None = None
         self._smo_log: UILog | None = None
+        self._switches_popup: "SwitchesPopup | None" = None
 
     def build(self):
         container = super().build()
@@ -246,7 +251,7 @@ class SmoManager(GameManager):
         # dp(40) layout height (which made the text float to the very top
         # of the strip — valign='middle' alone wasn't enough).
         pill_h = self.server_connect_bar.height
-        self._switch_pill = Label(
+        self._switch_pill = Button(
             text="Off",
             markup=True,
             size_hint_x=None,
@@ -262,12 +267,35 @@ class SmoManager(GameManager):
             # binding below can keep auto-fitting to the natural text width.
             # See _bind_switch_pill_layout for why both axes can't be bound.
             text_size=(None, pill_h),
+            # Flatten the default Button background so the pill keeps the
+            # old Label look — color carries the state, not a chrome
+            # button outline.
+            background_normal="",
+            background_down="",
+            background_color=(0, 0, 0, 0),
         )
         _bind_switch_pill_layout(self._switch_pill)
+        self._switch_pill.bind(on_release=self._open_switches_popup)
         self.connect_layout.add_widget(self._switch_pill)
+
+        # Event-driven Switches-changed refresh, so toggling active in
+        # the popup repaints immediately instead of waiting up to 1.5s
+        # for the next polling tick. The SwitchServer callback fires
+        # synchronously from the asyncio thread; we Clock.schedule_once
+        # so the actual widget mutations land on Kivy's thread.
+        if self.ctx.switch is not None:
+            self.ctx.switch.set_on_switches_changed(
+                self._on_switches_changed_async,
+            )
 
         Clock.schedule_interval(self._refresh_panels, _REFRESH_INTERVAL)
         return container
+
+    def _on_switches_changed_async(self) -> None:
+        """Asyncio-thread callback from SwitchServer. Hops to the Kivy
+        thread to repaint the pill + popup. Kivy's Clock is thread-safe
+        for schedule_once."""
+        Clock.schedule_once(lambda _dt: self._refresh_panels(0), 0)
 
     # ------------------------------------------------------------ panel refresh
 
@@ -277,29 +305,230 @@ class SmoManager(GameManager):
                 self._odyssey_label.text = _format_odyssey(self.ctx)
             if self._switch_pill is not None:
                 self._switch_pill.text = _format_switch_pill(self.ctx)
+            # Repaint the Switches popup if it's open so a fresh
+            # connection / active toggle shows up without the user having
+            # to close + reopen. Synchronous polling is good enough — the
+            # popup is small and refresh is bounded by _REFRESH_INTERVAL.
+            if self._switches_popup is not None and self._switches_popup.is_open:
+                self._switches_popup.refresh()
         except Exception:
             # Don't let a transient render error kill the scheduled refresh;
             # Clock.schedule_interval cancels on exception.
             logging.getLogger("SMO").exception("panel refresh failed")
 
+    # ------------------------------------------------------------ popup
+    def _open_switches_popup(self, _button) -> None:
+        if self._switches_popup is None:
+            self._switches_popup = SwitchesPopup(self.ctx)
+        self._switches_popup.refresh()
+        self._switches_popup.open()
+
+
+class SwitchesPopup(Popup):
+    """Modal popup that lists connected Switches and lets the user pick
+    the active one. Opened by clicking the top-bar Switch pill.
+
+    The active Switch is the one bound to the AP slot: its telemetry
+    forwards to AP and it receives item replays. Other connected
+    Switches are parked with a `KickMsg(reason="inactive")` and the
+    user can promote any of them via the buttons below.
+
+    The Advanced section at the bottom exposes the LAN-IP detection
+    result and a button to re-run the setup wizard — useful when the
+    PC's DHCP lease changed and the Switch mod's baked-in fallback IP
+    no longer reaches us.
+    """
+
+    def __init__(self, ctx: "SMOContext"):
+        self._ctx = ctx
+        self._body: BoxLayout | None = None
+        self.is_open = False
+        super().__init__(
+            title="Switches",
+            size_hint=(0.9, 0.7),
+            auto_dismiss=True,
+        )
+        self.bind(
+            on_open=lambda *_: setattr(self, "is_open", True),
+            on_dismiss=lambda *_: setattr(self, "is_open", False),
+        )
+        self._build()
+
+    def _build(self) -> None:
+        outer = BoxLayout(orientation="vertical", spacing=dp(6), padding=dp(6))
+        scroll = ScrollView(do_scroll_x=False, do_scroll_y=True)
+        self._body = BoxLayout(
+            orientation="vertical",
+            spacing=dp(4),
+            size_hint_y=None,
+        )
+        self._body.bind(minimum_height=self._body.setter("height"))
+        scroll.add_widget(self._body)
+        outer.add_widget(scroll)
+        self.content = outer
+
+    def refresh(self) -> None:
+        if self._body is None:
+            return
+        self._body.clear_widgets()
+        switches = self._ctx.state.get_switches()
+        if not switches:
+            self._body.add_widget(Label(
+                text=(
+                    "[i]No Switches connected.[/i]\n\n"
+                    "Boot SMO with the mod installed (Ryujinx or real "
+                    "hardware). The mod broadcasts a UDP probe on startup; "
+                    "the bridge replies with its LAN IP and the Switch then "
+                    "TCP-connects."
+                ),
+                markup=True,
+                halign="left",
+                valign="top",
+                size_hint_y=None,
+                height=dp(120),
+                text_size=(self.width - dp(40), None),
+            ))
+        else:
+            for sw in switches:
+                self._body.add_widget(_switch_row(sw, self._on_pick))
+        # Divider + Advanced row.
+        self._body.add_widget(Label(
+            text="[b]Advanced[/b]",
+            markup=True,
+            size_hint_y=None,
+            height=dp(24),
+            halign="left",
+            text_size=(self.width - dp(40), None),
+        ))
+        self._body.add_widget(Label(
+            text=(
+                f"[i]Detected LAN IP: {detect_lan_ip()}[/i]\n"
+                f"This is what the bridge advertises to discovering Switches "
+                f"and what the wizard bakes into the mod as the fallback IP. "
+                f"If your DHCP lease changed and a real-Switch deploy can't "
+                f"find the bridge after a reboot, re-run setup to rebuild "
+                f"the mod with the current address."
+            ),
+            markup=True,
+            halign="left",
+            valign="top",
+            size_hint_y=None,
+            height=dp(80),
+            text_size=(self.width - dp(40), None),
+        ))
+        rerun = Button(
+            text="Re-run setup wizard",
+            size_hint_y=None,
+            height=dp(32),
+        )
+        rerun.bind(on_release=lambda *_: self._on_rerun_setup())
+        self._body.add_widget(rerun)
+
+    def _on_pick(self, device_id: str) -> None:
+        ok = self._ctx.set_active_switch(device_id)
+        if ok:
+            logging.getLogger("SMO").info(
+                "active Switch -> %r (selected via Switches popup)", device_id,
+            )
+        self.refresh()
+
+    def _on_rerun_setup(self) -> None:
+        try:
+            from worlds.LauncherComponents import launch_subprocess
+            from .. import _run_setup_wizard_no_smoap
+            launch_subprocess(_run_setup_wizard_no_smoap, name="SMOSetup")
+        except Exception:
+            logging.getLogger("SMO").exception("failed to launch setup wizard")
+
+
+def _switch_row(sw: dict, on_pick) -> BoxLayout:
+    """One row in the SwitchesPopup body.
+
+    Active Switch: shows "● Active" with a disabled button.
+    Inactive Switch: shows a tappable "Make active" button that
+    promotes the row via the on_pick(device_id) callback.
+    """
+    row = BoxLayout(
+        orientation="horizontal",
+        size_hint_y=None,
+        height=dp(36),
+        spacing=dp(8),
+        padding=(dp(4), dp(2)),
+    )
+    is_active = bool(sw.get("active"))
+    # ASCII-only markers — see _format_switch_pill docstring for why the
+    # geometric-shapes block (●/○) renders as tofu under the default
+    # Roboto subset Kivy ships. The button text + the bold color carry
+    # active state without needing a glyph.
+    color = "#4caf50" if is_active else "#888888"
+    # Split the row into [prefix | info | button] each with a fixed slot
+    # so the device_id stays anchored when the prefix toggles between
+    # "Active" and "Idle" (different glyph widths in the proportional
+    # default font would otherwise drift the column left/right).
+    prefix_text = "[b]Active[/b]" if is_active else "Idle"
+    prefix_label = Label(
+        text=f"[color={color}]{prefix_text}[/color]",
+        markup=True,
+        size_hint_x=None,
+        width=dp(70),
+        halign="left",
+        valign="middle",
+        text_size=(dp(70), dp(36)),
+    )
+    info_label = Label(
+        text=f"[b]{sw['device_id']}[/b]  [i]{sw['peer_ip']}[/i]",
+        markup=True,
+        halign="left",
+        valign="middle",
+        size_hint_x=1,
+        text_size=(None, dp(36)),
+    )
+    row.add_widget(prefix_label)
+    row.add_widget(info_label)
+    btn = Button(
+        text="Active" if is_active else "Make active",
+        size_hint_x=None,
+        width=dp(140),
+        disabled=is_active,
+    )
+    if not is_active:
+        device_id = sw["device_id"]
+        btn.bind(on_release=lambda *_: on_pick(device_id))
+    row.add_widget(btn)
+    return row
+
 
 def _format_switch_pill(ctx: "SMOContext") -> str:
     """One-line Switch status for the top-bar pill, with markup color.
 
-    Kept terse — the pill auto-sizes to texture width and shares the top
-    bar with the AP server input + Connect button, so verbose text used
-    to overflow at narrow window widths. Color carries the state, the
-    word is just a hint.
+    Multi-Switch aware: shows the active Switch's device_id and a "+N"
+    badge when other Switches are connected as inactive. Click the
+    pill to open the selector popup.
 
-    Uses plain ASCII glyphs because Kivy's default Roboto subset doesn't
-    include the geometric-shapes block (U+25CF / U+25CB rendered as tofu).
+    Color carries the state — green = active Switch healthy, orange =
+    waiting for HELLO, gray = nothing connected.
+
+    Uses plain ASCII throughout because Kivy's default Roboto subset
+    doesn't include the geometric-shapes block (U+25CF / U+25CB render
+    as tofu boxes). Color carries the state; no glyph needed.
     """
     sw = ctx.switch
     if sw is None:
         return "[color=#888888]Off[/color]"
-    if sw.is_connected():
-        return "[color=#4caf50]Switch OK[/color]"
-    return "[color=#ff9800]Waiting[/color]"
+    switches = ctx.state.get_switches()
+    if not switches:
+        return "[color=#ff9800]No Switch[/color]"
+    active_name = next(
+        (s["device_id"] for s in switches if s.get("active")),
+        None,
+    )
+    extras = sum(1 for s in switches if not s.get("active"))
+    if active_name is None:
+        # Connected but none active (transient: between disconnect of
+        # active and auto-promotion). Show the first as "waiting".
+        return f"[color=#ff9800]{switches[0]['device_id']}[/color]"
+    badge = f"  [color=#888888](+{extras})[/color]" if extras else ""
+    return f"[color=#4caf50]{active_name}[/color]{badge}"
 
 
 def _format_odyssey(ctx: "SMOContext") -> str:

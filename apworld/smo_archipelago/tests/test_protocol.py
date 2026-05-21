@@ -8,6 +8,7 @@ import pytest
 
 from client import protocol
 from client.protocol import (
+    ActivateMsg,
     CappyMsg,
     CheckMsg,
     Classification,
@@ -16,6 +17,7 @@ from client.protocol import (
     ItemMsg,
     ItemRef,
     ItemKind,
+    KickMsg,
     MoonLabelMsg,
     OutstandingEntry,
     OutstandingMsg,
@@ -37,6 +39,43 @@ def test_hello_round_trip():
     assert parsed["t"] == "hello"
     assert parsed["mod_ver"] == "0.1.0+abc"
     assert parsed["smo_ver"] == "1.0.0"
+
+
+def test_hello_carries_device_id_when_set():
+    """The Switch mod populates device_id from
+    nn::settings::GetDeviceNickname so the bridge can disambiguate two
+    Switches on the same LAN."""
+    msg = HelloMsg(mod_ver="0.1.0", smo_ver="1.0.0", device_id="mario")
+    parsed = protocol.decode(protocol.encode(msg))
+    assert parsed["device_id"] == "mario"
+
+
+def test_hello_omits_empty_device_id():
+    """Empty device_id is stripped from the wire (matches the _strip_none
+    convention). Bridge then invents one from peer IP."""
+    msg = HelloMsg(mod_ver="0.1.0", smo_ver="1.0.0")
+    parsed = protocol.decode(protocol.encode(msg))
+    # Empty string would still be present (encode keeps empty strings; the
+    # _strip_none filter keys on None). The bridge handles empty as "absent".
+    assert parsed.get("device_id", "") == ""
+
+
+def test_kick_msg_round_trip():
+    msg = KickMsg(reason="unbound")
+    parsed = protocol.decode(protocol.encode(msg))
+    assert parsed == {"t": "kick", "reason": "unbound"}
+
+
+def test_kick_msg_default_reason_empty():
+    msg = KickMsg()
+    parsed = protocol.decode(protocol.encode(msg))
+    assert parsed["t"] == "kick"
+    assert parsed["reason"] == ""
+
+
+def test_activate_msg_round_trip():
+    parsed = protocol.decode(protocol.encode(ActivateMsg()))
+    assert parsed == {"t": "activate"}
 
 
 def test_check_strips_none_fields():

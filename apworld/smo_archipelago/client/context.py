@@ -1040,6 +1040,23 @@ class SMOContext(CommonContext):
             {"cmd": "StatusUpdate", "status": ClientStatus.CLIENT_GOAL}
         ])
 
+    def set_active_switch(self, device_id: str | None) -> bool:
+        """Promote `device_id` to active (or unbind if None). Shim for
+        GUI button handlers — schedules the actual work on the asyncio
+        loop via `async_start` (same pattern as `_cmd_inject_deathlink`).
+
+        Returns True when scheduling succeeded. The async task does the
+        real work (Kick the old active, Activate + replay the new); the
+        GUI repaints when SwitchServer's `set_on_switches_changed`
+        callback fires after the swap completes.
+        """
+        if self.switch is None:
+            return False
+        async_start(
+            self.switch.set_active(device_id), name="set_active_switch",
+        )
+        return True
+
     async def report_death(self, ts_ms: int = 0) -> None:
         """Mario died. State tally bumps unconditionally; DeathLink bounce
         only fires if enabled.

@@ -14,6 +14,22 @@ from dataclasses import dataclass, field
 from .protocol import ItemRef
 
 
+def _ip_sort_key(ip: str) -> tuple:
+    """Natural numeric ordering for IPv4 addresses.
+
+    Lex-sorting `"192.168.1.10"` against `"192.168.1.2"` puts `.10`
+    before `.2` — wrong for a UI list. Split octets and compare as
+    ints. Anything not a dotted quad sorts to the end alphabetically.
+    """
+    try:
+        parts = ip.split(".")
+        if len(parts) == 4:
+            return (0, tuple(int(p) for p in parts))
+    except (ValueError, AttributeError):
+        pass
+    return (1, ip)
+
+
 @dataclass
 class ItemEvent:
     item: ItemRef
@@ -75,6 +91,15 @@ class BridgeState:
         self._pending_snapshot_entries: list[dict] = []
         self._pending_snapshot_save_slot: int | None = None
         self.last_snapshot_save_slot: int | None = None
+        # Multi-Switch registry. SwitchServer accepts N parallel connections
+        # (one Switch and one Ryujinx; future co-op streaming) and the user
+        # picks which one is bound to the AP slot via the Switches popup.
+        # Keyed by device_id; entries are plain dicts (kivy-thread reads them
+        # via get_switches and shouldn't depend on dataclass identity).
+        # `_active_device_id` is the one currently forwarding telemetry to AP;
+        # others are connected-but-idle (KickMsg(reason="inactive")).
+        self._switches: dict[str, dict] = {}
+        self._active_device_id: str | None = None
 
     # ---------- AP <-> internal ----------
 
@@ -215,6 +240,71 @@ class BridgeState:
     def all_shine_palette(self) -> dict[int, int]:
         with self._lock:
             return dict(self.shine_palette)
+
+    # ---------- Multi-Switch registry ----------
+
+    def register_switch(
+        self,
+        device_id: str,
+        peer_ip: str,
+        mod_ver: str = "",
+        smo_ver: str = "",
+    ) -> None:
+        """Record a Switch connection. Idempotent: a same-id reconnect
+        updates peer_ip + last_seen rather than duplicating the entry.
+
+        Called from SwitchServer after HELLO is parsed. The caller is
+        responsible for collision-handling (appending a suffix to
+        device_id) before registering.
+        """
+        with self._lock:
+            self._switches[device_id] = {
+                "device_id": device_id,
+                "peer_ip": peer_ip,
+                "mod_ver": mod_ver,
+                "smo_ver": smo_ver,
+                "last_seen": time.time(),
+            }
+
+    def touch_switch(self, device_id: str) -> None:
+        with self._lock:
+            entry = self._switches.get(device_id)
+            if entry is not None:
+                entry["last_seen"] = time.time()
+
+    def unregister_switch(self, device_id: str) -> None:
+        with self._lock:
+            self._switches.pop(device_id, None)
+            if self._active_device_id == device_id:
+                self._active_device_id = None
+
+    def set_active_switch(self, device_id: str | None) -> None:
+        with self._lock:
+            if device_id is not None and device_id not in self._switches:
+                return
+            self._active_device_id = device_id
+
+    def get_active_switch(self) -> str | None:
+        with self._lock:
+            return self._active_device_id
+
+    def get_switches(self) -> list[dict]:
+        """Snapshot of connected Switches, sorted stably by peer IP.
+
+        IP-sorted (NOT active-first) so a user-driven active-toggle
+        doesn't reorder rows — the swap is visible because the active
+        marker moves between rows, not because the rows jump positions
+        around. Each entry carries an `active: bool` flag the UI uses
+        to color and label the row.
+        """
+        with self._lock:
+            active = self._active_device_id
+            entries = [
+                {**v, "active": (k == active)}
+                for k, v in self._switches.items()
+            ]
+        entries.sort(key=lambda e: _ip_sort_key(e.get("peer_ip", "")))
+        return entries
 
     # ---------- Snapshot for web tracker / replay ----------
 

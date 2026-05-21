@@ -81,6 +81,14 @@ class HelloMsg:
     mod_ver: str = ""
     smo_ver: str = ""
     cap_table_hash: str = ""
+    # Stable identifier for the Switch. Sourced from
+    # `nn::settings::GetDeviceNickname` on real hardware, falls back to a
+    # synthesized "sw-<ip-suffix>" when nickname is empty. Used by the
+    # bridge to disambiguate two Switches on the same LAN — see the
+    # _SwitchConn dict in switch_server.py. Tolerates absent / empty
+    # field for back-compat with pre-discovery Switch builds: the
+    # bridge invents one from peer IP when missing.
+    device_id: str = ""
 
 
 @dataclass
@@ -457,6 +465,39 @@ class CappyMsg:
     """
     t: str = "cappy"
     text: str = ""
+
+
+@dataclass
+class KickMsg:
+    """Bridge tells the Switch to go idle.
+
+    Sent on two paths:
+      * A second Switch connects while another is already the active
+        one — the newcomer is parked with reason="inactive" until the
+        user picks it via the selector UI.
+      * The active Switch is unbound (user toggled selection in the
+        Connections popup) — the previously-active receives
+        reason="unbound" so it can render an idle overlay.
+
+    Switch side: shows a small "(inactive — not bound to AP slot)"
+    overlay and stops sending telemetry. Inbound items / scouts /
+    state are suppressed until an `ActivateMsg` arrives.
+    """
+    t: str = "kick"
+    reason: str = ""  # "inactive" | "unbound" | "version_mismatch" | "duplicate_id"
+
+
+@dataclass
+class ActivateMsg:
+    """Bridge tells the Switch it is the active one.
+
+    Sent immediately before the post-HELLO replay sequence
+    (OutstandingMsg + ItemMsg backlog + ShineScoutsMsg + ApStateMsg)
+    when an inactive Switch is promoted to active via the selector
+    UI. The Switch lifts its idle overlay and resumes normal
+    telemetry forwarding.
+    """
+    t: str = "activate"
 
 
 @dataclass

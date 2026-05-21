@@ -12,10 +12,19 @@ Pages (sequenced; each calls `next_page()` when its work completes):
   2. PrereqPage        — runs `_setup.prereqs.check_all()`, surfaces ✓/✗
   3. DumpPickerPage    — file dialog for the user's SMO 1.0.0 NSP or XCI
   4. ExtractPage       — runs the extractor in a worker thread, streams log
-  5. BridgeIpPage      — text field prefilled with `detect_lan_ip()`
-  6. BuildPage         — runs sync_capture_table → cmake configure → cmake build
-  7. DeployPage        — radio: SD card vs Ryujinx, with auto-detect
-  8. DonePage          — "Launch SMOClient" button (if a .meatballsap was passed)
+  5. BuildPage         — runs sync_capture_table → cmake configure → cmake build.
+                         The bridge IP is captured silently via detect_lan_ip()
+                         and baked in as a fallback; the Switch mod's runtime
+                         UDP discovery (DiscoveryResponder) handles the common
+                         case where the LAN IP changes after the build.
+  6. DeployPage        — radio: SD card vs Ryujinx, with auto-detect
+  7. DonePage          — "Launch SMOClient" button (if a .meatballsap was passed)
+
+The legacy `BridgeIpPage` (a TextInput where the user manually confirmed the
+LAN IP) was dropped in the discovery rework. The page's build function
+(`build_ip`) is retained so the screen can still be reached programmatically
+from a future Advanced override surface, but it is no longer registered in
+the navigation flow.
 
 Kivy is imported lazily INSIDE this module — never at apworld-import time —
 because AP generation hosts (Linux servers running `python ap_generate.py`)
@@ -760,7 +769,10 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
                             size_hint=(1, 1))
         root.add_widget(log_box)
 
-        nav, _, next_btn = _nav_row(lambda: goto("nsp"), lambda: goto("ip"))
+        # Bridge IP is now captured silently via detect_lan_ip() at startup
+        # and baked into the build as a fallback; runtime UDP discovery
+        # handles the common case. Skip straight to the build step.
+        nav, _, next_btn = _nav_row(lambda: goto("nsp"), lambda: goto("build"))
         next_btn.disabled = True
         retry_btn = Button(text="Retry", size_hint_y=None, height=40, disabled=True)
         root.add_widget(retry_btn)
@@ -1109,7 +1121,7 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
         log_box = TextInput(text="", readonly=True, size_hint=(1, 1))
         root.add_widget(log_box)
 
-        nav, _, next_btn = _nav_row(lambda: goto("ip"), lambda: goto("deploy"))
+        nav, _, next_btn = _nav_row(lambda: goto("extract"), lambda: goto("deploy"))
         next_btn.disabled = True
         retry_btn = Button(text="Retry", size_hint_y=None, height=40, disabled=True)
         root.add_widget(retry_btn)
@@ -1516,7 +1528,9 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
     sm.add_widget(build_prereqs())
     sm.add_widget(build_nsp())
     sm.add_widget(build_extract())
-    sm.add_widget(build_ip())
+    # BridgeIpPage intentionally NOT registered — bridge IP is now
+    # captured silently via detect_lan_ip() (see wizard_state init above)
+    # and baked in as a fallback for the new runtime UDP discovery.
     sm.add_widget(build_build())
     sm.add_widget(build_deploy())
     sm.add_widget(build_done())

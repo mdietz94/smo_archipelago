@@ -28,12 +28,6 @@ ItemKind fromWire(const std::string& s); // legacy overload — forwards to char
 
 // Switch -> Bridge ----------------------------------------------------------
 
-struct Hello {
-    std::string mod_ver;
-    std::string smo_ver;
-    std::string cap_table_hash;
-};
-
 // Fixed-size char buffer used for Check string fields. libstdc++'s
 // std::string allocator path NULL-derefs in our subsdk9 context for any
 // string that exceeds SSO (~15 bytes), same root cause as the std::set
@@ -74,6 +68,18 @@ inline void copyFixedField(char (&dst)[N], const char* src) {
     }
     dst[i] = '\0';
 }
+
+struct Hello {
+    std::string mod_ver;
+    std::string smo_ver;
+    std::string cap_table_hash;
+    // Stable Switch identifier (`nn::settings::GetDeviceNickname`, or a
+    // synthesized "sw-<ip-suffix>" fallback). Bridge uses this to
+    // disambiguate two Switches on the same LAN — see the multi-Switch
+    // selector popup in SMOClient. Fixed buffer (M6.1 allocator-safety
+    // contract) — Nintendo's API returns at most 32 UTF-8 bytes plus null.
+    char device_id[kCheckFieldCap] = {};
+};
 
 // Length-bounded variant — used when the source is a string_view from the
 // inbound JSON Reader (which does NOT null-terminate). Truncates and always

@@ -31,6 +31,7 @@ from . import __version__, logging_setup
 from .config import Config
 from .context import SMOContext
 from .datapackage import DataPackage
+from .discovery import DEFAULT_DISCOVERY_PORT, DiscoveryResponder
 from .maps import CaptureMap, ShineMap
 from .protocol import KillMsg
 from .state import BridgeState
@@ -283,6 +284,18 @@ async def main(args: argparse.Namespace) -> None:
     # cancelling it triggers Server.__aexit__ -> wait_closed(), which on
     # Python 3.12+ blocks until every active client connection drops).
     await sw.start()
+
+    # UDP discovery responder. Switches probe 127.0.0.1:17776 (Ryujinx-
+    # on-same-host), then broadcast 255.255.255.255:17776 (normal LAN),
+    # then any baked-in fallback IP. Replies advertise our TCP port +
+    # the LAN IP a peer should connect to. Bind failure (port in use)
+    # is non-fatal — Switches with a baked-in IP still TCP-connect.
+    discovery = DiscoveryResponder(
+        tcp_port=cfg.switch.listen_port,
+        get_seed=lambda: state.seed,
+        port=DEFAULT_DISCOVERY_PORT,
+    )
+    await discovery.start()
     # AP connection is opt-in. A Launcher click (which passes no args)
     # leaves AP disconnected — the user clicks Connect / types /connect
     # when ready, and SMOContext.connect() then runs the SNI-style
@@ -305,11 +318,12 @@ async def main(args: argparse.Namespace) -> None:
     except (KeyboardInterrupt, asyncio.CancelledError):
         log.info("shutdown requested")
     finally:
-        # sw.stop() closes the active Switch writer first (so wait_closed
-        # can return) and then closes the listener. Order matters: do this
+        # sw.stop() closes every Switch writer first (so wait_closed can
+        # return) and then closes the listener. Order matters: do this
         # before ctx.shutdown() so any tasks still in flight on the asyncio
         # loop have a chance to wind down cleanly.
         await sw.stop()
+        discovery.stop()
         await ctx.shutdown()
 
 

@@ -36,8 +36,9 @@ set(SMO_AP_MOD_VERSION "0.1.0" CACHE STRING "Module version baked into HELLO")
 # ap_config.json defaults — baked into the file via configure_file at build
 # time. Override per-machine: -DBRIDGE_HOST=192.168.x.x at cmake configure.
 # ---------------------------------------------------------------------------
-set(BRIDGE_HOST            "192.168.1.187" CACHE STRING "PC LAN IP for the bridge")
+set(BRIDGE_HOST            "192.168.1.187" CACHE STRING "PC LAN IP fallback for the bridge (runtime UDP discovery is tried first)")
 set(BRIDGE_PORT            17777           CACHE STRING "Bridge TCP port")
+set(DISCOVERY_PORT         17776           CACHE STRING "UDP discovery probe port (Switch -> bridge; bridge -> Switch reply)")
 set(BRIDGE_RETRY_MS        3000            CACHE STRING "Reconnect backoff seed (ms)")
 set(BRIDGE_RECV_TIMEOUT_MS 200             CACHE STRING "Per-iteration recv timeout (ms)")
 set(BRIDGE_LOG_LEVEL       "info"          CACHE STRING "Module log level")
@@ -62,6 +63,7 @@ add_compile_definitions(
     SMO_TITLE_ID_STRING="${TITLE_ID}"
     BRIDGE_HOST_STRING="${BRIDGE_HOST}"
     BRIDGE_PORT_VALUE=${BRIDGE_PORT}
+    DISCOVERY_PORT_VALUE=${DISCOVERY_PORT}
     BRIDGE_RETRY_MS_VALUE=${BRIDGE_RETRY_MS}
     BRIDGE_RECV_TIMEOUT_MS_VALUE=${BRIDGE_RECV_TIMEOUT_MS}
 )

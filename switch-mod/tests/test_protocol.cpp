@@ -108,6 +108,25 @@ TEST(encode_hello) {
         R"({"t":"hello","mod_ver":"0.1.0+abc1234","smo_ver":"1.3.0","cap_table_hash":"sha1:deadbeef"})" "\n");
 }
 
+TEST(encode_hello_with_device_id) {
+    Hello h{.mod_ver="0.1.0", .smo_ver="1.0.0", .cap_table_hash=""};
+    // Populate the fixed-buffer device_id without bringing the M6.1
+    // allocator into play (libstdc++'s std::string-growth path NULL-derefs
+    // on the worker thread). copyFixedField is the canonical helper.
+    copyFixedField(h.device_id, "mario");
+    EXPECT_EQ_S(wire([&](auto& b){ encodeHello(b, h); }),
+        R"({"t":"hello","mod_ver":"0.1.0","smo_ver":"1.0.0","cap_table_hash":"","device_id":"mario"})" "\n");
+}
+
+TEST(encode_hello_omits_empty_device_id) {
+    // Default-constructed device_id is all-zero; encodeHello must omit
+    // the key entirely so legacy bridges (older parsers that don't
+    // recognize device_id) still parse the message.
+    Hello h{.mod_ver="0.1.0", .smo_ver="1.0.0", .cap_table_hash=""};
+    EXPECT_EQ_S(wire([&](auto& b){ encodeHello(b, h); }),
+        R"({"t":"hello","mod_ver":"0.1.0","smo_ver":"1.0.0","cap_table_hash":""})" "\n");
+}
+
 TEST(encode_check_moon) {
     Check c{.kind=ItemKind::Moon, .kingdom="Cascade", .shine_id="Our First Power Moon"};
     EXPECT_EQ_S(wire([&](auto& b){ encodeCheck(b, c); }),

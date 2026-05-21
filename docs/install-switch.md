@@ -30,9 +30,16 @@ sd:/atmosphere/contents/0100000000010000/
 
 ## Configuring the bridge target
 
-The bridge PC's IP is **compile-time** on retail Switch firmware. `ap_config.json` ships for documentation and Ryujinx-development convenience, but the retail mod does NOT read it at runtime — the IP is baked into `subsdk9` via `-DBRIDGE_HOST=...` at cmake configure time.
+On startup the mod resolves the bridge address at runtime via UDP discovery in this order:
 
-The setup wizard handles this — the Bridge-IP page asks for your PC's IP and re-runs cmake with the right `-D` flag. Changing your bridge PC's IP requires re-running setup (`/setup` in SMOClient).
+1. UDP probe → `127.0.0.1:17776` (covers Ryujinx-on-same-host).
+2. UDP broadcast → `255.255.255.255:17776` (covers a normal home LAN).
+3. UDP probe → the build-time-baked `BRIDGE_HOST:17776` (covers networks where broadcast is filtered but unicast traverses — some consumer routers, VLAN'd setups).
+4. TCP fallback → `BRIDGE_HOST:17777` if every UDP probe fails.
+
+SMOClient runs a `DiscoveryResponder` on UDP 17776; it replies with its current LAN IP so the answer is always routable. The baked-in `BRIDGE_HOST` is now only a fallback for steps 3 and 4 — most users never hit it.
+
+The setup wizard captures your PC's LAN IP silently and bakes it as the fallback. Re-run `/setup` if your DHCP lease changes AND discovery somehow fails (e.g. firewall is dropping UDP — see Troubleshooting in [first-time-setup.md](first-time-setup.md)).
 
 For manual / dev-loop builds:
 
@@ -40,9 +47,10 @@ For manual / dev-loop builds:
 cd C:\Users\maxwe\Documents\smo_archipelago\switch-mod
 & "C:/Program Files/CMake/bin/cmake.exe" -S . -B build -G Ninja `
     -DCMAKE_TOOLCHAIN_FILE=lunakit-vendor/cmake/toolchain.cmake `
-    -DBRIDGE_HOST=192.168.1.187     # your PC's LAN IP
+    -DBRIDGE_HOST=192.168.1.187     # your PC's LAN IP (fallback only)
 # Optional:
 #   -DBRIDGE_PORT=17777
+#   -DDISCOVERY_PORT=17776
 #   -DBRIDGE_RETRY_MS=3000
 #   -DBRIDGE_RECV_TIMEOUT_MS=200
 #   -DBRIDGE_LOG_LEVEL=info
@@ -50,12 +58,16 @@ cd C:\Users\maxwe\Documents\smo_archipelago\switch-mod
 
 The values are sticky in the cmake cache so `--build` and `--install` reuse them. Editing `ap_config.json` on the SD after install has no effect — it's a documentation artifact only on retail.
 
+### Multi-Switch setup
+
+The bridge accepts N parallel Switch connections — real hardware + Ryujinx on the same LAN, or two real Switches if you have them. Open the Switches popup in SMOClient (click the top-bar pill next to the Connect bar) to see which Switches are connected and toggle which one is bound to the AP slot. Telemetry from inactive Switches is dropped; only the active Switch's checks forward to AP and only the active Switch receives item replays.
+
 ## Steps (manual install — the wizard automates this)
 
 1. Power off the Switch and remove the SD card (or use the FTP / USB-mass-storage method).
 2. Copy `switch-mod/sd-overlay/atmosphere/` (or `%APPDATA%\SMOArchipelago\build\cmake\` outputs into the `atmosphere/contents/0100000000010000/{exefs,romfs}/` layout above) onto the SD's `atmosphere/` directory.
 3. Re-insert the SD.
-4. Make sure your PC's firewall allows inbound TCP on `bridge_port` from the Switch's IP.
+4. Make sure your PC's firewall allows inbound TCP on `bridge_port` (default 17777) and inbound UDP on `discovery_port` (default 17776) from the Switch's IP. UDP 17776 is the discovery channel; TCP 17777 is the main message channel.
 
 ## Coexistence with smo-lunakit
 
