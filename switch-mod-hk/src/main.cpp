@@ -128,12 +128,12 @@ HkTrampoline<void, const HakoniwaSequence*> drawMainHook =
         smoap::hooks::tickPendingUncapture();
         smoap::ui::drawHudFrame();
 
-        // Drain worker-thread system-bubble pushes BEFORE tryPump so a freshly
-        // arrived "Connected/Disconnected/Not connected to Archipelago" lands
-        // in CappyMessenger's queue in time for this frame's dispatch attempt.
-        // Cross-thread access to CappyMessenger from the worker crashes
-        // Ryujinx ARMeilleure's JIT; the worker pushes onto the SPSC ring and
-        // we drain here from frame-thread context.
+        // BISECT phase 15: DRAIN DISABLED. Worker still pushes to ring; frame
+        // doesn't drain. CappyMessenger.queue_ stays empty for the duration.
+        // Survives -> having entries in Cappy.queue_ is the trigger (then we
+        // look at what tryPump does with non-empty queue under GPU pressure).
+        // Crashes  -> Cappy queue contents aren't the issue.
+        /*
         {
             smoap::ap::ApState::SystemBubble bubble;
             while (smoap::ap::ApState::instance()
@@ -141,6 +141,7 @@ HkTrampoline<void, const HakoniwaSequence*> drawMainHook =
                 smoap::ui::CappyMessenger::instance().enqueueSystem(bubble.text);
             }
         }
+        */
 
         smoap::ui::CappyMessenger::instance().tryPump(
             smoap::ap::ApState::instance().scene_cache.load(
