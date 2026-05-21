@@ -50,24 +50,45 @@ _extracted_bundled_root: Path | None = None
 def _python_invoker() -> list[str]:
     """Return the command prefix that invokes a Python script via subprocess.
 
+    Resolution order:
+      1. The wizard-verified Python 3.12 (resolved by `check_python312`,
+         cached in prereqs._resolved_python312_bin). This is the SAME
+         interpreter `install_sail_python_deps` pip-installed lz4 into,
+         and the SAME 3.12 the extractor's venv targets. Preferring it
+         means child scripts (build_switchmod.py, extract_shine_map.py,
+         patch_hakkun.py) run under the right Python even when the
+         wizard itself is being run by Archipelago's launcher under a
+         different version (3.13 / 3.14 / Store stub).
+      2. `sys.executable` if it's named like a real Python interpreter
+         (`python` / `python3` / `py` / `pythonw`). Covers the dev-
+         source-checkout case where the wizard prereq check hasn't
+         been run (no cached path) and the dev launched us under their
+         own venv Python — that's also where their deps live.
+      3. `py -3.12` on PATH (covers the frozen-launcher case before
+         prereq check ran).
+      4. `python3.12` / `python3` / `python` on PATH as a last resort.
+      5. `sys.executable` as the irrecoverable fallback (better to
+         spawn SOMETHING with a clear error than nothing at all).
+
     Under AP's official Windows installer, `sys.executable` is
     `ArchipelagoLauncher.exe` — a PyInstaller-bundled launcher that
     argparse-parses its own argv. Spawning `[sys.executable, "-u",
-    "script.py", "--nsp", ...]` doesn't run Python on script.py; it
-    re-invokes the launcher with those args, which fails with
-    "unrecognized arguments: -u --nsp ...". (Reproduced in the
-    diagnostic build's extract.log.)
-
-    Fall back to the `py` launcher (`py -3.12`), which the wizard's
-    prereq check has already confirmed exists and works. We prefer 3.12
-    over the system default because the extractor's bootstrap re-execs
-    into a 3.12 venv anyway — invoking with 3.12 from the start means
-    the os.execv is a no-op when oead is already installed.
-
-    On a dev source checkout, `sys.executable` IS a Python interp and
-    we use it directly so the script runs under the same venv the
-    developer set up for the rest of SMOClient.
+    "script.py", ...]` doesn't run Python on script.py; it re-invokes
+    the launcher with those args, which fails with "unrecognized
+    arguments". Step 1 + 3 cover that case.
     """
+    # Lazy import to avoid a top-level circular dep risk (prereqs.py
+    # doesn't import build.py today but is closer to the leaf of the
+    # _setup graph, so importing it from build.py is fine — we just
+    # avoid the top-level for clarity that this is a "use if available"
+    # lookup, not a hard dep).
+    from .prereqs import resolved_python312_bin
+    pinned = resolved_python312_bin()
+    if pinned:
+        py_exe = Path(pinned) / "python.exe"
+        if py_exe.is_file():
+            return [str(py_exe)]
+
     exe_name = Path(sys.executable).stem.lower()
     if exe_name in ("python", "python3", "py", "pythonw"):
         return [sys.executable]
@@ -766,6 +787,7 @@ def run_build_switchmod(
     """
     from .prereqs import (
         resolved_llvm_bin, resolved_mingw_bin, resolved_python312_bin,
+        resolved_ninja_bin, resolved_cmake,
     )
 
     script = bundled_script("build_switchmod.py")
@@ -774,6 +796,12 @@ def run_build_switchmod(
     # Hand the wrapper its toolchain dirs explicitly. None means "let the
     # script's hardcoded default win" (the dev machine layout), which is
     # also what happens if the prereq check didn't run yet.
+    #
+    # IMPORTANT: every prereq the user verified MUST be plumbed through
+    # here, or build_switchmod.py's hardcoded defaults fire for end-user
+    # machines (those defaults match a dev's winget + msys2 layout, with
+    # at least one literal username in the Ninja path). Resolver/consumer
+    # misalignment is the same bug class as PR #169's Python pin.
     llvm = resolved_llvm_bin()
     if llvm:
         env["SMOAP_LLVM_BIN"] = llvm
@@ -790,6 +818,26 @@ def run_build_switchmod(
     python312 = resolved_python312_bin()
     if python312:
         env["SMOAP_PYTHON_BIN"] = python312
+    # Pin ninja to the dir check_ninja resolved. build_switchmod.py's
+    # default is hardcoded to a dev-machine winget path that contains a
+    # literal username — broken for any other user. The wizard's
+    # check_ninja prepends the right dir to its own PATH (so the build
+    # subprocess inherits it at the tail of its PATH chain), but
+    # plumbing the dir explicitly here makes the prepended slot point
+    # at the verified ninja instead of the broken default.
+    ninja = resolved_ninja_bin()
+    if ninja:
+        env["SMOAP_NINJA_BIN"] = ninja
+    # Pin cmake similarly. `resolved_cmake()` returns the full exe path
+    # (or the bare-name "cmake" if detection didn't find a real path);
+    # take the parent dir to feed build_switchmod.py's bin-dir-shaped
+    # SMOAP_CMAKE_BIN slot. Skip the bare-name case — no useful dir to
+    # plumb, and build_switchmod.py's `C:\Program Files\CMake\bin`
+    # default is at least a real Kitware install location to fall back
+    # on, vs the username-hardcoded ninja default.
+    cmake = resolved_cmake()
+    if cmake and cmake != "cmake":
+        env["SMOAP_CMAKE_BIN"] = os.path.dirname(cmake)
     # The wrapper hardcodes its source dir relative to its own location,
     # so it'll find `<bundled>/switch_mod/` correctly when invoked as
     # `python <bundled>/scripts/build_switchmod.py`.

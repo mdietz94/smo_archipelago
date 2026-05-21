@@ -70,6 +70,8 @@ def isolated_portable_roots(monkeypatch, tmp_path):
     monkeypatch.setattr(prereqs, "_resolved_llvm_bin", None)
     monkeypatch.setattr(prereqs, "_resolved_mingw_bin", None)
     monkeypatch.setattr(prereqs, "_resolved_python312_bin", None)
+    monkeypatch.setattr(prereqs, "_resolved_ninja_bin", None)
+    monkeypatch.setattr(prereqs, "_resolved_cmake", None)
 
 
 # ---------- check_python312 ----------
@@ -597,6 +599,47 @@ def test_ninja_found_at_winget_path_even_when_not_on_path(
     assert str(ninja) in r.detail
     import os
     assert str(pkg_dir) in os.environ["PATH"].split(os.pathsep)
+
+
+def test_ninja_caches_resolved_bin_dir_winget(
+    monkeypatch, tmp_path, fake_run, isolated_portable_roots,
+) -> None:
+    """`check_ninja` should cache the winget-deterministic dir in
+    `_resolved_ninja_bin`. `build.py` reads this and sets SMOAP_NINJA_BIN
+    on the build subprocess. Without this pin, build_switchmod.py falls
+    back to a dev-machine hardcoded path that contains a literal
+    username — broken for any other user."""
+    pkg_dir = tmp_path / "Ninja-build.Ninja_winget_x64"
+    pkg_dir.mkdir(parents=True)
+    ninja = pkg_dir / "ninja.exe"
+    ninja.write_text("")
+    monkeypatch.setattr(prereqs, "_winget_ninja_paths", lambda: [ninja])
+    fake_run({f"{ninja} --version": (0, "1.12.1\n", "")})
+
+    r = check_ninja()
+    assert r.ok
+    assert prereqs.resolved_ninja_bin() == str(pkg_dir)
+
+
+def test_ninja_caches_resolved_bin_dir_path_fallback(
+    monkeypatch, tmp_path, fake_run, isolated_portable_roots,
+) -> None:
+    """When the winget-deterministic probe misses but bare-name ninja
+    is on PATH, the detector should still cache the dir via shutil.which
+    so SMOAP_NINJA_BIN points at the same ninja `check_ninja` verified
+    — not whatever the build_switchmod.py default holds."""
+    bin_dir = tmp_path / "user-installed-ninja"
+    bin_dir.mkdir(parents=True)
+    ninja = bin_dir / "ninja.exe"
+    ninja.write_text("")
+    monkeypatch.setattr(prereqs, "_winget_ninja_paths", lambda: [])
+    fake_run({"ninja --version": (0, "1.12.1\n", "")})
+    monkeypatch.setattr(prereqs.shutil, "which",
+                        lambda name: str(ninja) if name == "ninja" else None)
+
+    r = check_ninja()
+    assert r.ok
+    assert prereqs.resolved_ninja_bin() == str(bin_dir)
 
 
 # ---------- check_hactool ----------

@@ -836,16 +836,39 @@ def _winget_ninja_paths() -> list[Path]:
     return sorted(base.glob("Ninja-build.Ninja_*/ninja.exe"))
 
 
+# Module-level cache of the resolved ninja `bin/` dir. `build.py` reads
+# it via `resolved_ninja_bin()` and exports as `SMOAP_NINJA_BIN` so the
+# build subprocess prepends the SAME ninja the prereq check passed — not
+# whatever's first on the inherited PATH. Without this, build_switchmod.py
+# falls back to a dev-machine hardcoded path (literally a user's name),
+# which is broken for any other end user. Mirrors `_resolved_llvm_bin`
+# / `_resolved_mingw_bin` / `_resolved_python312_bin`.
+_resolved_ninja_bin: str | None = None
+
+
+def resolved_ninja_bin() -> str | None:
+    """Return the dir containing the ninja binary the most recent
+    `check_ninja` call resolved, or None if detection hasn't been run
+    or didn't find one. Used by build.py to pin SMOAP_NINJA_BIN."""
+    return _resolved_ninja_bin
+
+
 def check_ninja() -> PrereqResult:
     # Try the winget-deterministic path first so a manual-mode user
     # whose terminal PATH is stale still gets a green row on Re-check.
     # Side effect: prepends the dir to PATH so cmake's bare-name `ninja`
-    # spawn inside `cmake --build` finds it without a shell restart.
+    # spawn inside `cmake --build` finds it without a shell restart;
+    # also caches `_resolved_ninja_bin` so build.py can pin it via
+    # SMOAP_NINJA_BIN (otherwise build_switchmod.py's dev-machine
+    # hardcoded fallback would fire for end users).
+    global _resolved_ninja_bin
+
     for candidate in _winget_ninja_paths():
         r = _safe_run([str(candidate), "--version"])
         if r is None or r[0] != 0:
             continue
         _prepend_path(candidate.parent)
+        _resolved_ninja_bin = str(candidate.parent)
         ver = (r[1] or r[2]).strip()
         return PrereqResult("ninja", "Ninja", True,
                             f"{ver} ({candidate})",
@@ -867,6 +890,13 @@ def check_ninja() -> PrereqResult:
             ),
             auto_installable=True,
         )
+    # PATH-resolved fallback. Cache the actual dir so build.py points
+    # SMOAP_NINJA_BIN at it (instead of whatever the build_switchmod.py
+    # hardcoded default holds). `shutil.which` returns the same lookup
+    # cmake will do, so resolver and consumer stay in lockstep.
+    resolved = shutil.which("ninja")
+    if resolved:
+        _resolved_ninja_bin = str(Path(resolved).parent)
     ver = (r[1] or r[2]).strip()
     return PrereqResult("ninja", "Ninja", True, ver, auto_installable=True)
 

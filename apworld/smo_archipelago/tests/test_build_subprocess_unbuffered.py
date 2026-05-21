@@ -268,6 +268,31 @@ def test_python_invoker_falls_through_to_python312_when_no_py_launcher(
     assert build._python_invoker() == ["python3.12"]
 
 
+def test_python_invoker_prefers_wizard_resolved_python312_over_sys_executable(
+    monkeypatch, tmp_path,
+) -> None:
+    """When `check_python312` has cached a resolved 3.12 dir, the invoker
+    must use that interpreter for child scripts — even if `sys.executable`
+    looks like a valid Python interpreter (the dev-case shortcut). Closes
+    the leak path where Archipelago's launcher chain falls through to a
+    system Python 3.14 and child scripts inherit the wrong version.
+
+    The cached dir wins over sys.executable inference precisely because
+    the wizard *verified* this Python is 3.12 and that pip-installed lz4
+    landed in its site-packages; sys.executable's version is unverified."""
+    pinned_dir = tmp_path / "Python312"
+    pinned_dir.mkdir()
+    pinned_exe = pinned_dir / "python.exe"
+    pinned_exe.write_text("")
+    from _setup import prereqs
+    monkeypatch.setattr(prereqs, "_resolved_python312_bin", str(pinned_dir))
+    # sys.executable is some other real-looking Python (could be 3.14);
+    # it should be ignored in favor of the pin.
+    monkeypatch.setattr(build.sys, "executable", "C:/Python314/python.exe")
+
+    assert build._python_invoker() == [str(pinned_exe)]
+
+
 def test_python_invoker_handles_pythonw(monkeypatch) -> None:
     """pythonw.exe (Windows no-console Python) is a real Python interp;
     must be recognized as such even though its name isn't 'python'.
