@@ -146,17 +146,18 @@ extern "C" void hkMain() {
     SMOAP_LOG_INFO("resolving M6-phase-D getPayShineNum lookup");
     smoap::game::installPayShineSnapshotSymbol();
 
-    // BISECT phase 2: disable EVERY hook except GameSystemInit + drawMain.
-    // If the crash still happens, it's NOT hook-related — must be in our
-    // own runtime (worker thread, ApState lifecycle, drawMain trampoline
-    // body's applyOnFrame / Cappy pump, or socket bring-up). If it goes
-    // away, we re-enable groups to find the culprit.
-    SMOAP_LOG_INFO("BISECT phase 2: ALL game-event/capture/world/label/cappy hooks DISABLED");
+    // BISECT phase 3: phase 2 (all 19 disabled) was STABLE for 2+ min in a
+    // kingdom. So one of these 19 is the culprit. Re-enabling only the two
+    // that fire routinely during idle exploration: ShineNumGet (HUD shine
+    // count) and ShineNumByWorldGet (per-world HUD). If still stable, the
+    // culprit is in one of the user-action-driven hooks (capture, moon, world
+    // warp). If it crashes again, the culprit is one of these two.
+    SMOAP_LOG_INFO("BISECT phase 3: enabling ShineNumGet + ShineNumByWorldGet only");
     // smoap::hooks::installScenarioFlagHook();
     // smoap::hooks::installMoonGetHook();
     // smoap::hooks::installDeathHook();
-    // smoap::hooks::installShineNumGetHook();
-    // smoap::hooks::installShineNumByWorldGetHook();
+    smoap::hooks::installShineNumGetHook();
+    smoap::hooks::installShineNumByWorldGetHook();
     // smoap::game::installCaptureGrantSymbols();
     // smoap::hooks::installAddHackDictionaryHook();
     // smoap::hooks::installAddPayShineHook();
