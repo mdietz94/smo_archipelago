@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "package_version": "0.1.29-alpha",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.29-alpha/smo-poptracker-v0.1.29-alpha.zip",
+      "sha256": "205f540911dd5d030225419fd54618d042609f5f30306c19e5f8a4c81457dea8",
+      "changelog": [
+        "wizard: drop stale devkitPro references after LLVM 19 + WinLibs cutover",
+        "wizard: split prereq mode picker into its own screen; tighten row alignment",
+        "wizard: fix bundled switch_mod path + persist build/install logs"
+      ]
+    },
+    {
       "package_version": "0.1.28-alpha",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.28-alpha/smo-poptracker-v0.1.28-alpha.zip",
       "sha256": "97c0f223afb2cc3d00e9aed09b9d9bfde5d9c71b0620c8d2681c0163f25c7c03",
