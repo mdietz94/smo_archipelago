@@ -75,8 +75,8 @@ HkTrampoline<void, GameDataFile*> saveLoadHook =
                            drained);
         }
         st.save_was_loaded.store(true, std::memory_order_release);
-        // BISECT phase 11: ApClient calls OFF.
-        // smoap::ap::ApClient::instance().requestRehello();
+        // BISECT phase 12: requestRehello ON, deferSaveLoadStatusBubble OFF.
+        smoap::ap::ApClient::instance().requestRehello();
         // smoap::ap::ApClient::instance().deferSaveLoadStatusBubble();
     });
 
