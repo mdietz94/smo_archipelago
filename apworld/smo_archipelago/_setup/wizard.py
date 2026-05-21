@@ -348,7 +348,50 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
         m = Label(text=msg, halign="left", valign="top", text_size=(600, None))
         m.bind(size=lambda inst, val: setattr(inst, "text_size", (val[0], None)))
         root.add_widget(m)
-        nav, _, next_btn = _nav_row(None, lambda: goto("prereq_mode"), next_text="Begin")
+
+        # On Begin, run check_all() in a worker. If every prereq is
+        # already satisfied, skip the prereq_mode + prereqs screens
+        # (which exist to ask "how should we install?" and "keep
+        # portable toolchain after build?") and jump straight to the
+        # NSP picker. If anything is missing, fall through to the
+        # normal prereq_mode → prereqs path.
+        def on_begin() -> None:
+            popup_box = BoxLayout(orientation="vertical", padding=12, spacing=8)
+            popup_box.add_widget(Label(text="Checking prerequisites..."))
+            popup = Popup(
+                title="Setup",
+                content=popup_box,
+                size_hint=(0.5, 0.25),
+                auto_dismiss=False,
+            )
+            popup.open()
+
+            def worker() -> None:
+                state = load_setup_state()
+                hactool_override = (
+                    Path(state["hactool_path"]) if state.get("hactool_path") else None
+                )
+                prod_keys_override = (
+                    Path(state["prodkeys_path"]) if state.get("prodkeys_path") else None
+                )
+                results = check_all(
+                    hactool_override=hactool_override,
+                    prod_keys_override=prod_keys_override,
+                )
+
+                def finish(_dt):
+                    popup.dismiss()
+                    if all_ok(results):
+                        wizard_log("welcome→Begin: all prereqs OK, skipping prereq screens")
+                        goto("nsp")
+                    else:
+                        goto("prereq_mode")
+                from kivy.clock import Clock as _Clock
+                _Clock.schedule_once(finish)
+
+            threading.Thread(target=worker, daemon=True).start()
+
+        nav, _, next_btn = _nav_row(None, on_begin, next_text="Begin")
         root.add_widget(nav)
         s.add_widget(root)
         return s
