@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "package_version": "0.1.30-alpha",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.30-alpha/smo-poptracker-v0.1.30-alpha.zip",
+      "sha256": "b34344fde449f30efc6608dacfd383b7df19db98d7e6a19fcbf2ee91f8f32457",
+      "changelog": [
+        "wizard build: pin cmake's python/python3 invocations to vendored 3.12",
+        "wizard: skip prereq screens when all deps already satisfied",
+        "PopTracker auto-update: add v0.1.28-alpha to versions.json"
+      ]
+    },
+    {
       "package_version": "0.1.28-alpha",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.28-alpha/smo-poptracker-v0.1.28-alpha.zip",
       "sha256": "97c0f223afb2cc3d00e9aed09b9d9bfde5d9c71b0620c8d2681c0163f25c7c03",
