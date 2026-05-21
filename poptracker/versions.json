@@ -1,6 +1,20 @@
 {
   "versions": [
     {
+      "package_version": "0.1.31-alpha",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.31-alpha/smo-poptracker-v0.1.31-alpha.zip",
+      "sha256": "d9bf00ce20c8d29fd1ba5d90a16c9b773e337cdb9e4b267c3553db17613aeadf",
+      "changelog": [
+        "wizard build: pin SMOAP_PYTHON_BIN to the wizard-verified 3.12",
+        "wizard: batch log streaming so build/extract pages stop freezing the window",
+        "wizard: harden bare-name shell-outs + add CI guard",
+        "docs: stop claiming a LAN-IP change requires a rebuild",
+        "docs: refresh post-Hakkun comments that misrepresent the current build",
+        "PopTracker auto-update: add v0.1.29-alpha to versions.json",
+        "docs+setup: scrub remaining stale devkitPro references"
+      ]
+    },
+    {
       "package_version": "0.1.29-alpha",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.29-alpha/smo-poptracker-v0.1.29-alpha.zip",
       "sha256": "205f540911dd5d030225419fd54618d042609f5f30306c19e5f8a4c81457dea8",
