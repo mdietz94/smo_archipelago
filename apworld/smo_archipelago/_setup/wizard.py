@@ -441,6 +441,16 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
             popup.open()
 
             log_lines: list[str] = []
+            # File mirror so installer output survives the popup being
+            # dismissed. Previously the full transcript only lived in the
+            # Kivy widget and was lost on close, leaving wizard.log with
+            # just the "Install all missing: [...]" breadcrumb.
+            install_log_path = appdata_root() / "install.log"
+            install_log_file = None
+            try:
+                install_log_file = open(install_log_path, "w", encoding="utf-8")
+            except OSError as e:
+                wizard_log(f"could not open install.log: {e}")
 
             def append_log(line: str) -> None:
                 log_lines.append(line)
@@ -449,10 +459,21 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
                 log_widget.text = "\n".join(log_lines[-400:])
 
             def on_line(line: str) -> None:
+                # Synchronous file write on the worker thread so the
+                # line is durable even if the wizard dies mid-install.
+                if install_log_file is not None:
+                    try:
+                        import time
+                        install_log_file.write(
+                            f"[{time.strftime('%H:%M:%S')}] {line}\n"
+                        )
+                        install_log_file.flush()
+                    except Exception:
+                        pass
                 from kivy.clock import Clock as _Clock
                 _Clock.schedule_once(lambda dt: append_log(line))
 
-            def worker() -> None:
+            def _worker_body() -> None:
                 # Lazy-import installers — pulls in urllib + ctypes + the
                 # GitHub-API JSON parser, none of which the apworld layer
                 # should drag onto a headless gen host.
@@ -522,6 +543,19 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
                     # rows that DID succeed still need their green flip.
                     do_check()
                 _Clock.schedule_once(finish)
+
+            def worker() -> None:
+                # try/finally so the install.log file gets closed on
+                # every exit path — preflight aborts, normal completion,
+                # AND any uncaught exception inside _worker_body.
+                try:
+                    _worker_body()
+                finally:
+                    if install_log_file is not None:
+                        try:
+                            install_log_file.close()
+                        except Exception:
+                            pass
 
             threading.Thread(target=worker, daemon=True).start()
 
@@ -1262,6 +1296,24 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
         root.add_widget(nav)
         s.add_widget(root)
 
+        # File-log mirror so the build screen's output survives the
+        # popup-style Kivy widget being cleared (each retry calls
+        # log_lines.clear() and resets log_box.text). When the user
+        # reports "the build failed", build.log has the full subprocess
+        # transcript across every attempt of this wizard run.
+        build_log_path = appdata_root() / "build.log"
+        build_log_state: dict[str, Any] = {"file": None}
+
+        def _build_log_to_file(line: str) -> None:
+            f = build_log_state["file"]
+            if f is not None:
+                try:
+                    import time
+                    f.write(f"[{time.strftime('%H:%M:%S')}] {line}\n")
+                    f.flush()
+                except Exception:
+                    pass
+
         def append_line(line: str) -> None:
             log_lines.append(line)
             if len(log_lines) > 2000:
@@ -1269,6 +1321,11 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
             log_box.text = "\n".join(log_lines[-400:])
 
         def on_line(line: str) -> None:
+            # Synchronous file write happens on the worker thread so the
+            # line is durable even if the wizard process dies before the
+            # next Kivy frame. The widget update is scheduled on the UI
+            # thread.
+            _build_log_to_file(line)
             from kivy.clock import Clock as _Clock
             _Clock.schedule_once(lambda dt: append_line(line))
 
@@ -1357,6 +1414,21 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
                 retry_btn.disabled = True
                 return
             build_state["attempt_count"] += 1
+            # Open build.log fresh on the first attempt of a page entry,
+            # append on retries so the full diagnostic trail across
+            # attempts stays in one file. Best-effort — a failure to
+            # open just means no file persistence, the widget still works.
+            if build_log_state["file"] is None:
+                mode = "w" if build_state["attempt_count"] == 1 else "a"
+                try:
+                    build_log_state["file"] = open(
+                        build_log_path, mode, encoding="utf-8",
+                    )
+                except OSError as e:
+                    on_line(
+                        f"[wizard] could not open {build_log_path}: {e} "
+                        f"(build will run; output will not be persisted)"
+                    )
             on_line(
                 f"[wizard] === build attempt "
                 f"{build_state['attempt_count']}/{MAX_STEP_ATTEMPTS} ==="
@@ -1369,6 +1441,15 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
 
         def _reset_and_start(*_):
             build_state["attempt_count"] = 0
+            # Close any handle left over from a previous page entry so
+            # the next start_worker re-opens in truncate mode.
+            f = build_log_state["file"]
+            if f is not None:
+                try:
+                    f.close()
+                except Exception:
+                    pass
+                build_log_state["file"] = None
             start_worker()
 
         retry_btn.bind(on_release=lambda _i: start_worker())

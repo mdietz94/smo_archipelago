@@ -17,7 +17,19 @@ import subprocess
 import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SWITCH_MOD = os.path.join(REPO_ROOT, "switch-mod")
+# Probe the dev-checkout name first (`switch-mod`) and fall back to the
+# bundled-apworld name (`switch_mod`). The apworld zip's contents must
+# be valid Python module names — hyphens are illegal — so
+# `install_apworld.py --bundle-mod` renames the dir to underscore-form
+# when staging into `_setup/switch_mod/`. This probe lets the same
+# wrapper drive both dev builds and end-user wizard builds.
+SWITCH_MOD = next(
+    (p for p in (
+        os.path.join(REPO_ROOT, "switch-mod"),
+        os.path.join(REPO_ROOT, "switch_mod"),
+    ) if os.path.isdir(p)),
+    os.path.join(REPO_ROOT, "switch-mod"),  # fallback used only for the error message
+)
 BUILD_DIR = os.path.join(SWITCH_MOD, "build")
 
 # Windows-native binary directories. Each can be overridden via the matching
@@ -45,7 +57,13 @@ def ensure_hakkun_patched() -> None:
     Windows wchar_t bug; patch 3 quotes the host clang path).
     """
     patch_script = os.path.join(REPO_ROOT, "scripts", "patch_hakkun.py")
-    result = subprocess.run([sys.executable, patch_script])
+    # Hand patch_hakkun.py the resolved switch-mod path explicitly so the
+    # dev-checkout vs bundled-apworld layout difference is settled in one
+    # place (here). Without this, patch_hakkun.py's own REPO_ROOT-relative
+    # probe would have to duplicate the same fallback logic.
+    patch_env = os.environ.copy()
+    patch_env["SMOAP_SWITCH_MOD_DIR"] = SWITCH_MOD
+    result = subprocess.run([sys.executable, patch_script], env=patch_env)
     if result.returncode != 0:
         sys.exit("[build] patch_hakkun.py failed")
 

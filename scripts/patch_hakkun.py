@@ -47,7 +47,21 @@ import os
 import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HAKKUN = os.path.join(REPO_ROOT, "switch-mod", "sys")
+# SMOAP_SWITCH_MOD_DIR is set by build_switchmod.py (which already
+# resolved the dev-checkout vs bundled-apworld layout). When invoked
+# standalone we probe both names, dev-checkout first.
+_switch_mod_env = os.environ.get("SMOAP_SWITCH_MOD_DIR")
+if _switch_mod_env and os.path.isdir(_switch_mod_env):
+    SWITCH_MOD = _switch_mod_env
+else:
+    SWITCH_MOD = next(
+        (p for p in (
+            os.path.join(REPO_ROOT, "switch-mod"),
+            os.path.join(REPO_ROOT, "switch_mod"),
+        ) if os.path.isdir(p)),
+        os.path.join(REPO_ROOT, "switch-mod"),
+    )
+HAKKUN = os.path.join(SWITCH_MOD, "sys")
 
 
 def patch_file(path: str, old: str, new: str, sentinel: str) -> str:
