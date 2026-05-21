@@ -201,9 +201,8 @@ def _prepend_path(dir_path: Path) -> None:
 
     Used after a detector resolves a tool via a winget-deterministic path
     that isn't on PATH yet — downstream subprocess invocations (cmake →
-    ninja, extract → py.exe) need to find the tool by bare name. Mirrors
-    `check_devkitpro`'s os.environ mutation pattern. Mutation is process-
-    local; nothing persists to the user's environment.
+    ninja, extract → py.exe) need to find the tool by bare name. Mutation
+    is process-local; nothing persists to the user's environment.
     """
     cur = os.environ.get("PATH", "")
     s = str(dir_path)
