@@ -16,9 +16,9 @@ This project provides an in-game module that:
 ## Requirements
 
 - **Super Mario Odyssey 1.0.0**
-- **Switch firmware 21.x or earlier, with Atmosphere CFW** — or an **emulator**
+- **Switch firmware 21.2 or 22.x, with Atmosphere CFW** — or an **emulator**
 - **Windows PC** on the same LAN as the Switch
-- **Archipelago, Python 3.12, devkitPro+devkitA64, CMake, Ninja, hactool, prod.keys**
+- **Archipelago, Python 3.12, LLVM 19, CMake, Ninja, msys2 mingw64, hactool, prod.keys**
 
 See [`docs/first-time-setup.md`](docs/first-time-setup.md) for the full prereq table with install links.
 
@@ -142,8 +142,10 @@ Type `/setup` in SMO Client to re-run the wizard.
 ## Credits
 
 - [empathy-mp3](https://github.com/empathy-mp3/SMO-manual-AP) — upstream apworld this fork descends from.
-- [Amethyst-szs](https://github.com/Amethyst-szs/smo-lunakit) — LunaKit SMO mod SDK.
-- [shadowninja108](https://github.com/shadowninja108/exlaunch) — exlaunch.
+- [fruityloops1](https://github.com/fruityloops1/LibHakkun) — LibHakkun (hook framework + sail symbol DB).
+- [MonsterDruide1](https://github.com/MonsterDruide1/OdysseyHeaders) — OdysseyHeaders + OdysseyDecomp (SMO 1.0.0 forward-decls + decompilation reference).
+- [Amethyst-szs](https://github.com/Amethyst-szs/smo-lunakit) — LunaKit SMO mod SDK (pre-Hakkun base for our switch-mod; still a reference for symbol verification).
+- [shadowninja108](https://github.com/shadowninja108/exlaunch) — exlaunch (pre-Hakkun hook framework).
 - [ArchipelagoMW](https://github.com/ArchipelagoMW/Archipelago) — Archipelago.
 
 ## License

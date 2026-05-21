@@ -8,6 +8,7 @@
 // SMOAP_HOST_TEST guard inside Log.hpp). We use SMOAP_LOG_INFO directly here
 // rather than through a layer because the diagnostic frequency is low
 // (per-item, not per-frame).
+#include "../ap/ApState.hpp"
 #include "../util/Log.hpp"
 
 namespace smoap::ui {
@@ -102,24 +103,17 @@ void CappyMessenger::enqueueSystem(const char* text) {
 }
 
 void CappyMessenger::tryPump(const void* scene) {
-    // Scene-stability bookkeeping. We tick this even when there's nothing
-    // queued so the settle counter is warm by the time an item arrives.
+    // Scene-stability bookkeeping. Increment the frame counter every pump
+    // when the scene is stable + non-null; reset both counters on transitions.
     if (scene != last_scene_) {
         if (last_scene_ != nullptr || scene != nullptr) {
             SMOAP_LOG_INFO("[cappy] scene changed last=%p new=%p — resetting "
-                           "settle counter",
+                           "settle gates",
                            last_scene_, scene);
         }
         last_scene_ = scene;
         settle_frames_ = 0;
-        // If a balloon was active on the previous scene, force-release the
-        // buffer. Two reasons: (1) CapMessage state is per-scene, so SMO has
-        // already discarded the balloon — keeping buffer_in_use_=true would
-        // strand the next dispatch waiting for an isActive that will never
-        // flip; (2) the buffer-in-use probe below would otherwise call
-        // s_isActive(new_scene) before the new scene's CapMessageDirector
-        // finishes registering with its SceneObjHolder, which NULL-derefs.
-        // Releasing here is safe — SMO can no longer read the old buffer.
+        scene_change_ms_ = scene != nullptr ? smoap::ap::ApState::nowMs() : 0;
         if (buffer_in_use_) {
             SMOAP_LOG_INFO("[cappy] scene change while buffer in-use — "
                            "force-releasing");
@@ -134,22 +128,18 @@ void CappyMessenger::tryPump(const void* scene) {
     if (!s_tryShow) return;        // host test build, or symbol resolve failed
     if (!s_isActive) return;
 
-    // Settle gate: don't poke the CapMessage director until the scene has
-    // been stable for kSceneSettleFrames consecutive frames. New StageScene
-    // construction races with SceneObjHolder child registration; calling
-    // rs::isActiveCapMessage before the director registers NULL-derefs.
-    if (settle_frames_ < kSceneSettleFrames) {
-        // Throttle the log so we don't spam every frame — once at the start
-        // is plenty for diagnostics.
-        if (settle_frames_ == 0) {
-            SMOAP_LOG_INFO("[cappy] waiting for scene settle (%u/%u frames) "
-                           "before first dispatch; queue=%u scene=%p",
-                           static_cast<unsigned>(settle_frames_),
-                           static_cast<unsigned>(kSceneSettleFrames),
-                           static_cast<unsigned>(live_count_),
-                           scene);
+    // Settle gate: dispatch only after BOTH a minimum number of frames AND
+    // a minimum wallclock interval have elapsed since the scene transition.
+    // See kSceneSettleFrames / kSceneSettleMs in the header for why both.
+    {
+        const std::int64_t now = smoap::ap::ApState::nowMs();
+        const std::int64_t elapsed_ms = scene_change_ms_ == 0
+            ? 0 : now - scene_change_ms_;
+        const bool frames_ok = settle_frames_ >= kSceneSettleFrames;
+        const bool time_ok   = elapsed_ms     >= kSceneSettleMs;
+        if (!frames_ok || !time_ok) {
+            return;
         }
-        return;
     }
 
     // Don't rotate the buffer while a balloon is on screen — SMO is reading
@@ -170,9 +160,8 @@ void CappyMessenger::tryPump(const void* scene) {
     // Idle pre-flight isActive check: this is the FIRST call into rs::
     // territory for a brand-new dispatch. Bracket with DEBUG logs — this
     // runs every frame while items are queued and CapMessage is busy, so
-    // INFO would flood the sink and the wire-forward path. The meaningful
-    // transitions (`dispatched`, `dropping head after N frames`, `balloon
-    // released`) are logged at INFO separately.
+    // INFO would flood the sink. Meaningful transitions are logged at INFO
+    // separately.
     SMOAP_LOG_DEBUG("[cappy] >> isActive(scene=%p) [pre-flight]", scene);
     const bool nintendo_active = s_isActive(scene);
     SMOAP_LOG_DEBUG("[cappy] << isActive returned %d", nintendo_active);
@@ -288,6 +277,7 @@ void CappyMessenger::resetForTest() {
     buffer_in_use_ = false;
     last_scene_ = nullptr;
     settle_frames_ = 0;
+    scene_change_ms_ = 0;
     dispatched_since_reset_ = false;
 }
 

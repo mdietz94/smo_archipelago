@@ -38,16 +38,16 @@ This repository is open-source and built on a careful line: **functional identif
 
 ## What we're building
 
-A real Archipelago client for **Super Mario Odyssey on a modded Switch (FW 21.2, native SMO 1.0.0 install, Atmosphere CFW)**. Builds on the data layout from [empathy-mp3/SMO-manual-AP](https://github.com/empathy-mp3/SMO-manual-AP) (an earlier honor-system, tick-the-boxes-by-hand world) with an in-game module that detects moons/captures/scenario events automatically, applies received items live, and enforces capture locks until the AP item arrives.
+A real Archipelago client for **Super Mario Odyssey on a modded Switch (FW 21.2 or FW 22, native SMO 1.0.0 install, Atmosphere CFW)**. Builds on the data layout from [empathy-mp3/SMO-manual-AP](https://github.com/empathy-mp3/SMO-manual-AP) (an earlier honor-system, tick-the-boxes-by-hand world) with an in-game module that detects moons/captures/scenario events automatically, applies received items live, and enforces capture locks until the AP item arrives.
 
 ### Architecture (two tiers)
 
 ```
 [ Switch / SMO ]  <--TCP/JSON LAN-->  [ PC Client (Python, inside apworld) ]  <--websocket-->  [ AP server ]
-   exlaunch                              SMOContext(CommonContext)                              archipelago.gg
-   LunaKit headers                       Kivy GUI (Tracker + Connections tabs)                  or self-host
-   ImGui overlay (M8)                    SwitchServer asyncio TCP on :17777
-   HUD overlay (M3)                      Forked apworld machinery
+   LibHakkun (subsdk9 / hkMain)         SMOContext(CommonContext)                              archipelago.gg
+   OdysseyHeaders + sail .sym DB        Kivy GUI (Tracker + Connections tabs)                  or self-host
+   CappyMessenger speech bubbles (M8)   SwitchServer asyncio TCP on :17777
+                                        Forked apworld machinery
 ```
 
 The PC client (formerly the standalone "bridge" process) lives inside the apworld at `apworld/smo_archipelago/client/` and ships in the .apworld zip. Archipelago's Launcher auto-discovers it via the `Component("SMO Client", ...)` registration in the apworld's `__init__.py`. One process, one Kivy window, one install artifact.
@@ -62,8 +62,8 @@ The client owns AP-protocol complexity (websocket + deflate + TLS + reconnect, a
 | **Archipelago as git submodule, not pip install or vendored copy** | Their `setup.py` blocks pip; copying ~15 transitive files would drift fast. Submodule under `vendor/Archipelago/` is drift-proof and also enables seed generation in the same checkout |
 | **Forked apworld, not vendored unchanged** | M8 will add automation-only features (deathlink, traps, hint system, progressive moon gating) the upstream honor-system world can't enforce |
 | **Web tracker priority, in-game ImGui later** | User preference. Web tracker (M5) ships before in-game tracker (M8) |
-| **LunaKit as soft dep (link headers), not fork** | LunaKit churns fast; submodule lets us pin without inheriting their bugs |
-| **Target SMO 1.0.0** | Canonical version every public mod (lunakit, smo-online, smo-practice, OdysseyDecomp) targets. User has a native 1.0.0 install on a downgraded FW 21.2 Switch |
+| **LibHakkun + sail symbol DB, not exlaunch + lunakit** | Switch-side stack migrated 2026-05-21 (PR #151 + this cutover). LibHakkun's musl + LLVM libc++ + `HeapSourceDynamic` addon retires the M6.1 worker-thread allocator constraint; sail's `.sym` files complement `HookSymbols.hpp` (sail handles link-side resolution against SMO's dynsym, HookSymbols.hpp still provides the `inline constexpr` name strings used at call sites). Ten upstream-PR-ready Windows-port patches live in `scripts/patch_hakkun.py` (applied to the pinned `switch-mod/sys` submodule). OdysseyHeaders submodule at `switch-mod/lib/OdysseyHeaders` provides forward-decls; OdysseyDecomp stays an external reference for full decomp |
+| **Target SMO 1.0.0** | Canonical version every public mod (LibHakkun, lunakit, smo-online, smo-practice, OdysseyDecomp, OdysseyHeaders) targets. User has a native 1.0.0 install on a downgraded FW 21.2 Switch (FW 22 also validated post-Hakkun-cutover) |
 | **Bit-index capture table generated from apworld** | `scripts/sync_capture_table.py` regenerates `switch-mod/src/ap/capture_table.h` from `data/items.json` so Switch and bridge can't drift on cap-name → bit-index assignment |
 | **Game name `Spicy Meatball Overdrive`, zip `meatballs.apworld`** | AP-protocol name set 2026-05-16 (dropped a prior framework-derived prefix; we ship a real client with in-game enforcement). Deployed zip renamed `smo_archipelago.apworld` → `smo.apworld` (2026-05-16) → `meatballs.apworld` (2026-05-20). The 2026-05-20 hop moved us off the `worlds.smo` slot that an existing upstream apworld already owns under the `.apsmo` namespace. Archipelago derives the module name from the zip stem, so the world imports as `worlds.meatballs` and the host.yaml settings key is `meatballs_options`. The per-player file extension is `.meatballsap` (was `.smoap`). The in-repo source folder stayed `apworld/smo_archipelago/` to avoid churning every dev-workflow path reference; see the identifier table in the preamble |
 | **Two-stage connect gate (SNI-style)** | SMOClient never auto-dials AP on launch. Clicking Connect (or `/connect` / `--connect`) parks the request until the Switch HELLOs; `SMOContext.connect()` overrides `CommonContext.connect` to dial AP from the Switch-ready callback. State tracked as `disconnected → waiting_for_switch → connected`. Mirrors SNIClient (user-cited gold standard); pre-fix, the default `archipelago.gg` host produced "Connection refused" the moment the user opened the Launcher button. Any new AP-dial path (auto-reconnect, scripted launch) must route through `SMOContext.connect()` — never `asyncio.create_task(server_loop(ctx))` directly. `disconnect()` clears the pending state so a stale dial doesn't fire on the next Switch reconnect. Tests: `apworld/smo_archipelago/tests/test_connect_gate.py` |
@@ -74,7 +74,7 @@ Shipped as v0.1.x-alpha (see `git tag`). All planned milestones (M0 through M7) 
 
 Pattern invariants worth knowing even without reading the milestone narratives:
 
-- **M6.1 — libstdc++ allocator NULL-derefs in subsdk9** (worker thread is NOT a safe haven — proven 2026-05-16). Any thread that hits `std::set`, `std::vector<T>::push_back` (incl. `<bool>`), `std::string` growth past SSO (~15 chars), `std::to_string`, or `std::mutex` construction NULL-derefs inside `nn::os::GetTlsValue` reading slot 0. Cause: most likely libstdc++'s allocator reaches for a `nn::os::TlsSlot` our init never `AllocateTlsSlot`'d. Use instead: `FlatHashSet<N>` (open-addressing, `uint64_t[N]`) for dedupe, `char[N]` + `copyFixedFieldN` / `readIntoField<N>` for variable strings, `LineBuffer` (caller-owned `char[8 KiB]`) for encode output, `snprintf` to stack `char[24]` for int→string, fixed `T[N]` + count for vectors, release-store-publish atomics (the `pending_moon_label` pattern) for cross-thread handoff instead of mutexes. Strings ≤ 15 chars (SSO, no heap) are OK on any thread. Long-term fix would be an early `nn::os::AllocateTlsSlot` + libnx heap-init in `exl_main`; not investigated.
+- **M6.1 — libstdc++ allocator NULL-derefs in subsdk9** *(retired 2026-05-21 post-Hakkun migration).* Was an exlaunch-era constraint where any thread hitting `std::set` / `std::vector::push_back` / `std::string` growth past SSO / `std::to_string` / `std::mutex` NULL-deref'd inside `nn::os::GetTlsValue` reading slot 0 (libstdc++'s allocator reached for a TLS slot exl_main never `AllocateTlsSlot`'d). LibHakkun's musl + LLVM libc++ + `HeapSourceDynamic` addon (which routes `operator new` / `malloc` / `free` to SMO's own allocator) clears this — worker threads can now use `std::*` freely. The defensive patterns still in the code (`FlatHashSet<N>`, `LineBuffer`, `copyFixedFieldN`, snprintf-to-stack-`char[24]`, release-store-publish atomics like `pending_moon_label`) are vestigial and safe to replace with `std::*` equivalents in phase 7 polish. Kept as-is here to keep the cutover diff mechanical.
 - **M6 phase D**: when sending the post-HELLO item replay, **skip Moon items** — `OutstandingMsg` carries authoritative per-kingdom balance, re-sending Moons double-counts. See [docs/milestones.md#m6-phase-d](docs/milestones.md#m6-phase-d).
 - **M7 Path A**: future "lie to the game" hooks need the three-layer pattern (UI query → cinematic state → stage commit) — catch upstream of the visible state change, not just at commit. See [docs/milestones.md#m7-path-a--kingdom-order-gate](docs/milestones.md#m7-path-a--kingdom-order-gate).
 
@@ -86,7 +86,8 @@ C:\Users\maxwe\Documents\smo_archipelago\
   CLAUDE.md                      ← this file
   LICENSE                        MIT
   .gitignore                     Note: third_party/ ignored; vendor/ tracked
-  .gitmodules                    Submodules (vendor/Archipelago, lunakit-vendor)
+  .gitmodules                    Submodules (vendor/Archipelago, switch-mod/sys (LibHakkun),
+                                 switch-mod/lib/OdysseyHeaders)
   .claude/skills/                Project skills (smo-build, smo-loopback-test, ...)
   apworld/smo_archipelago/       The apworld + Python client
     __init__.py                  World class + SMOSettings + "SMO Client" Component reg
@@ -116,18 +117,37 @@ C:\Users\maxwe\Documents\smo_archipelago\
       pyproject.toml             Self-contained pytest config (importmode=importlib)
       conftest.py                Inserts apworld/smo_archipelago/ into sys.path
       seeds/                     Loopback test seeds (smo_loopback.yaml + gitignored out/)
-  switch-mod/                    exlaunch C++ module — unchanged by the client merge
-    CMakeLists.txt               Builds subsdk9 from lunakit stock templates
+  switch-mod/                    LibHakkun-based C++ module (post-Hakkun-cutover 2026-05-21)
+    CMakeLists.txt               Builds subsdk9 via LibHakkun + sail symbol DB
+    config/
+      config.cmake               MODULE_BINARY=subsdk9, MODULE_NAME=smo_archipelago,
+                                 HAKKUN_ADDONS=HeapSourceDynamic, USE_SAIL=TRUE
+      VersionList.sym            SMO 1.0.0 build ID = 3ca12dfaaf9c82da064d1698df79cda1
+      npdm.json                  NPDM template (bsd:u + sm: handles, transfermem)
+    sys/                         LibHakkun submodule (github.com/fruityloops1/LibHakkun;
+                                 Windows-port patches in scripts/patch_hakkun.py)
+    lib/OdysseyHeaders/          Vendored OdysseyHeaders submodule (MonsterDruide1) — forward
+                                 declarations for SMO 1.0.0 public API
+    syms/
+      game/SmoApSymbols.sym      Sail symbol DB — 48 SMO 1.0.0 mangled names. Tells sail
+                                 to emit a corresponding entry in build/fakesymbols.so so
+                                 the linker resolves cleanly; complemented by
+                                 src/hooks/HookSymbols.hpp on the C++ side.
+      nn/nifm.sym                3 nn::nifm mangled names (Initialize +
+                                 SubmitNetworkRequestAndWait + IsNetworkAvailable).
     src/
-      main.cpp                   exl_main entry — installs hooks, spawns worker
+      main.cpp                   hkMain entry — installs trampolines, spawns ApClient worker
       ap/{ApClient,ApState,ApConfig,ApFrameBridge,ApProtocol}.{cpp,hpp}
       ap/capture_table.h         AUTO-GENERATED (42 cap names) — run sync_capture_table.py
-      hooks/HookSymbols.hpp      Mangled SMO 1.0.0 symbols — `grep -c '^inline constexpr'`
-                                 for the current count (was 8 at M0, grew through M6/M7).
+      hooks/HookSymbols.hpp      `inline constexpr const char* k<Name> = "_Z..."` constants
+                                 used at hook call sites (`hk::ro::lookupSymbol(kFoo)` /
+                                 `installAtSym<kFoo>()`). Keep in sync with the matching
+                                 `.sym` entries; sail catches drift at build time.
       hooks/*.cpp                One file per hook target; see directory listing. Covers
                                  moon get/label, capture start/lock, scenario flag, save
                                  load, world-map select, addPayShine debit, addHackDictionary
-                                 gating, Cappy message routing, shine appearance, death-link.
+                                 gating, Cappy message routing, shine appearance, death-link,
+                                 credits-start goal-detect.
       game/{MoonApply,CaptureGate,KingdomUnlock,KingdomOrderGate}.{cpp,hpp}
                                  KingdomUnlock retains the kingdom name ↔ bit ↔ worldId
                                  tables M6-D + M7-A depend on, despite its now-legacy name.
@@ -135,20 +155,21 @@ C:\Users\maxwe\Documents\smo_archipelago\
       ui/CappyMessenger.{cpp,hpp}  In-game speech-bubble notifications via SMO's CappyMessenger
                                  (used by M6-C reconciliation, M7-A lock messaging, etc.).
       util/{Json,Log}.{cpp,hpp}
-    romfs/ap_config.json         INFORMATIONAL ONLY — bridge IP/port are baked in at
-                                 compile time via CMake -DBRIDGE_HOST/-DBRIDGE_PORT. The
-                                 runtime SD-read path was abandoned (MountSdCardForDebug
-                                 fails on retail/newer FW). See ApConfig.cpp:1-8. Editing
-                                 this JSON on the SD does NOTHING — rebuild instead.
-    lunakit-vendor/              Vendored LunaKit submodule
   scripts/
+    build_switchmod.py           One-call cross-build: applies LibHakkun patches, builds sail
+                                 (host binary, one time), runs cmake + ninja with LLVM 19 PATH.
+    patch_hakkun.py              Applies the 10 LibHakkun Windows-port patches (idempotent).
+                                 Includes AArch64 PC-relative trampoline relocator —
+                                 worth upstreaming to fruityloops1/LibHakkun.
+    setup_sail_winpath.py        One-time mingw64 host compile of sail.exe.
+    fix_hakkun_symlinks.py       Convert OdysseyHeaders text-symlink files to junctions
+                                 (Git for Windows quirk); stub today, ready if needed.
     switch_smoke_test.py         Fake-Switch end-to-end test
     sync_capture_table.py        items.json → capture_table.h
     extract_shine_map.py         M5.8: NSP → romfs → shine_map.json + capture_map.json
     install_apworld.py           Zips apworld/smo_archipelago/ → vendor/.../custom_worlds/
     ap_generate.py, ap_server.py Archipelago Generate/MultiServer wrappers (auto-pip suppressed)
     build_poptracker_pack.py     PopTracker pack generator
-    check_nso_symbols.py         Offline symbol-resolution check against main.nso
     .extract-venv/               Auto-created Python 3.12 venv (gitignored)
   docs/
     architecture.md              Two-tier diagram, threading, responsibilities
@@ -186,10 +207,10 @@ C:\Users\maxwe\Documents\smo_archipelago\
 
 Project skills live in `.claude/skills/`. They auto-load when triggered by their description keywords:
 
-- **smo-build** — build switch-mod, deploy to Ryujinx/Switch, capture_table sync, libnx + worktree gotchas, fresh-worktree setup, the SMO-already-inits-socket rule.
+- **smo-build** — build switch-mod via `scripts/build_switchmod.py` (LLVM 19 + LibHakkun + sail), deploy to Ryujinx/Switch, capture_table sync, fresh-worktree setup (submodule init + per-machine data files), the SMO-already-inits-socket rule.
 - **smo-loopback-test** — AP loopback E2E without booting SMO (3-pane setup + scripted pytest path).
-- **smo-host-tests** — C++ host tests (test_json, test_protocol) via msys2 mingw64 g++.
-- **smo-symbol-discovery** — add new hook targets; OdysseyDecomp forward-decls + aarch64 mangling + check_nso_symbols.py verification.
+- **smo-host-tests** — currently dormant; tests live in pre-Hakkun `switch-mod/tests/` and need restoration (post-cutover follow-up task).
+- **smo-symbol-discovery** — add new hook targets via sail `.sym` files; aarch64 mangling + `llvm-nm --dynamic build/fakesymbols.so` verification; the [sail mangling length trap](C:\Users\maxwe\.claude\projects\C--Users-maxwe-Documents-smo-archipelago\memory\project_sail_mangling_length_trap.md).
 - **smo-extract-data** — regenerate `shine_map.json` + `capture_map.json` from a 1.0.0 NSP.
 - **smo-poptracker** — build / iterate / debug the PopTracker pack.
 
@@ -199,7 +220,7 @@ For anything not covered by a skill, [docs/milestones.md](docs/milestones.md) is
 
 1. **`PlayerHackKeeper::startHack` may not be a single chokepoint** — capture entry can split across multiple functions per cap-type. Secondary read-only check on `CapTargetInfo::isCaptureTarget` from the frame pump if the trampoline misses cases.
 2. **Synthetic moon grant** must not retrigger our own hook — `ApState::synthetic_grant_this_frame` guard exists, plus belt-and-braces dedupe by `locations_checked` hash set.
-3. **Goal-detection wiring (load-bearing, easy to break by accident).** Vanilla SMO awards NO Power Moon for clearing the main game — Mario is simply deposited in Mushroom Kingdom after the wedding cutscene, with nothing to collect. Four earlier attempts got this wrong: (a) `DemoPeachWedding::makeActorAlive` fires in Bowser's Kingdom too (the actor is a generic "Peach in wedding dress" per OdysseyDecomp); (b) hanging the bridge-side trigger on the "Defeat Bowser and Escape the Moon" location actually fires on the *Darker Side* completion moon, not the main ending; (c) "first Mushroom Kingdom arrival" via `WorldMapSelectHook::markVisitedFromStage` AND (d) "current kingdom resolves to Mushroom" via `ShineNumGetHook` both false-positive on the hidden Luncheon portrait warp (a painting in CookingWorld teleports Mario to PeachWorld pre-game-clear). The shipped fix is `CreditsStartHook` ([switch-mod/src/hooks/CreditsStartHook.cpp](switch-mod/src/hooks/CreditsStartHook.cpp)): a `HOOK_DEFINE_INLINE` patch at offset `0x4C54A4` (BL inside `StaffRollScene::init`, the credits-only scene class — verified by Kgamer77/SuperMarioOdysseyArchipelago, MIT) calls `reportGoal()` gated by `ApState::goal_sent`. The credits scene only initializes when the post-wedding cutscene plays — never on portrait warp, Darker Side, or save load. The apworld's `victory: true` location is "Arrive in the Mushroom Kingdom" (naming retained for back-compat; the trigger is now credits-roll). Don't re-introduce a Mushroom-arrival, moon-check, or `DemoPeachWedding` trigger here.
+3. **Goal-detection wiring (load-bearing, easy to break by accident).** Vanilla SMO awards NO Power Moon for clearing the main game — Mario is simply deposited in Mushroom Kingdom after the wedding cutscene, with nothing to collect. Four earlier attempts got this wrong: (a) `DemoPeachWedding::makeActorAlive` fires in Bowser's Kingdom too (the actor is a generic "Peach in wedding dress" per OdysseyDecomp); (b) hanging the bridge-side trigger on the "Defeat Bowser and Escape the Moon" location actually fires on the *Darker Side* completion moon, not the main ending; (c) "first Mushroom Kingdom arrival" via `WorldMapSelectHook::markVisitedFromStage` AND (d) "current kingdom resolves to Mushroom" via `ShineNumGetHook` both false-positive on the hidden Luncheon portrait warp (a painting in CookingWorld teleports Mario to PeachWorld pre-game-clear). The shipped fix is `CreditsStartHook` ([switch-mod/src/hooks/CreditsStartHook.cpp](switch-mod/src/hooks/CreditsStartHook.cpp)): a Strategy A inline BL patch at offset `0x4C54A4` (BL inside `StaffRollScene::init`, the credits-only scene class — verified by Kgamer77/SuperMarioOdysseyArchipelago, MIT) calls `reportGoal()` gated by `ApState::goal_sent`. Hakkun's `writeBranchLinkAtMainOffset` (commit `a422098` post-#151) replaces the exlaunch-era `HOOK_DEFINE_INLINE` macro. The credits scene only initializes when the post-wedding cutscene plays — never on portrait warp, Darker Side, or save load. The apworld's `victory: true` location is "Arrive in the Mushroom Kingdom" (naming retained for back-compat; the trigger is now credits-roll). Don't re-introduce a Mushroom-arrival, moon-check, or `DemoPeachWedding` trigger here.
 
 ## Partial / deferred work for a future iteration
 

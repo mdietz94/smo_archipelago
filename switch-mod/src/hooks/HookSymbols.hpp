@@ -87,32 +87,6 @@ inline constexpr const char* kPlayerHackKeeperStartHack =
 inline constexpr const char* kPlayerHackKeeperForceKillHack =
     "_ZN16PlayerHackKeeper13forceKillHackEv";
 
-// PlayerHackKeeper::tryEscapeHack()
-// Source: MonsterDruide1/OdysseyDecomp src/Player/PlayerHackKeeper.h
-// Gentler release path than forceKillHack: doesn't despawn the captured
-// actor, just lets Mario pop out. Safe for inanimate captures that don't
-// have an intro state machine to race against (Cactus, Tree, Manhole,
-// Pole, Boulder, Mini Rocket, Volbonan). KGamer77's
-// SuperMarioOdysseyArchipelago uses the same split for the same 7 caps
-// in Mod/source/main.cpp:75 (see also third_party/Kgamer77-SMOAP for
-// reference). CaptureStartHook branches on hack name and falls back to
-// forceKillHack if this symbol fails to resolve.
-inline constexpr const char* kPlayerHackKeeperTryEscapeHack =
-    "_ZN16PlayerHackKeeper13tryEscapeHackEv";
-
-// PlayerHackKeeper::isActiveHackStartDemo() const
-// Source: MonsterDruide1/OdysseyDecomp src/Player/PlayerHackKeeper.h
-// Returns true while the capture-entry "dive in" cinematic is still
-// playing. We poll this from tickPendingUncapture so the deny path
-// releases the moment the demo ends — instead of waiting on a fixed
-// wall-clock delay (which prior versions tuned per-cap because the demo
-// length varies). KGamer77 uses the same gate in Mod/source/main.cpp:73.
-// If this symbol fails to resolve, CaptureStartHook's deny path is
-// disabled (same fallback shape as forceKillHack) — better to leak the
-// capture than to fire forceKillHack mid-cinematic.
-inline constexpr const char* kPlayerHackKeeperIsActiveHackStartDemo =
-    "_ZNK16PlayerHackKeeper21isActiveHackStartDemoEv";
-
 // --- Scenario flag set ---
 // GameDataFile::setMainScenarioNo(s32)  (s32 = int on aarch64)
 // Source: MonsterDruide1/OdysseyDecomp src/System/GameDataFile.h:456
@@ -389,17 +363,6 @@ inline constexpr const char* kAlSetModelMaterialParameterF32 =
 // instead of crashing (the parameter setters do NOT bounds-check).
 inline constexpr const char* kAlIsExistMaterial =
     "_ZN2al15isExistMaterialEPKNS_9LiveActorEPKc";
-
-// al::isExistModel(const LiveActor*) — null-safe model-keeper presence
-// probe. Required GUARD before any model-touching call (isExistMaterial,
-// setMaterialProgrammable, setModelMaterialParameter*) — those derefs
-// mModelKeeper unconditionally and crash if the actor hasn't allocated
-// its model. Hit during Cascade reload after the first multi-moon: an
-// already-collected linked-Shine inside an AppearSwitchTimer is init'd
-// by rs::tryInitLinkShine without a model archive. OdysseyDecomp uses
-// this same probe in AppearSwitchTimer/CapTargetInfo for the same reason.
-inline constexpr const char* kAlIsExistModel =
-    "_ZN2al12isExistModelEPKNS_9LiveActorE";
 
 // =============================================================================
 // M7 Path A — fork-cinematic kingdom-order gate (two-layer architecture).

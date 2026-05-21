@@ -1,6 +1,6 @@
 ---
 name: smo-build
-description: Build the SMO Switch mod (subsdk9 / switch-mod/) and deploy to Ryujinx or the real Switch. Use whenever the user asks to build, rebuild, recompile, or deploy the Switch module; whenever cmake, devkitPro, ninja, subsdk, or RYU_PATH come up; whenever a switch-mod/ C++ file changes and a build is needed; or whenever the user mentions the install_apworld worktree gotcha (DepositMsg / unknown message type from Switch). Covers the one-time capture_table.h generation, the Ryujinx-first iterate loop, the post-build deploy, the real-Switch deploy path, and the worktree apworld-install workaround.
+description: Build the SMO Switch mod (subsdk9 / switch-mod/) and deploy to Ryujinx or the real Switch. Use whenever the user asks to build, rebuild, recompile, or deploy the Switch module; whenever cmake, LLVM, ninja, sail, subsdk, LibHakkun, OdysseyHeaders, or RYU_PATH come up; whenever a switch-mod/ C++ file changes and a build is needed; or whenever the user mentions the install_apworld worktree gotcha (DepositMsg / unknown message type from Switch). Covers the one-time capture_table.h generation, the Ryujinx-first iterate loop, the post-build deploy, the real-Switch deploy path, and the worktree apworld-install workaround.
 ---
 
 # Building the SMO Switch mod
@@ -19,48 +19,50 @@ python C:\Users\maxwe\Documents\smo_archipelago\scripts\sync_capture_table.py
 
 Rerun this whenever `apworld/smo_archipelago/data/items.json` changes (the table maps cap-name → bit-index for the Switch mod; out-of-sync table = wrong bit assignments).
 
-## Step 1: configure + build (~10s)
+## Step 1: build (~30s incremental, ~2min from cold)
 
 ```pwsh
-cd C:\Users\maxwe\Documents\smo_archipelago\switch-mod
-$env:DEVKITPRO = "C:/devkitPro"
-# Auto-detect this machine's current LAN IP (interface with a default gateway, Up).
-# DHCP can hand out a different address week-to-week, so re-detect every build rather
-# than hardcoding. For Ryujinx-on-same-host runs, override with `$bridgeHost = "127.0.0.1"`.
+python C:\Users\maxwe\Documents\smo_archipelago\scripts\build_switchmod.py
+```
+
+The script:
+1. Applies LibHakkun Windows-port patches via `scripts/patch_hakkun.py` (idempotent — sentinels detect already-applied state).
+2. Builds `sail` (LibHakkun's symbol-DB host binary) one time per machine via `scripts/setup_sail_winpath.py` if `switch-mod/sys/sail/build/sail.exe` is missing.
+3. Runs CMake configure + ninja build with the Windows-native LLVM 19 + CMake + Ninja toolchain.
+
+Toolchain paths the script expects (hardcoded; edit `scripts/build_switchmod.py` if your install differs):
+- `C:\Program Files\LLVM\bin` — LLVM 19 (clang-cl + clang-tidy). Install via `winget install LLVM.LLVM --version 19.1.7`.
+- `C:\Program Files\CMake\bin` — Windows-native CMake.
+- `C:\Users\maxwe\AppData\Local\Microsoft\WinGet\Packages\Ninja-build.Ninja_Microsoft.Winget.Source_8wekyb3d8bbwe` — Ninja.
+- `C:\msys64\mingw64\bin` — mingw64 host g++ (used only by sail's host-compile step; the target build is LLVM-only).
+
+Override `-DBRIDGE_HOST` / `-DBRIDGE_PORT` / `-DSMO_AP_MOD_VERSION` per-machine by passing them after the script name. The script forwards everything past `argv[1]` to CMake's configure:
+
+```pwsh
+python scripts\build_switchmod.py -DBRIDGE_HOST=127.0.0.1
+```
+
+For LAN auto-detection (DHCP can hand out a different address week-to-week, so re-detect every build rather than hardcoding):
+
+```pwsh
 $bridgeHost = (Get-NetIPConfiguration | Where-Object {
     $_.IPv4DefaultGateway -ne $null -and $_.NetAdapter.Status -eq 'Up'
 } | Select-Object -First 1).IPv4Address.IPAddress
 if (-not $bridgeHost) { throw "Could not detect LAN IP — check network adapters." }
-Write-Host "BRIDGE_HOST=$bridgeHost"
-& "C:/Program Files/CMake/bin/cmake.exe" -S . -B build -G Ninja `
-    -DCMAKE_TOOLCHAIN_FILE=lunakit-vendor/cmake/toolchain.cmake `
-    -DBRIDGE_HOST=$bridgeHost
-& "C:/Program Files/CMake/bin/cmake.exe" --build build
+python scripts\build_switchmod.py -DBRIDGE_HOST=$bridgeHost
 ```
 
-Defaults:
-- `-DBRIDGE_HOST` — auto-detected from the active LAN adapter (the one with a default gateway). DHCP leases change, so let the snippet above resolve it fresh each build rather than baking a literal. For Ryujinx-on-same-host runs, set `$bridgeHost = "127.0.0.1"` before the cmake call.
-- Bridge port baked at compile time; the runtime `romfs/ap_config.json` SD-read path was abandoned (MountSdCardForDebug fails on retail/newer FW). Edit-and-rebuild is the only way.
-- The detected IP is baked into `subsdk9`; if your LAN IP changes after deploy, you must rebuild and re-deploy or the Switch mod will try to connect to a stale address.
+For Ryujinx-on-same-host runs, use `-DBRIDGE_HOST=127.0.0.1`. The detected IP is baked into `subsdk9`; if your LAN IP changes after deploy, rebuild and re-deploy or the Switch mod will try to connect to a stale address.
 
-**Do NOT add `-DRYU_PATH=...` unless the user explicitly asks.** The post-build hook auto-deploys subsdk9+npdm+ap_config.json into Ryujinx mods/, which clobbers parallel agents' state in another worktree. For build-verification ("does it compile?"), omit it. If a deploy IS needed for this turn, ask first. Manual copy steps below.
+**Do NOT add CMake auto-deploy flags unless the user explicitly asks.** Build output is at `switch-mod/build/sd/atmosphere/contents/0100000000010000/exefs/subsdk9`; manual copy via Step 2.
 
-If Ninja isn't installed, swap `-G Ninja` for:
-```
--G "Unix Makefiles" -DCMAKE_MAKE_PROGRAM=C:/devkitPro/msys2/usr/bin/make.exe
-```
-Same build product; verified end-to-end.
-
-**Critical cross-build gotcha**: msys2 cmake (`/c/devkitPro/msys2/usr/bin/cmake`) inside Git Bash CANNOT find DEVKITPRO (it expects `/opt/devkitpro` mount which Git Bash doesn't have). Use the Windows CMake at `C:/Program Files/CMake/bin/cmake.exe` with `DEVKITPRO=C:/devkitPro` env var.
-
-The build needs `set_source_files_properties(... PROPERTIES COMPILE_FLAGS "-fpermissive")` on lunakit's vendored sources because devkitA64 GCC 15 rejects const-T `std::construct_at` in lunakit's `typed_storage.hpp`. Already wired in CMakeLists.
-
-## Step 2: deploy to Ryujinx (manual, no -DRYU_PATH)
+## Step 2: deploy to Ryujinx (manual)
 
 ```pwsh
-$RYU = "$env:APPDATA\Ryujinx\mods\contents\0100000000010000\smo-archipelago"
-Copy-Item -Force <worktree>\switch-mod\build\subsdk9  $RYU\exefs\subsdk9
-Copy-Item -Force <worktree>\switch-mod\build\main.npdm $RYU\exefs\main.npdm
+$ryu = "$env:APPDATA\Ryujinx\mods\contents\0100000000010000\smo-archipelago\exefs"
+$src = "<worktree>\switch-mod\build\sd\atmosphere\contents\0100000000010000\exefs"
+Copy-Item -Force $src\subsdk9   $ryu\subsdk9
+Copy-Item -Force $src\main.npdm $ryu\main.npdm
 ```
 
 User boots SMO in Ryujinx manually (`cd C:\Users\maxwe\Documents\ryujinx-1.3.3 && .\Ryujinx.exe`, then double-click SUPER MARIO ODYSSEY).
@@ -80,9 +82,9 @@ Ryujinx's log is gold — `[rtld]` unresolved-symbol lines, guest stack traces w
 ## Step 4: real-Switch deploy (only after Ryujinx clean)
 
 ```pwsh
-& "C:/Program Files/CMake/bin/cmake.exe" --install build  # populates sd-overlay/
 # Replace <SD>: with whatever drive letter the SD card mounts as on this machine.
-xcopy /E /I /Y C:\Users\maxwe\Documents\smo_archipelago\switch-mod\sd-overlay\atmosphere <SD>:\atmosphere
+$src = "C:\Users\maxwe\Documents\smo_archipelago\switch-mod\build\sd\atmosphere"
+xcopy /E /I /Y $src <SD>:\atmosphere
 ```
 
 Confirm the drive letter with the user before copying — it varies per machine (the maintainer's is `D:`, others may differ). Don't guess. After the copy, optionally eject the same drive so the user can pull it without remembering:
@@ -112,23 +114,17 @@ Copy-Item -Force `
 
 ## Subsdk slot
 
-Module ships as `subsdk9` at `sd:/atmosphere/contents/0100000000010000/exefs/subsdk9` — the lunakit default. SMO 1.0.0 has no subsdks in its exefs so the slot is free.
-
-## libnx extern "C" gotcha (build-time foot-gun)
-
-`lunakit-vendor/src/lib/nx/kernel/svc.h` and `lib/nx/result.h` declare functions WITHOUT any `extern "C"` wrapper. The wrapper is in the umbrella `lib/nx/nx.h`. From C++ TUs, **always `#include "lib/nx/nx.h"`**, never the inner headers directly.
-
-Including them direct gives C++ mangling at call sites (e.g. `_Z20svcOutputDebugStringPKcm`), the assembly stubs have C linkage, link succeeds, runtime gets unresolved-symbol from rtld, PC jumps to 0, process aborts. Critical bug we hit twice — recognize the symptom from runtime: `[rtld] unresolved _Z20svc...`.
+Module ships as `subsdk9` at `sd:/atmosphere/contents/0100000000010000/exefs/subsdk9`. SMO 1.0.0 has no subsdks in its exefs so the slot is free.
 
 ## Fresh worktree setup (additional steps)
 
 A fresh `.claude/worktrees/<name>/` (or `git worktree add`) is missing three pieces the build needs. Do all three up-front, in this order — each fails differently and step 3 reads files written by step 2:
 
-1. **Init `lunakit-vendor` + `exlaunch` submodules**:
+1. **Init `switch-mod/sys` (LibHakkun) + `switch-mod/lib/OdysseyHeaders` submodules**:
    ```pwsh
-   git -C <worktree> submodule update --init switch-mod/lunakit-vendor switch-mod/exlaunch
+   git -C <worktree> submodule update --init --recursive switch-mod/sys switch-mod/lib/OdysseyHeaders
    ```
-   Skipping → `cmake configure: Could not find toolchain file: lunakit-vendor/cmake/toolchain.cmake`.
+   The `--recursive` is required: LibHakkun nests `tools/senobi`, OdysseyHeaders nests NintendoSDK. Skipping → `scripts/patch_hakkun.py` exits with "switch-mod/sys not found".
 
 2. **Copy generated data files** (gitignored, per-machine — extracted from a Nintendo NSP via the `smo-extract-data` skill; copy from main checkout is faster):
    ```pwsh
@@ -145,4 +141,4 @@ A fresh `.claude/worktrees/<name>/` (or `git worktree add`) is missing three pie
 
 ## SMO already inits nn::socket
 
-Never call `nn::socket::Initialize` from subsdk9. SMO 1.0.0 calls it itself during process startup (before `GameSystem::init` returns); a second call hits an "already initialized" assertion inside `nn::socket::detail::InitializeCommon + 0x28c` and aborts the process. Confirmed by an Atmosphere crash report 2026-05-15 showing `ApClient::initNetworking` → `nn::socket::Initialize` → `InitializeCommon` → `OnAssertionFailure` → `nn::svc::Break`. Lunakit independently confirms by installing `DisableSocketInit::InstallAtSymbol("_ZN2nn6socket10InitializeEPvmmi")` as a no-op replace-hook — they suppress SMO's call so they can run their own pool. We take the opposite approach: keep SMO's init, skip ours. `Socket()`/`Connect()`/`Send()`/`Recv()`/`Select()` all work against the library SMO already brought up; no pool of our own needed. `nn::nifm::Initialize` and `SubmitNetworkRequestAndWait` are still safe (idempotent). If a larger socket pool is ever needed, mirror lunakit's pattern: replace-hook SMO's `Initialize` with a no-op, then call our own — don't double-init.
+Never call `nn::socket::Initialize` from subsdk9. SMO 1.0.0 calls it itself during process startup (before `GameSystem::init` returns); a second call hits an "already initialized" assertion inside `nn::socket::detail::InitializeCommon + 0x28c` and aborts the process. Confirmed by an Atmosphere crash report 2026-05-15 (under the legacy exlaunch build) showing `ApClient::initNetworking` → `nn::socket::Initialize` → `InitializeCommon` → `OnAssertionFailure` → `nn::svc::Break`. The Hakkun port wires `hk::socket::Socket::initialize<"bsd:u">` from `hkMain` *only* after explicitly initializing `sm::ServiceManager` (the spike's Gate 2 only took the function's address — non-lazy init was discovered during phase 3b). `Socket()`/`Connect()`/`Send()`/`Recv()`/`Poll()` all work against the library SMO already brought up; we run our own `bsd:u` service handle alongside SMO's. `nn::nifm::Initialize` and `SubmitNetworkRequestAndWait` are still safe (idempotent); resolved via sail-supplied `switch-mod/syms/nn/nifm.sym`.

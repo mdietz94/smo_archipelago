@@ -4,10 +4,10 @@ Two tiers, each independently restartable:
 
 ```
 [ Switch / SMO ]                [ SMOClient (Python, inside .apworld) ]   [ AP server ]
-  exlaunch subsdk9                 asyncio                                   archipelago.gg
-  LunaKit headers                  SMOContext(CommonContext)                 or self-host
-  ImGui overlay (M8)   <--TCP-->   SwitchServer asyncio TCP    <--websocket-->
-  HUD overlay (M3)                 Kivy GUI (Tracker + Connections tabs)
+  LibHakkun subsdk9                asyncio                                   archipelago.gg
+  OdysseyHeaders + sail .sym DB    SMOContext(CommonContext)                 or self-host
+  CappyMessenger (M8)  <--TCP-->   SwitchServer asyncio TCP    <--websocket-->
+                                   Kivy GUI (Tracker + Connections tabs)
                                    Forked apworld (in-zip, same package)
 ```
 
@@ -90,10 +90,16 @@ SMO frame → CaptureStartHook (HOOK_DEFINE_REPLACE if locked path)
 | Goal detection | yes (hook) | yes (forwards to AP) |
 | Replay on reconnect | applies idempotently | sends replay |
 | Tracker | — | yes (Kivy GUI Tracker tab) |
-| In-game HUD overlay | yes (HUD M3, ImGui M8) | — |
+| In-game HUD overlay | CappyMessenger speech bubbles (M8) | — |
 
-## Why we link LunaKit but don't fork it
+## Why LibHakkun + sail (and not exlaunch + LunaKit)
 
-LunaKit is the closest mod to ours in spirit (also `subsdk9`, also exlaunch). We need its `tryGetGameDataHolder`, `tryGetPlayerActorHakoniwa`, `tryGetStageScene`, `warpPlayer`, the `DevGuiWindow` base for M8, and its working `nn::socket` bring-up sequence. Forking LunaKit means tracking its rapid churn forever; linking against it as a submodule lets us update at our own pace.
+The switch-side stack migrated to LibHakkun + OdysseyHeaders + sail in 2026-05-21 (PR #151 + the cutover that followed). Before that, the project used exlaunch as the hook framework and LunaKit as a soft dependency (headers + helper utilities) — LunaKit gave us `tryGetGameDataHolder`, `tryGetPlayerActorHakoniwa`, `tryGetStageScene`, `warpPlayer`, and a working `nn::socket` bring-up sequence.
 
-Coexistence: only one `subsdk9` can be installed at a time. M8 ships a combined LunaKit+AP build for users who want both. Until then, users pick one.
+The Hakkun migration replaced both: LibHakkun's `HkTrampoline` + `installAtSym<>` covers the hook surface, OdysseyHeaders provides the typed forward-decls for the public SMO API, and sail's `.sym` DB replaces the hand-mangled `HookSymbols.hpp`. The motivating wins:
+
+- LibHakkun's musl + LLVM libc++ + `HeapSourceDynamic` addon retires the M6.1 worker-thread allocator constraint. `std::set` / `std::vector` / `std::string` / `std::mutex` are safe on any thread.
+- Sail's symbol resolution catches typos at build time (`llvm-nm --dynamic build/fakesymbols.so`) instead of at runtime.
+- The five real bugs surfaced during the migration (IUseSceneObjHolder offset, CappyMessenger worker→frame race, sail mangling length-prefix trap, sm non-lazy init, AArch64 PC-relative trampoline relocator) are all fixed.
+
+Coexistence: only one `subsdk9` can be installed at a time. Users running other `subsdk9` mods (e.g. LunaKit's devgui) need to pick one.

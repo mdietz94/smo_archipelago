@@ -1,34 +1,31 @@
 // Hook on GameDataFile::setMainScenarioNo(int).
 //
-// M3: empty trampoline. M4 reports scenario via reportStatus.
+// Reports scenario flag changes to the bridge via reportStatus.
 
-#include "lib.hpp"
+#include "hk/hook/Trampoline.h"
+#include "hk/types.h"
+
 #include "../ap/ApFrameBridge.hpp"
 #include "../util/Log.hpp"
-#include "HookSymbols.hpp"
-#include "SoftInstall.hpp"
 
 class GameDataFile;
 
 namespace smoap::hooks {
 
 namespace {
-HOOK_DEFINE_TRAMPOLINE(ScenarioFlagHook) {
-    static void Callback(GameDataFile* self, int scenario_no) {
-        Orig(self, scenario_no);
+
+HkTrampoline<void, GameDataFile*, int> scenarioFlagHook =
+    hk::hook::trampoline([](GameDataFile* self, int scenario_no) -> void {
+        scenarioFlagHook.orig(self, scenario_no);
         SMOAP_LOG_INFO("ScenarioFlagHook: scenario_no=%d", scenario_no);
-        // stage_name is left empty here; the bridge tags status with the
-        // last kingdom from the most recent moon check. A future
-        // ScenarioFlagHook revision can pull the current stage via
-        // self->getStageNameCurrent() once we wire that lookup.
         smoap::ap::reportStatus(/*stage_name=*/nullptr, scenario_no);
-    }
-};
+    });
+
 }  // namespace
 
 void installScenarioFlagHook() {
-    SMOAP_LOG_INFO("installing ScenarioFlagHook -> %s", smoap::sym::kGameDataFileSetMainScenarioNo);
-    softInstallAtSymbol<ScenarioFlagHook>(smoap::sym::kGameDataFileSetMainScenarioNo);
+    SMOAP_LOG_INFO("installing ScenarioFlagHook -> GameDataFile::setMainScenarioNo");
+    scenarioFlagHook.installAtSym<"_ZN12GameDataFile17setMainScenarioNoEi">();
 }
 
 }  // namespace smoap::hooks

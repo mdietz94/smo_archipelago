@@ -41,41 +41,47 @@ Open <http://localhost:8000> for the tracker UI.
 
 ## Switch module (C++)
 
-The module compiles cleanly via the lunakit toolchain. Build steps:
+The module is a Hakkun-based subsdk9 (post-Hakkun-cutover, 2026-05-21). Build via the wrapper script `scripts/build_switchmod.py`.
 
 Prerequisites:
 
-- devkitPro / devkitA64 — install via the Windows installer at <https://devkitpro.org/wiki/Getting_Started>.
-  - The installer sets `DEVKITPRO`, `DEVKITA64`, `DEVKITARM` env vars. Verify in a fresh shell:
-    ```pwsh
-    echo $env:DEVKITPRO
-    & "$env:DEVKITPRO\devkitA64\bin\aarch64-none-elf-gcc.exe" --version
-    ```
+- LLVM 19 (not 20 — LibHakkun pins ABI to libc++ 19). `winget install LLVM.LLVM --version 19.1.7`. Verify:
+  ```pwsh
+  & "C:\Program Files\LLVM\bin\clang.exe" --version
+  ```
 - CMake 3.24 or newer. `winget install Kitware.CMake`
 - Ninja. `winget install Ninja-build.Ninja`
-- Ghidra 11.x — only needed for M0 symbol discovery. <https://ghidra-sre.org>
+- msys2 with mingw64 g++ (for sail's host-binary compile). `winget install MSYS2.MSYS2`, then `pacman -S mingw-w64-x86_64-gcc`.
+- Python 3.11 or newer with `pyelftools`, `mmh3`, `lz4`: `pip install pyelftools mmh3 lz4`.
 
-Bootstrap (one time):
+Bootstrap (one time per worktree):
 
 ```pwsh
-cd C:\Users\maxwe\Documents\smo_archipelago\switch-mod
-git submodule add https://github.com/shadowninja108/exlaunch.git exlaunch
-git submodule add https://github.com/Amethyst-szs/smo-lunakit.git lunakit-vendor
-git submodule update --init --recursive
+cd C:\Users\maxwe\Documents\smo_archipelago
+git submodule update --init --recursive switch-mod/sys switch-mod/lib/OdysseyHeaders
 ```
+
+`switch-mod/sys` is LibHakkun (github.com/fruityloops1/LibHakkun); `switch-mod/lib/OdysseyHeaders` is MonsterDruide1's vendored SMO 1.0.0 forward-decl headers. `--recursive` is required to pull LibHakkun's nested `tools/senobi` submodule.
 
 Configure & build:
 
 ```pwsh
-cd C:\Users\maxwe\Documents\smo_archipelago\switch-mod
-cmake -S . -B build -G Ninja `
-      -DCMAKE_TOOLCHAIN_FILE=lunakit-vendor/cmake/toolchain.cmake `
-      -DSMO_VERSION=1.0.0
-cmake --build build
-cmake --install build      # populates ../sd-overlay/
+cd C:\Users\maxwe\Documents\smo_archipelago
+python scripts\build_switchmod.py
 ```
 
-Output: `switch-mod/sd-overlay/atmosphere/contents/0100000000010000/exefs/subsdk9` and `romfs/ap_config.json`.
+The script:
+1. Applies LibHakkun's Windows-port patches via `scripts/patch_hakkun.py` (idempotent).
+2. Builds sail once per machine if `switch-mod/sys/sail/build/sail.exe` is missing.
+3. Runs CMake configure + ninja build with the LLVM 19 + CMake + Ninja toolchain on PATH.
+
+Output: `switch-mod/build/sd/atmosphere/contents/0100000000010000/exefs/subsdk9` + `main.npdm`.
+
+Override `-DBRIDGE_HOST` / `-DBRIDGE_PORT` per-machine by passing them after the script name (forwarded to CMake configure):
+
+```pwsh
+python scripts\build_switchmod.py -DBRIDGE_HOST=127.0.0.1
+```
 
 ## Sync the capture table
 

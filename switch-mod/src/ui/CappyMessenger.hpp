@@ -79,21 +79,26 @@ public:
     // bounded so a truly broken state eventually drops.
     static constexpr std::uint32_t kMaxRetryFrames = 9000;
 
-    // Defensive: wait this many frames AFTER we first see a non-null scene
-    // before attempting any rs:: dispatch. Gives the StageScene time to
-    // finish endInit + register its SceneObjHolder children (CapMessage
-    // Director among them). Otherwise rs::isActiveCapMessage NULL-derefs
-    // on the un-registered director.
-    //
-    // Was 120 (~2s). Crashed in Ryujinx 2026-05-17 on the first non-null
-    // scene at the title→save-load boundary: 120 frames after the scene
-    // pointer appeared, isActiveCapMessage still NULL-deref'd inside
-    // CapMessageLayout::isShow because the director sub-object wasn't yet
-    // registered with the scene's SceneObjHolder. 600 frames (~10s) is the
-    // new floor — generous, but the worst-case visible cost is a 10s delay
-    // before the first balloon shows after a scene transition, and items
-    // queue cleanly in the meantime.
-    static constexpr std::uint32_t kSceneSettleFrames = 600;
+    // Defensive: dispatch only after BOTH this many drawMain calls AND this
+    // many wallclock milliseconds have elapsed since the scene transition.
+    // Why both: rs::isActiveCapMessage NULL-derefs on the un-registered
+    // CapMessage director, and we have no direct readiness probe. On real
+    // Switch 60fps is locked so either heuristic suffices; on Ryujinx the
+    // emulator's GPU stalls mean drawMain stops firing for seconds at a
+    // time, decoupling wallclock from actual game-state progression. The
+    // frame counter blocks while drawMain is stalled (since it only ticks
+    // when tryPump fires), the wallclock counter blocks if the game runs
+    // faster than 60fps in catch-up mode. The MAX of the two is correct in
+    // both cases.
+    // Dispatch only after BOTH a minimum number of drawMain calls AND a
+    // minimum wallclock interval since the scene transition. On real Switch
+    // 60fps is locked so the two thresholds align; on Ryujinx the wallclock
+    // half catches the catch-up-frame edge case where guest frames advance
+    // faster than wallclock under GPU stalls. Matches production's 600 frame
+    // value; the wallclock half is defense-in-depth that costs nothing on
+    // real hardware.
+    static constexpr std::uint32_t kSceneSettleFrames = 600;     // ~10s @ 60fps
+    static constexpr std::int64_t  kSceneSettleMs     = 10000;   // 10s wallclock
 
     // On-screen duration. Passed as the THIRD positional arg to
     // rs::tryShowCapMessagePriorityLow (which the decompiler signature
@@ -186,13 +191,13 @@ private:
     std::size_t live_count_ = 0;
     std::uint32_t retry_frames_ = 0;
 
-    // Scene-stability tracking for the settle-delay guard. last_scene_ is the
-    // pointer we saw on the last pump; settle_frames_ is the count of
-    // consecutive pumps where scene matched and was non-null. Dispatch is
-    // gated on settle_frames_ >= kSceneSettleFrames so a brand-new StageScene
-    // gets time to finish wiring up its SceneObjHolder before we poke it.
+    // Scene-stability tracking for the settle-delay guard. last_scene_ is
+    // the pointer we saw on the last pump. Both counters reset on scene
+    // change; dispatch is gated on settle_frames_ >= kSceneSettleFrames
+    // AND (now - scene_change_ms_) >= kSceneSettleMs.
     const void* last_scene_ = nullptr;
     std::uint32_t settle_frames_ = 0;
+    std::int64_t scene_change_ms_ = 0;
 
     // Substitution buffer. Filled by tryPump immediately before calling
     // rs::tryShowCapMessagePriorityLow with kArchipelagoLabel; the hook

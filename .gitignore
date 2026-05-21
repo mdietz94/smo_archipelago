@@ -24,8 +24,6 @@ switch-mod/sd-overlay/atmosphere/contents/*/exefs/subsdk9
 switch-mod/sd-overlay/atmosphere/contents/*/exefs/main.npdm
 switch-mod/sd-overlay/atmosphere/contents/*/romfs/ap_config.json
 switch-mod/src/ap/capture_table.h
-switch-mod-hk/src/ap/capture_table.h
-switch-mod-hk/build/
 
 # Symbol dumps - never commit, contain copyrighted material
 docs/main-*.nso

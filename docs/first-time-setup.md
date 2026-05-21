@@ -17,8 +17,8 @@ Before you start, confirm all three:
 | Requirement | Why | What to do if you don't have it |
 |---|---|---|
 | **Super Mario Odyssey 1.0.0** | Every public SMO mod (lunakit, OdysseyDecomp, ours) targets the original 1.0.0 release. 1.1.0+ have different symbol offsets, struct layouts, and patched behaviors — our module won't load on them. | If you're on 1.1.0, 1.2.0, or 1.3.0, downgrade to 1.0.0 using [Istador/odyssey-downgrade](https://github.com/Istador/odyssey-downgrade). Follow that tool's README — it's a one-time process that removes the update overlay so the cartridge / base NSP runs as 1.0.0. |
-| **Switch firmware 21.x or earlier, OR an emulator** | The subsdk9-style modules we rely on use a homebrew lifecycle Nintendo changed in firmware 22. **FW22 is NOT supported** by this project, even though Atmosphere 1.11+ technically boots on it. An emulator loads the same `subsdk9` overlay as a mod and is fully supported. |  |
-| **Atmosphere CFW** running on the above firmware (real Switch only) | The mod ships as an Atmosphere overlay (`exefs/subsdk9`). | Follow one of the community guides — [NH Switch Guide](https://nh-server.github.io/switch-guide/) is the canonical starting point. Make sure you're on FW 21.x BEFORE setting up Atmosphere; don't update past 21.x. |
+| **Switch firmware 21.x or 22.x, OR an emulator** | The post-Hakkun-cutover module (subsdk9, LibHakkun-based) has been validated on both FW 21.2 and FW 22. Earlier firmware likely works (the homebrew lifecycle the module relies on hasn't materially changed since FW 18-ish), but only FW 21.2 + FW 22 have been hands-on tested. An emulator loads the same `subsdk9` overlay as a mod and is fully supported. |  |
+| **Atmosphere CFW** running on the above firmware (real Switch only) | The mod ships as an Atmosphere overlay (`exefs/subsdk9`). | Follow one of the community guides — [NH Switch Guide](https://nh-server.github.io/switch-guide/) is the canonical starting point. |
 
 ## What you'll end up with
 
@@ -54,7 +54,7 @@ back-and-forth:
 | **prod.keys** (Switch console keys) | hactool needs them to decrypt the dump | Dump with Lockpick_RCM → place at `%USERPROFILE%\.switch\prod.keys` |
 | **title.keys** (XCI only) | NSPs ship a ticket inside the package; XCI cartridge dumps don't, so hactool needs the SMO titlekey from `title.keys` | Dump with Lockpick_RCM (same run as prod.keys) → place at `%USERPROFILE%\.switch\title.keys` |
 | **Your SMO 1.0.0 NSP or XCI** | Source of moon + capture names | Your legally-dumped copy. **Not** a patched version — 1.0.0 only. NSP and XCI are both supported. |
-| **A modded Switch OR an emulator** | Where SMO actually runs | Atmosphere CFW on a modded Switch (FW 21.x or earlier), or an emulator |
+| **A modded Switch OR an emulator** | Where SMO actually runs | Atmosphere CFW on a modded Switch (FW 21.2 or FW 22 validated), or an emulator |
 
 > ⚠️ **Why so many tools?** SMO Archipelago is "play your own Switch", not
 > "play an emulated ROM". The mod that talks to AP runs inside SMO on the

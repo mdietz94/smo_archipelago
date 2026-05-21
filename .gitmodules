@@ -1,15 +1,9 @@
 [submodule "vendor/Archipelago"]
 	path = vendor/Archipelago
 	url = https://github.com/ArchipelagoMW/Archipelago.git
-[submodule "switch-mod/exlaunch"]
-	path = switch-mod/exlaunch
-	url = https://github.com/shadowninja108/exlaunch.git
-[submodule "switch-mod/lunakit-vendor"]
-	path = switch-mod/lunakit-vendor
-	url = https://github.com/Amethyst-szs/smo-lunakit.git
-[submodule "switch-mod-hk/sys"]
-	path = switch-mod-hk/sys
+[submodule "switch-mod/sys"]
+	path = switch-mod/sys
 	url = https://github.com/fruityloops1/LibHakkun.git
-[submodule "switch-mod-hk/lib/OdysseyHeaders"]
-	path = switch-mod-hk/lib/OdysseyHeaders
+[submodule "switch-mod/lib/OdysseyHeaders"]
+	path = switch-mod/lib/OdysseyHeaders
 	url = https://github.com/MonsterDruide1/OdysseyHeaders.git
