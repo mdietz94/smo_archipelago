@@ -193,9 +193,13 @@ public:
     // pairs. Frame thread drains and folds into shine_palette[].
     SpscRing<ShineScout, 4096> inbound_scouts;
 
-    // socket -> frame. Route worker-thread Cappy system-bubble enqueues
-    // through here to avoid the non-atomic queue_[] race with frame-thread
-    // tryPump. 16 slots is plenty (~3-4 in flight at most).
+    // socket -> frame. Hakkun build crashes Ryujinx's ARMeilleure JIT when
+    // the worker thread directly calls CappyMessenger::enqueueSystem (non-
+    // atomic writes to queue_[] from one thread while drawMain reads/writes
+    // it from another). Production exlaunch survives the same race; we
+    // don't. Route every worker-side system bubble through this ring and
+    // have drawMain drain + enqueue from frame thread. 16 slots is plenty —
+    // there are at most ~3-4 system bubbles in flight at any time.
     struct SystemBubble {
         char text[64];
     };
@@ -216,12 +220,11 @@ public:
     bool goal_sent = false;
     bool synthetic_grant_this_frame = false;
 
-    // M7: set immediately before we invoke the deferred capture-release
-    // (PlayerHackKeeper::forceKillHack or tryEscapeHack) from the deferred-
-    // kill tick. Defense-in-depth — today nothing observes the kill, but if
-    // a future hook lands on the post-cancel path it can check this flag and
-    // skip outbound reporting so we don't echo a synthetic "Mario un-captured"
-    // event back to AP.
+    // M7: set immediately before we invoke PlayerHackKeeper::forceKillHack
+    // from the deferred-kill tick. Defense-in-depth — today nothing observes
+    // the kill, but if a future hook lands on the post-cancel path it can
+    // check this flag and skip outbound reporting so we don't echo a
+    // synthetic "Mario un-captured" event back to AP.
     bool synthetic_uncapture_this_frame = false;
 
     // ---- Talkatoo% mode --------------------------------------------------
@@ -316,25 +319,21 @@ public:
                                         char (*out_moons)[kCheckFieldCap],
                                         std::size_t out_cap) const;
 
-    // M7 deferred kill — CaptureStartHook's deny branch sets this instead of
-    // calling the release inline; smoap::hooks::tickPendingUncapture() drains
-    // it from drawMain after PlayerHackKeeper::isActiveHackStartDemo() returns
-    // false (i.e. the capture-entry "dive in" cinematic has ended). The gate
-    // serves two purposes:
-    //   (1) firing inline from startHack is a no-op — the hack state machine
-    //       hasn't fully entered the dive-in demo yet, so cancelHack /
-    //       forceKillHack don't actually release Mario in that window
-    //       (playtest 2026-05-16). Polling isActiveHackStartDemo per frame
-    //       (matches the gate KGamer77's SuperMarioOdysseyArchipelago uses in
-    //       Mod/source/main.cpp:73) catches the earliest safe moment.
+    // M7 deferred kill — CaptureStartHook's deny branch sets these instead of
+    // calling forceKillHack inline; smoap::hooks::tickPendingUncapture()
+    // drains them from drawMain ~1s later. The delay serves two purposes:
+    //   (1) cancel/forceKillHack appears to be a no-op when invoked from
+    //       inside startHack — playtest 2026-05-16 showed cancelHack ran
+    //       cleanly but Mario stayed captured. By the time the hack demo has
+    //       run its course, the keeper is in a state where teardown sticks.
     //   (2) it's funnier UX — the player runs around as the captured enemy
-    //       for the duration of the dive-in cinematic before being yanked
-    //       back to Mario.
-    // Touched only from the frame thread (CaptureStartHook fires inline from
-    // game code during frame processing, drawMain runs there too). Atomic
-    // for paranoid cross-frame visibility / consistency with the surrounding
-    // state fields.
+    //       for a beat before being yanked back to Mario.
+    // Both fields touched only from the frame thread (CaptureStartHook fires
+    // inline from game code during frame processing, drawMain runs there
+    // too). Atomic for paranoid cross-frame visibility / consistency with
+    // the surrounding state fields.
     std::atomic<void*> pending_kill_keeper{nullptr};
+    std::atomic<std::int64_t> pending_kill_at_ms{0};
 
     // Set by SaveLoadHook around Orig(initializeData) so the dictionary-
     // write filter (AddHackDictionaryHook) lets SMO rehydrate the

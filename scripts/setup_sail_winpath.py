@@ -26,7 +26,7 @@ CMAKE_BIN = r"C:\Program Files\CMake\bin"
 NINJA_BIN = r"C:\Users\maxwe\AppData\Local\Microsoft\WinGet\Packages\Ninja-build.Ninja_Microsoft.Winget.Source_8wekyb3d8bbwe"
 MINGW_BIN = r"C:\msys64\mingw64\bin"
 
-# The script runs from switch-mod-hk/ (cwd contains `hakkun/` submodule).
+# The script runs from switch-mod/ (cwd contains `hakkun/` submodule).
 SWITCH_MOD = os.getcwd()
 HAKKUN_SETUP = os.path.join(SWITCH_MOD, "sys", "tools", "setup_sail.py")
 
@@ -41,12 +41,12 @@ env["CXX"] = "g++"
 
 # Upstream setup_sail.py uses os.getcwd() as the root, then builds at
 # {root}/sys/sail/build. We must invoke it with cwd = directory that *contains*
-# a `sys/sail/` subdir. In our layout, switch-mod-hk/ contains `sys/` (the
+# a `sys/sail/` subdir. In our layout, switch-mod/ contains `sys/` (the
 # LibHakkun submodule), and LibHakkun's setup_sail expects `cwd/sys/sail/`,
 # so cwd = SWITCH_MOD works because SWITCH_MOD/sys is LibHakkun's `sail/`
 # parent. Wait — LibHakkun's own setup_sail.py does
 # `project_dir = f'{root_dir}/sys/sail'`, which from SWITCH_MOD gives
-# `switch-mod-hk/sys/sail` — which is correct.
+# `switch-mod/sys/sail` — which is correct.
 HAKKUN_ROOT = SWITCH_MOD
 
 result = subprocess.run([sys.executable, HAKKUN_SETUP], env=env, cwd=HAKKUN_ROOT)

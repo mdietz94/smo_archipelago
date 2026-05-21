@@ -136,7 +136,7 @@ jobs:
         with:
           submodules: false
 
-      # ubuntu-latest already ships a recent g++ (>= 13). All three host
+      # ubuntu-latest already ships a recent g++ (>= 13). All four host
       # tests are pure C++20, header-only-from-the-Switch-side via
       # SMOAP_HOST_TEST guards (see switch-mod/src/util/Log.hpp).
       - name: Show compiler version
@@ -166,3 +166,10 @@ jobs:
             switch-mod/src/ui/CappyMessenger.cpp \
             -Iswitch-mod/src -o test_cappy_messenger
           ./test_cappy_messenger
+
+      - name: Build + run test_shine_lookup
+        run: |
+          g++ -std=c++20 -Wall -Wextra -O0 -g -DSMOAP_HOST_TEST \
+            switch-mod/tests/test_shine_lookup.cpp \
+            -Iswitch-mod/src -o test_shine_lookup
+          ./test_shine_lookup

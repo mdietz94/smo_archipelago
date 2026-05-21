@@ -4,7 +4,7 @@
 Git for Windows clones repository symlinks as small text files containing the
 relative target path. The example we used for spike-validation does this for
 the `include/` -> `lib/OdysseyHeaders/*` mappings. Our equivalent layout under
-`switch-mod-hk/` may also need this if we ever symlink OdysseyHeaders
+`switch-mod/` may also need this if we ever symlink OdysseyHeaders
 subdirectories into our include path (we don't today — we add OdysseyHeaders
 directly to the include path via CMake — but if a future refactor moves to a
 symlink layout, this script handles it).
@@ -31,7 +31,7 @@ def main() -> int:
         return 0
 
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    include_dir = os.path.join(repo_root, "switch-mod-hk", "include")
+    include_dir = os.path.join(repo_root, "switch-mod", "include")
     if not os.path.isdir(include_dir):
         print(f"[fix_hakkun_symlinks] include/ dir not found: {include_dir}; nothing to do")
         return 0

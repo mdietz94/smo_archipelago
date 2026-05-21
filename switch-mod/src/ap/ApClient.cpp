@@ -1,6 +1,6 @@
-// TCP client to the PC bridge.
+// TCP client to the PC bridge — Hakkun port (phase 3b residual).
 //
-// Owns a single nn::socket TCP connection on a dedicated worker thread.
+// Owns a single hk::socket TCP connection on a dedicated worker thread.
 // The frame thread (drawMain trampoline) only touches ApState's lock-free
 // SPSC rings; this thread does all blocking I/O.
 //
@@ -8,48 +8,71 @@
 //   1. start() (called from frame thread inside GameSystemInit hook):
 //      saves target, spawns worker, returns immediately.
 //   2. initNetworking() (frame thread, before start): nn::nifm::Initialize +
-//      SubmitNetworkRequestAndWait. nn::socket::Initialize is owned by SMO
-//      itself — it's already brought up by the time GameSystem::init returns
-//      (BSD RegisterClient happens during the Orig call). Calling Initialize
-//      a second time asserts inside InitializeCommon. LunaKit avoids this by
-//      installing a REPLACE no-op hook on nn::socket::Initialize and doing
-//      its own bring-up first; we just piggy-back on SMO's.
-//   3. threadMain() loop: connectOnce -> sendHello -> Select+recv read,
+//      SubmitNetworkRequestAndWait then hk::socket::Socket::initialize<"bsd:u">.
+//      SMO has its own nn::socket::Initialize, but per the Hakkun spike Gate 2
+//      a parallel hk::socket::Socket client coexists without conflict
+//      (sm:: hands out an independent bsd:u handle).
+//   3. threadMain() loop: connectOnce -> sendHello -> poll+recv read,
 //      pumpOnce drain outbound, error-on-disconnect with backoff retry.
 
 #include "ApClient.hpp"
 
 #include <cstdint>
 #include <cstring>
+#include <new>
 
-#include "nn/nifm.h"
-#include "nn/os.h"
-#include "nn/socket.hpp"
-// nx.h is the C-linkage umbrella for libnx (svc + result + ...). Including
-// the inner headers directly from C++ gives C++ mangling and unresolved
-// links against the assembly stubs.
-#include "lib/nx/nx.h"
+#include "hk/os/Thread.h"
+#include "hk/services/sm.h"
+#include "hk/services/socket/address.h"
+#include "hk/services/socket/config.h"
+#include "hk/services/socket/poll.h"
+#include "hk/services/socket/service.h"
+#include "hk/svc/api.h"
+#include "hk/svc/cpu.h"
+#include "hk/types.h"
 
 #include "ApDiscovery.hpp"
 #include "ApProtocol.hpp"
 #include "ApState.hpp"
 #include "../game/CaptureGate.hpp"
-#include "../game/KingdomUnlock.hpp"  // kingdomBitFor (M6 phase D OutstandingMsg apply)
+#include "../game/KingdomUnlock.hpp"
 #include "../game/MoonApply.hpp"
 #include "../ui/CappyMessenger.hpp"
 #include "../util/Log.hpp"
+
+// nn::nifm — sail resolves these against SMO's dynsym. See
+// switch-mod/syms/nn/nifm.sym for the matching mangled entries.
+namespace nn::nifm {
+    u32 Initialize();
+    void SubmitNetworkRequestAndWait();
+    bool IsNetworkAvailable();
+}  // namespace nn::nifm
 
 namespace smoap::ap {
 
 namespace {
 
-// BSD socket constants (not exposed by lunakit's nn/socket.hpp).
-constexpr int kAfInet      = 2;
-constexpr int kSockStream  = 1;
-constexpr int kSolSocket   = 0xffff;
-constexpr int kSoKeepAlive = 0x0008;
+// Socket-option levels and names. Hakkun doesn't re-export the BSD constants;
+// the values match Nintendo's bsd:u service (which derives from FreeBSD).
+constexpr s32 kSolSocket   = 0xffff;
+constexpr s32 kSoKeepAlive = 0x0008;
 
-constexpr std::size_t kWorkerStackSize = 64 * 1024;
+// Worker thread stack — 64 KiB, page-aligned. Bigger than Hakkun's 4 KiB
+// default because handleLine's static DecodedMsg is 64 KiB on its own and
+// we also need headroom for json encode/decode + LineBuffer copies.
+constexpr std::size_t kWorkerStackSize = 0x10000;
+alignas(0x1000) u8 g_worker_stack[kWorkerStackSize];
+
+// In-place storage for the hk::os::Thread. The Thread ctor immediately
+// creates the kernel thread (svc::CreateThread), so we lazy-construct via
+// placement new from start() rather than at file-static init time.
+alignas(hk::os::Thread) char g_worker_thread_storage[sizeof(hk::os::Thread)];
+hk::os::Thread* g_worker_thread = nullptr;
+
+// hk::socket::Socket transfer-memory pool. Page-aligned, sized via
+// ServiceConfig::calcTransferMemorySize() at init time.
+constexpr std::size_t kSocketBufferSize = 0x60000;  // ServiceConfig defaults
+alignas(0x1000) u8 g_socket_buffer[kSocketBufferSize];
 
 // Exponential backoff caps (ms): 1s, 2s, 5s, 10s, 30s.
 constexpr std::uint32_t kBackoffCapMs = 30 * 1000;
@@ -78,10 +101,9 @@ char s_last_ap_state[24] = "disconnected";
 // Worker-side system-bubble emitter. Pushes the text onto ApState's
 // inbound_system_bubbles SPSC ring; drawMain (frame thread) drains and
 // calls CappyMessenger::enqueueSystem from there. Direct worker-thread
-// calls into CappyMessenger race the non-atomic queue_[]/tail_/live_count_
-// state against frame-thread tryPump reads — production has tolerated this
-// on the user's setup, but the Hakkun-migration build crashes Ryujinx's
-// ARMeilleure JIT on the same race, which exposed it. Fix it at the source.
+// calls into CappyMessenger crash Ryujinx ARMeilleure's JIT (the queue_
+// non-atomic state races with frame-thread tryPump reads); production
+// exlaunch survived the race, our Hakkun build doesn't.
 void enqueueSystemBubble(const char* text) {
     if (!text || !*text) return;
     ApState::SystemBubble msg;
@@ -94,10 +116,111 @@ void enqueueSystemBubble(const char* text) {
     ApState::instance().inbound_system_bubbles.push(msg);
 }
 
-// Stack must be page-aligned; size must be a multiple of page size. nn::os
-// CreateThread takes the BASE address + size (svcCreateThread takes top).
-alignas(0x1000) std::byte g_worker_stack[kWorkerStackSize];
-nn::os::ThreadType g_worker_thread{};
+// Thin wrappers around hk::socket::Socket so the worker-loop call sites stay
+// close to the production code shape. Each wrapper unpacks the
+// ValueOrResult<Tuple<s32,s32>> envelope and returns BSD-style (ret, errno):
+//   ret >= 0  -> success, value depends on op (bytes / fd / 0)
+//   ret  < 0  -> failure, errno carries the reason
+// Hakkun's send/recv tuples are (return value, errno). IPC-level failures
+// (Socket::instance() being nullptr, service IPC error) collapse into
+// ret=-1, errno=ECONNRESET so the caller's "treat as socket dead" path
+// triggers and we reconnect.
+struct SockResult {
+    s32 ret;
+    s32 err;
+};
+
+SockResult sockSocket(hk::socket::AddressFamily fam,
+                      hk::socket::Type type,
+                      hk::socket::Protocol proto) {
+    auto* sock = hk::socket::Socket::instance();
+    if (!sock) return {-1, 104};  // ECONNRESET
+    auto vor = sock->socket(fam, type, proto);
+    if (!vor.hasValue()) return {-1, 104};
+    auto t = vor.getInnerValue();
+    return {t.a, t.b};
+}
+
+SockResult sockConnect(s32 fd, const hk::socket::SocketAddrIpv4& addr) {
+    auto* sock = hk::socket::Socket::instance();
+    if (!sock) return {-1, 104};
+    // hk::socket::Socket::connect's template signature has an unused second
+    // type parameter B which template-deduction can't infer from the args;
+    // provide it explicitly.
+    auto vor = sock->connect<hk::socket::SocketAddrIpv4, int>(fd, addr);
+    if (!vor.hasValue()) return {-1, 104};
+    auto t = vor.getInnerValue();
+    return {t.a, t.b};
+}
+
+SockResult sockClose(s32 fd) {
+    auto* sock = hk::socket::Socket::instance();
+    if (!sock) return {-1, 104};
+    auto vor = sock->close(fd);
+    if (!vor.hasValue()) return {-1, 104};
+    auto t = vor.getInnerValue();
+    return {t.a, t.b};
+}
+
+SockResult sockSend(s32 fd, const void* data, std::size_t len) {
+    auto* sock = hk::socket::Socket::instance();
+    if (!sock) return {-1, 104};
+    auto vor = sock->send(fd,
+                          hk::Span<const u8>(static_cast<const u8*>(data), len),
+                          0);
+    if (!vor.hasValue()) return {-1, 104};
+    auto t = vor.getInnerValue();
+    return {t.a, t.b};
+}
+
+SockResult sockRecv(s32 fd, void* data, std::size_t len) {
+    auto* sock = hk::socket::Socket::instance();
+    if (!sock) return {-1, 104};
+    auto vor = sock->recv(fd,
+                          hk::Span<u8>(static_cast<u8*>(data), len),
+                          0);
+    if (!vor.hasValue()) return {-1, 104};
+    auto t = vor.getInnerValue();
+    return {t.a, t.b};
+}
+
+SockResult sockSetKeepalive(s32 fd) {
+    auto* sock = hk::socket::Socket::instance();
+    if (!sock) return {-1, 104};
+    // Use the explicit Span-taking overload — the templated convenience form
+    // `setSockOpt(fd, level, opt, T&)` fails to compile because its body
+    // constructs Span<const u8> directly from `&opt` which is `const s32*`,
+    // and Span's constructor wants `const u8*`.
+    const s32 keepalive = 1;
+    auto vor = sock->setSockOpt(
+        fd, kSolSocket, kSoKeepAlive,
+        hk::Span<const u8>(reinterpret_cast<const u8*>(&keepalive),
+                           sizeof(keepalive)));
+    if (!vor.hasValue()) return {-1, 104};
+    auto t = vor.getInnerValue();
+    return {t.a, t.b};
+}
+
+// Returns >0 if socket is readable, 0 on timeout, <0 on error.
+int sockPollReadable(s32 fd, std::uint32_t timeout_ms) {
+    auto* sock = hk::socket::Socket::instance();
+    if (!sock) return -1;
+    hk::socket::PollFd pfd[1] = {
+        {.fd = fd,
+         .requestedEvents = hk::socket::PollEvents::CanRead,
+         .returnedEvents  = hk::socket::PollEvents::Default},
+    };
+    auto vor = sock->poll(hk::Span<hk::socket::PollFd>(pfd, 1),
+                          static_cast<s32>(timeout_ms));
+    if (!vor.hasValue()) return -1;
+    auto t = vor.getInnerValue();
+    if (t.a < 0) return -1;
+    if (t.a == 0) return 0;
+    using PE = hk::socket::PollEvents;
+    const auto re = pfd[0].returnedEvents;
+    if (re & (PE::Error | PE::HangUp)) return -1;
+    return (re & PE::CanRead) ? 1 : 0;
+}
 
 // M6 phase D — translate an ApState snapshot into the wire PaySnapshot,
 // encode, and send. Always sends complete=true; entries are filled for all
@@ -116,13 +239,13 @@ int sendPaySnapshotMessage(int socket_fd, smoap::util::json::LineBuffer& line,
         entry.pay = ps.totals[bit];
     }
     encodePaySnapshot(line, wire);
-    return nn::socket::Send(socket_fd, line.data(), line.size(), 0);
+    return sockSend(socket_fd, line.data(), line.size()).ret;
 }
 
-extern "C" void workerEntry(void* arg) {
-    static_cast<ApClient*>(arg)->threadMain();
+void workerEntry(ApClient* self) {
+    self->threadMain();
     // Should not return; if we do, just sleep forever.
-    while (true) svcSleepThread(INT64_MAX);
+    while (true) hk::svc::SleepThread(INT64_MAX);
 }
 
 }  // namespace
@@ -134,8 +257,8 @@ ApClient& ApClient::instance() {
 
 void ApClient::initNetworking() {
     SMOAP_LOG_INFO("[frame] nn::nifm::Initialize");
-    const Result nifm_rc = nn::nifm::Initialize();
-    if (R_FAILED(nifm_rc)) {
+    const u32 nifm_rc = nn::nifm::Initialize();
+    if (nifm_rc != 0) {
         SMOAP_LOG_ERROR("[frame] nn::nifm::Initialize FAILED rc=0x%x", nifm_rc);
         return;
     }
@@ -144,10 +267,46 @@ void ApClient::initNetworking() {
     const bool net_up = nn::nifm::IsNetworkAvailable();
     SMOAP_LOG_INFO("[frame] network available: %s", net_up ? "YES" : "NO");
 
-    // nn::socket::Initialize is intentionally NOT called here — SMO already
-    // initialized the BSD client during GameSystem::init (Orig). A second
-    // Initialize asserts inside nn::socket::detail::InitializeCommon.
-    SMOAP_LOG_INFO("[frame] networking ready (sockets owned by SMO)");
+    // Bring up our own sm: connection FIRST. Hakkun's HK_SINGLETON pattern
+    // does NOT lazy-init — `sm::ServiceManager::instance()` returns an
+    // uninitialized pointer until `initialize()` runs, and the first
+    // getServiceHandle null-derefs (verified 2026-05-20 in Ryujinx — crash at
+    // PC subsdk+0x25ba0 with bsd:u name in X[8]). Spike Gate 2 didn't catch
+    // this because it only took the function address, never actually called
+    // Socket::initialize. Each Switch process can hold multiple sm: sessions,
+    // so opening our own alongside SMO's is fine.
+    SMOAP_LOG_INFO("[frame] hk::sm::ServiceManager::initialize");
+    auto sm_init = hk::sm::ServiceManager::initialize();
+    if (!sm_init.hasValue()) {
+        SMOAP_LOG_ERROR("[frame] sm::ServiceManager::initialize FAILED "
+                        "rc=0x%x — ApClient cannot connect",
+                        static_cast<unsigned>(hk::Result(sm_init).getValue()));
+        return;
+    }
+    SMOAP_LOG_INFO("[frame] sm::ServiceManager::registerClient");
+    if (const auto rc = hk::sm::ServiceManager::instance()->registerClient();
+        rc.failed()) {
+        SMOAP_LOG_ERROR("[frame] sm::registerClient FAILED rc=0x%x — "
+                        "ApClient cannot connect",
+                        static_cast<unsigned>(rc.getValue()));
+        return;
+    }
+
+    // Bring up Hakkun's hk::socket::Socket client against bsd:u. SMO has its
+    // own nn::socket::Initialize already in flight by the time GameSystem::init
+    // returns. Opening a parallel hk::socket client is safe because sm:: hands
+    // each new request an independent bsd:u handle + we supply our own
+    // per-client transfer memory pool.
+    hk::socket::ServiceConfig cfg{};
+    auto vor = hk::socket::Socket::initialize<"bsd:u">(
+        cfg, hk::Span<u8>(g_socket_buffer, kSocketBufferSize));
+    if (!vor.hasValue()) {
+        SMOAP_LOG_ERROR("[frame] hk::socket::Socket::initialize FAILED "
+                        "rc=0x%x — ApClient cannot connect",
+                        static_cast<unsigned>(hk::Result(vor).getValue()));
+        return;
+    }
+    SMOAP_LOG_INFO("[frame] hk::socket ready (parallel client to SMO's)");
 }
 
 void ApClient::start(const BridgeTarget& target) {
@@ -155,30 +314,18 @@ void ApClient::start(const BridgeTarget& target) {
     running_ = true;
     SMOAP_LOG_INFO("ApClient::start target=%s:%u", target.host.c_str(), target.port);
 
-    // Use nn::os::CreateThread (NOT raw svcCreateThread): the worker calls
-    // nn::socket::Socket which is an IPC to the bsd: service, and IPC needs
-    // per-thread nn-runtime state that only nn::os-managed threads have.
-    // Raw svcCreateThread threads NULL-deref inside HipcSimpleClientSession
-    // Manager::Allocate -> InternalCriticalSectionImplByHorizon::Enter.
-    // Use the no-coreNum overload — nn::os picks the process's default core
-    // internally. The 7-arg overload would forward our value to the kernel
-    // SVC, which only accepts 0..N (process-allowed cores) or -2 ("default");
-    // -1 / IdealCoreDontCare returns InvalidCoreId from svcCreateThread.
-    //
-    // Priority must be in nn::os range [0, 31] (0 = highest, 16 = default,
-    // 31 = lowest). svcCreateThread accepts a wider 0..63 range; nn::os is
-    // stricter and aborts InvalidPriority on anything outside [0, 31].
-    const Result rc = nn::os::CreateThread(
-        &g_worker_thread, &workerEntry, this,
-        g_worker_stack, kWorkerStackSize,
-        /*priority=*/16);
-    if (R_FAILED(rc)) {
-        SMOAP_LOG_ERROR("ApClient: nn::os::CreateThread failed (rc=0x%x)", rc);
+    // Construct the worker thread in-place. Hakkun's Thread ctor immediately
+    // svc::CreateThread's; start() then svc::StartThread's it.
+    g_worker_thread = new (g_worker_thread_storage) hk::os::Thread(
+        &workerEntry, this,
+        reinterpret_cast<ptr>(g_worker_stack), kWorkerStackSize,
+        /*priority=*/44, /*coreId=*/-2);
+    g_worker_thread->setName("smoap-worker");
+    const auto rc = g_worker_thread->start();
+    if (rc.failed()) {
+        SMOAP_LOG_ERROR("ApClient: thread start failed (rc=0x%x)", rc.getValue());
         running_ = false;
-        return;
     }
-    nn::os::SetThreadName(&g_worker_thread, "smoap-worker");
-    nn::os::StartThread(&g_worker_thread);
 }
 
 void ApClient::stop() {
@@ -216,29 +363,13 @@ static constexpr std::int64_t kDisconnectGracePeriodMs = 10000;
 static constexpr std::int64_t kSaveLoadAnnounceWaitMs = 1500;
 
 void ApClient::requestRehello() {
-    // Arm the bubble suppressor BEFORE setting the rehello flag so the worker
-    // thread can't race ahead and call disconnect() between these stores.
-    // The worker only ever READS this value (against nowMs()), so a relaxed
-    // load is fine.
     suppress_state_bubble_until_ms_.store(
         ApState::nowMs() + kRehelloBubbleSuppressMs,
         std::memory_order_relaxed);
-    // Set the atomic; the worker reads it on the next loop iteration and
-    // closes-and-reopens. We do NOT call disconnect() here because we're on
-    // the frame thread and socket close should be owned by the worker.
     rehello_requested_.store(true, std::memory_order_release);
 }
 
 void ApClient::deferSaveLoadStatusBubble() {
-    // Arm the worker-thread deadline. The worker fires "Connected" the moment
-    // ap_state=ready is observed inside the window (typically when the bridge
-    // finishes its AP handshake ~1s after we HELLO'd), or "Not connected"
-    // once the deadline expires. Either path clears the atomic back to 0.
-    //
-    // Idempotency: if multiple SaveLoadHook fires call this within the
-    // debounce window, store unconditionally so the LATEST save load resets
-    // the wait — the deferred bubble should reflect the connection state as
-    // of the most recent save reload, not whatever the original load picked.
     save_load_announce_deadline_ms_.store(
         ApState::nowMs() + kSaveLoadAnnounceWaitMs,
         std::memory_order_relaxed);
@@ -250,64 +381,26 @@ void ApClient::deferSaveLoadStatusBubble() {
 void ApClient::threadMain() {
     SMOAP_LOG_INFO("[worker] thread started, target=%s:%u",
                    target_.host.c_str(), target_.port);
-    // nifm Initialize was done on the frame thread inside
-    // GameSystemInitHook::Callback because it's an nn-IPC call and our
-    // raw-svcCreateThread worker can't make those. Socket bring-up is
-    // SMO's; the worker only does socket-level ops (Socket, Connect,
-    // Send, Recv, Select) which empirically work on raw threads.
     SMOAP_LOG_INFO("[worker] entering connect loop");
 
     std::uint32_t backoff_ms = target_.retry_ms;
-    // Monotonic ms when current connection was established; 0 = not
-    // connected. Drives the quick-bounce / stability gates below.
     std::int64_t connected_at_ms = 0;
-    // Snapshot gate has two halves: save_was_loaded (SaveLoadHook latch) and
-    // CappyMessenger::hasDispatchedSinceReset (a successful Cappy balloon has
-    // fired in the current scene since the last save load — implies scene !=
-    // null AND settle_frames >= kSceneSettleFrames AND CapMessageDirector is
-    // registered AND Nintendo's pipeline accepted our show; i.e. we are in a
-    // live gameplay scene with save data definitively past any deserialization
-    // race). Earlier iterations used `scene_cache != nullptr` for the second
-    // half but that fired the moment any scene was active, including before
-    // the shine bitmap was fully resident — producing phantom moon checks
-    // (e.g. "Mushroom: Secret Path to Peach's Castle" credited on a save that
-    // had never visited Mushroom). The "Connected to Archipelago" / "Not
-    // connected" bubble armed by deferSaveLoadStatusBubble() on every save
-    // load guarantees a dispatch attempt that flips this latch as soon as the
-    // scene is healthy. If Cappy somehow never dispatches, we never snapshot —
-    // acceptable, since the player eventually leaves the scene (load/save/
-    // travel) and the next dispatch re-arms the gate.
-    //
-    // sendHello fires unconditionally on connect; if either half is missing
-    // at that point the snapshot is deferred and re-checked from the loop
-    // body below on each iteration. Cleared after a successful sendSnapshot
-    // and re-evaluated on every (re)connect. Worker-thread-local — gate
-    // signals are atomics / single-write bools so no extra locking.
     bool snapshot_pending = false;
 
     while (running_) {
         // Fire deferred "Disconnected from Archipelago" bubble if the grace
-        // window armed by disconnect() has expired with no recovery. We get
-        // here on every loop iteration including the connect-fail backoff
-        // path (which `continue`s back to the top), so even a 30s backoff
-        // sleep adds at most one extra cycle of latency to the bubble.
-        // s_last_ap_state can only be "ready" here if we deferred and never
-        // recovered; the ap_state(ready) handler clears the timer.
+        // window armed by disconnect() has expired with no recovery.
         if (const auto deadline = pending_disconnect_bubble_at_ms_.load(
                 std::memory_order_relaxed);
             deadline > 0 && ApState::nowMs() >= deadline) {
             SMOAP_LOG_INFO("[bubble] firing deferred 'Disconnected from "
                            "Archipelago' (grace expired)");
-            enqueueSystemBubble("Disconnected from Archipelago");
+            smoap::ap::enqueueSystemBubble("Disconnected from Archipelago");
             std::strcpy(s_last_ap_state, "disconnected");
             pending_disconnect_bubble_at_ms_.store(0, std::memory_order_relaxed);
         }
 
-        // Save-load deferred status announcement. Two ways out: early-fire
-        // "Connected" the moment ap_state=ready is observed, or wait for the
-        // deadline and announce whatever state we ended up in. The ap_state
-        // message handler also checks this atomic for the fast-path fire so a
-        // sub-second AP handshake doesn't block on the recv_timeout poll.
+        // Save-load deferred status announcement.
         if (const auto deadline = save_load_announce_deadline_ms_.load(
                 std::memory_order_relaxed);
             deadline > 0) {
@@ -316,22 +409,18 @@ void ApClient::threadMain() {
             if (ready_now) {
                 SMOAP_LOG_INFO("[bubble] firing deferred save-load status "
                                "'Connected to Archipelago' (ap_state=ready)");
-                enqueueSystemBubble("Connected to Archipelago");
+                smoap::ap::enqueueSystemBubble("Connected to Archipelago");
                 save_load_announce_deadline_ms_.store(0, std::memory_order_relaxed);
             } else if (expired) {
                 SMOAP_LOG_INFO("[bubble] firing deferred save-load status "
                                "'Not connected to Archipelago' (wait expired, "
                                "ap_state=%s)", s_last_ap_state);
-                enqueueSystemBubble("Not connected to Archipelago");
+                smoap::ap::enqueueSystemBubble("Not connected to Archipelago");
                 save_load_announce_deadline_ms_.store(0, std::memory_order_relaxed);
             }
         }
 
         // Reset backoff after we've held a connection for kStableConnectMs.
-        // Gated on backoff being elevated so this is a no-op in the steady
-        // state. Done HERE (not on connect-success) so the bridge's
-        // accept-then-reject path can't keep resetting backoff to retry_ms
-        // and hammering the bridge at LAN line-rate.
         if (connected_at_ms > 0 && backoff_ms != target_.retry_ms &&
             ApState::nowMs() - connected_at_ms >= kStableConnectMs) {
             SMOAP_LOG_INFO("[conn] connection stable for >=%lldms; backoff "
@@ -346,12 +435,6 @@ void ApClient::threadMain() {
         if (rehello_requested_.compare_exchange_strong(expected, false)) {
             SMOAP_LOG_INFO("re-HELLO requested; cycling connection");
             disconnect();
-            // M6 phase D — save-load-triggered re-HELLOs (the only producer
-            // of requestRehello today) just close+reopen; on the next HELLO
-            // the snapshot pair re-sends PayShineNum, the bridge re-derives
-            // outstanding, and OutstandingMsg comes back fresh. No in-flight
-            // ack state to clear anymore — derived-outstanding owns
-            // crash-recovery via PayShineNum, not a Switch-side ring.
         }
 
         if (socket_fd_ < 0) {
@@ -361,13 +444,8 @@ void ApClient::threadMain() {
             // overwritten with the discovered host:port for this connect
             // cycle. On failure (no UDP reply on any of loopback /
             // broadcast / fallback-unicast), target_ retains whatever the
-            // wizard baked in as -DBRIDGE_HOST and the TCP connectOnce
-            // below tries that directly (step 4 — TCP-fallback).
-            //
-            // The discovery probe + reply round-trip is bounded by the
-            // probe timeouts in ApDiscovery.cpp (~3 sec worst case if
-            // every step fails); cheap relative to the existing
-            // exponential-backoff reconnect cadence.
+            // wizard baked in as -DBRIDGE_HOST and connectOnce below tries
+            // that directly (step 4 — TCP-fallback).
             {
                 BridgeTarget discovered{};
                 if (resolveBridge(discovered, target_)) {
@@ -377,43 +455,12 @@ void ApClient::threadMain() {
             }
             if (!connectOnce()) {
                 SMOAP_LOG_WARN("connect failed; sleeping %u ms before retry", backoff_ms);
-                svcSleepThread(static_cast<s64>(backoff_ms) * 1'000'000);  // ms -> ns
+                hk::svc::SleepThread(static_cast<s64>(backoff_ms) * 1'000'000);
                 backoff_ms = backoff_ms < kBackoffCapMs ? backoff_ms * 2 : kBackoffCapMs;
                 continue;
             }
             connected_at_ms = ApState::nowMs();
-            // Backoff reset is DEFERRED to the stability check at the top of
-            // the loop. A "successful" TCP handshake followed by an immediate
-            // app-layer ErrMsg(busy)+FIN from the bridge would otherwise reset
-            // backoff every iteration; the deferred reset means a sustained
-            // rejection cycle keeps backoff escalating.
             sendHello();
-            // Two-part gate (see snapshot_pending declaration above):
-            //   1. save_was_loaded — SaveLoadHook fired at least once.
-            //   2. CappyMessenger::hasDispatchedSinceReset — a Cappy balloon
-            //      has successfully fired in the current scene since the last
-            //      save load (implies scene is fully alive and save data is
-            //      past any deserialization race).
-            // Why both: SaveLoadHook fires not just on user-initiated Load
-            // Save / New Game, but also for every file-select preview render
-            // on the title screen. On real Switch, SMO boots → file-select
-            // renders all save previews → SaveLoadHook latches save_was_loaded
-            // long before the user clicks anything; if we only gated on (1),
-            // the snapshot would faithfully report the previous save's
-            // moons/captures the moment the bridge connected, and AP would
-            // credit them as fresh LocationChecks (observed 2026-05-18 with
-            // 10 moons forwarded from a never-loaded save). Requiring a real
-            // Cappy dispatch is a stronger signal than the prior "scene_cache
-            // != nullptr" check — it folds in scene-stability (settle frames)
-            // + CapMessageDirector registration + Nintendo accepting our show,
-            // and only goes true when we're unambiguously past the title /
-            // file-select scenes.
-            //
-            // If the gate is closed at connect time, the loop body's drain
-            // block below polls hasDispatchedSinceReset each iteration
-            // (~200 ms) and sends the snapshot once both conditions are true.
-            // No extra requestRehello round-trip needed — the existing socket
-            // is fine.
             {
                 auto& s = ApState::instance();
                 const bool save_ok = s.save_was_loaded.load(std::memory_order_acquire);
@@ -432,31 +479,11 @@ void ApClient::threadMain() {
                 }
             }
             ApState::instance().conn.store(ConnState::Hello);
-
-            // M6 phase D — no deposit replay needed. PayShineNum is derived
-            // state owned by SMO's save file; the post-HELLO snapshot
-            // (sendSnapshot's tail, behind the save+scene gate) ships the
-            // current reading. The bridge re-derives outstanding from
-            // lifetime_received_AP − PayShineNum and pushes OutstandingMsg
-            // unprompted. Anything the bridge had buffered survives because
-            // it was always derived, never persisted.
         }
 
         // Wait up to recv_timeout_ms for inbound data.
-        fd_set rfds;
-        FD_ZERO(&rfds);
-        FD_SET(socket_fd_, &rfds);
-        struct timeval tv;
-        tv.tv_sec  = static_cast<long>(target_.recv_timeout_ms / 1000);
-        tv.tv_usec = static_cast<long>((target_.recv_timeout_ms % 1000) * 1000);
-        const int sel = nn::socket::Select(socket_fd_ + 1, &rfds, nullptr, nullptr, &tv);
+        const int sel = sockPollReadable(socket_fd_, target_.recv_timeout_ms);
 
-        // Lambda: if the connection died within kStableConnectMs of being
-        // established, escalate backoff and sleep here so the next reconnect
-        // attempt is paced. Bridge-rejection cycles ("busy" ErrMsg + FIN
-        // immediately after handshake) would otherwise loop at ~100Hz with
-        // no sleep, since connectOnce() returns true and the failure path
-        // that increments backoff_ms is bypassed.
         auto quickBounceBackoff = [&]() {
             if (connected_at_ms <= 0) return;
             const auto held_ms = ApState::nowMs() - connected_at_ms;
@@ -465,16 +492,16 @@ void ApClient::threadMain() {
             SMOAP_LOG_WARN("[conn] quick bounce after only %lldms held; "
                            "backoff -> %u ms; sleeping",
                            static_cast<long long>(held_ms), backoff_ms);
-            svcSleepThread(static_cast<s64>(backoff_ms) * 1'000'000);
+            hk::svc::SleepThread(static_cast<s64>(backoff_ms) * 1'000'000);
         };
 
         if (sel < 0) {
-            SMOAP_LOG_WARN("Select returned error; reconnecting");
+            SMOAP_LOG_WARN("poll returned error; reconnecting");
             quickBounceBackoff();
             disconnect();
             continue;
         }
-        if (sel > 0 && FD_ISSET(socket_fd_, &rfds)) {
+        if (sel > 0) {
             if (!recvIntoBuf()) {
                 SMOAP_LOG_WARN("recv error or peer closed; reconnecting");
                 quickBounceBackoff();
@@ -483,13 +510,7 @@ void ApClient::threadMain() {
             }
         }
 
-        // Drain ALL complete lines from read_buf_ each iteration. When the
-        // bridge sends N messages in a single TCP push (e.g. hello_ack +
-        // checked_replay + ap_state at handshake time, or a kill arriving
-        // right after a queued item), Select only fires once on the socket;
-        // we must walk the buffer to completion or the trailing messages
-        // wait indefinitely for the next socket event before being parsed.
-        // Also drains leftover lines on iterations where Select timed out.
+        // Drain ALL complete lines from read_buf_ each iteration.
         char line_buf[kInboundLineCap];
         std::size_t line_len = 0;
         while (popLine(line_buf, line_len)) {
@@ -498,13 +519,7 @@ void ApClient::threadMain() {
 
         // Late-arriving snapshot send: at HELLO time the gate may have been
         // closed because the player was still on the file-select screen, or
-        // because the stage's first Cappy balloon hadn't fired yet. Poll
-        // hasDispatchedSinceReset() here — the frame-thread CappyMessenger
-        // flips it on the first successful tryShow — and send the snapshot
-        // the first time both halves of the gate are true. Polling cadence
-        // is recv_timeout_ms (default 200 ms), which the user won't perceive
-        // between Cappy's first bubble dispatching and the snapshot landing
-        // on the bridge.
+        // because the stage's first Cappy balloon hadn't fired yet.
         if (snapshot_pending && socket_fd_ >= 0) {
             auto& s = ApState::instance();
             const bool save_ok = s.save_was_loaded.load(std::memory_order_acquire);
@@ -526,45 +541,41 @@ void ApClient::threadMain() {
 }
 
 bool ApClient::connectOnce() {
-    SMOAP_LOG_INFO("[conn] Socket(AF_INET, SOCK_STREAM, 0)");
-    socket_fd_ = nn::socket::Socket(kAfInet, kSockStream, 0);
-    SMOAP_LOG_INFO("[conn] Socket returned fd=%d", socket_fd_);
-    if (socket_fd_ < 0) {
-        const int err = nn::socket::GetLastErrno();
-        SMOAP_LOG_WARN("[conn] Socket() failed errno=%d", err);
+    SMOAP_LOG_INFO("[conn] socket(Ipv4, Stream, Ip)");
+    auto r = sockSocket(hk::socket::AddressFamily::Ipv4,
+                        hk::socket::Type::Stream,
+                        hk::socket::Protocol::Ip);
+    SMOAP_LOG_INFO("[conn] socket returned fd=%d errno=%d", r.ret, r.err);
+    if (r.ret < 0) {
+        SMOAP_LOG_WARN("[conn] socket() failed errno=%d", r.err);
         socket_fd_ = -1;
         return false;
     }
+    socket_fd_ = r.ret;
 
-    // Nintendo's `sockaddr` is 16 bytes with sa_family as a single byte at
-    // offset 1 (after a length-byte at offset 0) — NOT byte-equivalent to
-    // POSIX `sockaddr_in` (8 bytes, sin_family as u16 at offset 0). Passing
-    // sockaddr_in to nn::socket::Connect makes bsd read byte 1 (= 0 for our
-    // AF_INET=2 LE-encoded value) as the family, returns EINVAL.
-    sockaddr addr{};
-    addr.family = static_cast<u8>(kAfInet);
-    addr.port   = nn::socket::InetHtons(target_.port);
-    if (nn::socket::InetAton(target_.host.c_str(), &addr.address) == 0) {
-        SMOAP_LOG_WARN("[conn] InetAton failed for %s", target_.host.c_str());
-        nn::socket::Close(socket_fd_);
+    // hk::socket::SocketAddrIpv4 encapsulates Nintendo's 16-byte sockaddr
+    // layout (sa_length / sa_family / port / address). No manual workaround
+    // needed.
+    auto parsed = hk::socket::SocketAddrIpv4::parse(target_.host.c_str(), target_.port);
+    if (!parsed.hasValue()) {
+        SMOAP_LOG_WARN("[conn] SocketAddrIpv4::parse failed for %s", target_.host.c_str());
+        sockClose(socket_fd_);
         socket_fd_ = -1;
         return false;
     }
+    const hk::socket::SocketAddrIpv4 addr = parsed.getInnerValue();
     SMOAP_LOG_INFO("[conn] connecting to %s:%u", target_.host.c_str(), target_.port);
 
-    const Result rc = nn::socket::Connect(socket_fd_, &addr, sizeof(addr));
-    if (R_FAILED(rc)) {
-        const int err = nn::socket::GetLastErrno();
-        SMOAP_LOG_WARN("[conn] Connect FAILED rc=0x%x errno=%d (host=%s port=%u fd=%d)",
-                       rc, err, target_.host.c_str(), target_.port, socket_fd_);
-        nn::socket::Close(socket_fd_);
+    auto cr = sockConnect(socket_fd_, addr);
+    if (cr.ret < 0) {
+        SMOAP_LOG_WARN("[conn] connect FAILED ret=%d errno=%d (host=%s port=%u fd=%d)",
+                       cr.ret, cr.err, target_.host.c_str(), target_.port, socket_fd_);
+        sockClose(socket_fd_);
         socket_fd_ = -1;
         return false;
     }
 
-    const int keepalive = 1;
-    nn::socket::SetSockOpt(socket_fd_, kSolSocket, kSoKeepAlive,
-                           &keepalive, sizeof(keepalive));
+    sockSetKeepalive(socket_fd_);
 
     SMOAP_LOG_INFO("[conn] CONNECTED to %s:%u (fd=%d)",
                    target_.host.c_str(), target_.port, socket_fd_);
@@ -573,28 +584,13 @@ bool ApClient::connectOnce() {
 
 void ApClient::disconnect() {
     if (socket_fd_ >= 0) {
-        nn::socket::Close(socket_fd_);
+        sockClose(socket_fd_);
         socket_fd_ = -1;
     }
     read_buf_len_ = 0;
     auto& st = ApState::instance();
     st.conn.store(ConnState::Disconnected);
-    // M6 phase D: clear bridge_connected so ShineNumGetHook freezes the HUD
-    // to 0 and AddPayShineHook suppresses Orig. Any pending PaySnapshots
-    // queued before disconnect stay in the ring for the next pump; on
-    // reconnect, sendSnapshot's tail rebuilds + ships an authoritative
-    // snapshot anyway, so the bridge converges regardless.
     st.bridge_connected.store(false, std::memory_order_relaxed);
-    // Cappy "Disconnected" bubble policy. Three paths:
-    //   (a) rehello window: suppress + commit state transition. The
-    //       matching "Connected" on reconnect is suppressed by the same
-    //       window on the ap_state path.
-    //   (b) was-ready + TCP-blip path: DEFER. Arm the grace timer and
-    //       leave s_last_ap_state at "ready". The worker loop fires the
-    //       bubble + commits the transition if grace expires. If
-    //       ap_state(ready) arrives first, it clears the timer and the
-    //       was_ready=true,now_ready=true comparison fires no bubble.
-    //   (c) not previously ready: nothing to fire; just commit state.
     const bool suppress = ApState::nowMs() <
         suppress_state_bubble_until_ms_.load(std::memory_order_relaxed);
     if (std::strcmp(s_last_ap_state, "ready") == 0) {
@@ -603,10 +599,6 @@ void ApClient::disconnect() {
                            "(rehello window)");
             std::strcpy(s_last_ap_state, "disconnected");
         } else {
-            // Use CAS so a re-disconnect during an already-pending grace
-            // window doesn't push the deadline out — we want the bubble
-            // to fire on the ORIGINAL schedule even if instability causes
-            // multiple short drops in a row.
             std::int64_t expected = 0;
             const std::int64_t target = ApState::nowMs() + kDisconnectGracePeriodMs;
             if (pending_disconnect_bubble_at_ms_.compare_exchange_strong(
@@ -615,8 +607,6 @@ void ApClient::disconnect() {
                                "Archipelago' (%lldms grace for TCP recovery)",
                                static_cast<long long>(kDisconnectGracePeriodMs));
             }
-            // s_last_ap_state stays "ready" so a quick ap_state(ready)
-            // recovery hits the was_ready=true,now_ready=true silent path.
         }
     } else {
         std::strcpy(s_last_ap_state, "disconnected");
@@ -627,19 +617,11 @@ void ApClient::sendHello() {
     Hello hello;
     hello.mod_ver = SMO_AP_MOD_VERSION_STRING;
     hello.smo_ver = SMO_VERSION_STRING;
-    // hello.device_id is left empty in v1. The bridge synthesizes a
-    // disambiguator from the peer IPv4 (`sw-<last-octet>`) so the
-    // selector popup still shows distinct entries for two Switches on
-    // the same LAN. Future enhancement: wire `nn::settings::Get
-    // DeviceNickname` via HookSymbols.hpp + nn::ro::LookupSymbol so the
-    // user's Switch nickname shows up here (verify symbol with
-    // scripts/check_nso_symbols.py first — it may live in an SDK sysmod
-    // rather than main.nso).
     smoap::util::json::LineBuffer line;
     encodeHello(line, hello);
     SMOAP_LOG_INFO("[conn] sending HELLO (%zu bytes)", line.size());
-    const int sent = nn::socket::Send(socket_fd_, line.data(), line.size(), 0);
-    SMOAP_LOG_INFO("[conn] HELLO send returned %d", sent);
+    const auto r = sockSend(socket_fd_, line.data(), line.size());
+    SMOAP_LOG_INFO("[conn] HELLO send returned %d errno=%d", r.ret, r.err);
 }
 
 namespace {
@@ -647,8 +629,7 @@ namespace {
 // Per-stage shine accumulator used by sendSnapshot's enumeration callback.
 // We bucket shines by stage_name so each kingdom emits one StateChunk message
 // (instead of one chunk per shine), keeping wire chatter low and respecting
-// the 8 KiB per-line cap. Fixed buffers throughout (M6.1: worker thread can
-// never grow a std::string past SSO or push_back into a std::vector).
+// the 8 KiB per-line cap. Fixed buffers throughout.
 struct SnapshotBuilder {
     int sock_fd = -1;
     StateChunk current;
@@ -658,7 +639,7 @@ struct SnapshotBuilder {
     void flushIfNeeded(const char* stage) {
         if (current_active && std::strcmp(current.stage_name, stage) != 0) {
             encodeStateChunk(line, current);
-            nn::socket::Send(sock_fd, line.data(), line.size(), 0);
+            sockSend(sock_fd, line.data(), line.size());
             current = StateChunk{};
             current_active = false;
         }
@@ -683,7 +664,7 @@ struct SnapshotBuilder {
     void finalize() {
         if (current_active) {
             encodeStateChunk(line, current);
-            nn::socket::Send(sock_fd, line.data(), line.size(), 0);
+            sockSend(sock_fd, line.data(), line.size());
             current_active = false;
         }
     }
@@ -693,24 +674,21 @@ struct SnapshotBuilder {
 
 void ApClient::sendSnapshot() {
     auto& st = ApState::instance();
-    smoap::util::json::LineBuffer line;  // reused across all snapshot messages
+    smoap::util::json::LineBuffer line;
 
     // 1) state_begin
     {
         StateBegin b;
         b.mod_ver = SMO_AP_MOD_VERSION_STRING;
-        // M4.5 has no save-slot accessor wired up yet; M5/M6 will populate
-        // this from GameDataHolder. -1 omits the field on the wire.
         b.save_slot = -1;
         encodeStateBegin(line, b);
-        if (nn::socket::Send(socket_fd_, line.data(), line.size(), 0) < 0) {
+        if (sockSend(socket_fd_, line.data(), line.size()).ret < 0) {
             SMOAP_LOG_WARN("[snapshot] state_begin send failed; aborting");
             return;
         }
     }
 
-    // 2) per-stage chunks. M4.5 stub for enumerateOwnedShines emits nothing,
-    //    so the only wire output here is when M5/M6 lands the real impl.
+    // 2) per-stage chunks.
     SnapshotBuilder builder{};
     builder.sock_fd = socket_fd_;
     smoap::game::enumerateOwnedShines(
@@ -721,8 +699,7 @@ void ApClient::sendSnapshot() {
         &builder);
     builder.finalize();
 
-    // 3) _meta chunk: cross-stage state. Always emitted so the bridge sees
-    //    the goal flag (and so we have a "snapshot is complete" canary).
+    // 3) _meta chunk.
     {
         StateChunk meta;
         copyFixedFieldN(meta.stage_name, "_meta", 5);
@@ -741,20 +718,14 @@ void ApClient::sendSnapshot() {
         meta.include_goal_reached = true;
         meta.goal_reached = st.goal_sent;
         encodeStateChunk(line, meta);
-        nn::socket::Send(socket_fd_, line.data(), line.size(), 0);
+        sockSend(socket_fd_, line.data(), line.size());
     }
 
     // 4) state_end
     encodeStateEnd(line);
-    nn::socket::Send(socket_fd_, line.data(), line.size(), 0);
+    sockSend(socket_fd_, line.data(), line.size());
 
-    // 5) M6 phase D PayShineNum snapshot. Same save+scene gate (we got
-    //    called only because both halves were open). The bridge needs
-    //    this BEFORE it ships its first OutstandingMsg — until it sees
-    //    a snapshot, compute_outstanding returns None and the bridge
-    //    sends nothing. Build directly here instead of going through
-    //    pending_pay_snapshots: avoids a needless round-trip through
-    //    the ring on the connection's first send.
+    // 5) M6 phase D PayShineNum snapshot.
     {
         ApState::PendingPaySnapshot ps{};
         if (st.buildPaySnapshot(ps)) {
@@ -775,12 +746,8 @@ void ApClient::sendSnapshot() {
 }
 
 void ApClient::pumpOnce() {
-    // Peek-then-pop: a failed Send leaves the entry queued for the next pump
-    // cycle. Combined with the snapshot on (re)connect, this means brief
-    // disconnects don't lose outbound checks (the deque covers the gap; the
-    // snapshot covers anything beyond it).
     auto& st = ApState::instance();
-    smoap::util::json::LineBuffer line;  // reused across loop iterations
+    smoap::util::json::LineBuffer line;
     Check c;
     while (st.outbound_checks.peek(c)) {
         encodeCheck(line, c);
@@ -789,7 +756,7 @@ void ApClient::pumpOnce() {
                        c.stage_name[0] ? c.stage_name : "<empty>",
                        c.object_id[0] ? c.object_id : "<empty>",
                        static_cast<unsigned>(line.size()));
-        const int n = nn::socket::Send(socket_fd_, line.data(), line.size(), 0);
+        const int n = sockSend(socket_fd_, line.data(), line.size()).ret;
         if (n < 0) {
             SMOAP_LOG_WARN("[pump] check Send returned %d; leaving in queue for retry", n);
             return;
@@ -802,40 +769,25 @@ void ApClient::pumpOnce() {
     while (st.outbound_status.peek(e)) {
         if (e.goal) {
             encodeGoal(line);
-            if (nn::socket::Send(socket_fd_, line.data(), line.size(), 0) < 0) return;
+            if (sockSend(socket_fd_, line.data(), line.size()).ret < 0) return;
         }
         if (e.death) {
-            // The Switch doesn't have a useful wall-clock; the bridge stamps
-            // time when it converts the death to an AP Bounce. Send ts_ms=0
-            // and let the bridge fill it in.
             Death d{.ts_ms = e.ts_ms};
             encodeDeath(line, d);
-            if (nn::socket::Send(socket_fd_, line.data(), line.size(), 0) < 0) return;
-            // Clear the debounce flag so the next death can be reported.
+            if (sockSend(socket_fd_, line.data(), line.size()).ret < 0) return;
             st.death_pending_send.store(false, std::memory_order_release);
         }
         st.outbound_status.popDiscard();
     }
 
-    // Drain outbound_logs: every smoap::util::log() call above the configured
-    // threshold landed here from any thread (frame, worker, hooks). Best-
-    // effort delivery — if a Send fails we leave the entry queued for the
-    // next pump cycle, identical to outbound_checks. We do NOT log around
-    // the send loop itself (would re-enter into the same ring; the re-entry
-    // guard in Log.cpp covers it but logging here adds zero diagnostic
-    // value). Drains run BEFORE the deposit loop so a log-storm doesn't
-    // starve deposits if the consumer side is slow.
+    // Drain outbound_logs.
     if (const std::uint32_t drops = st.log_drops.exchange(0, std::memory_order_relaxed); drops > 0) {
-        // Surface the drop count as a one-shot WARN line so the gap is
-        // visible in the tab. Built directly (not via SMOAP_LOG_*) so we
-        // don't pump the synthesized line back into our own ring.
         Log marker;
         copyFixedField(marker.level, "warn");
         std::snprintf(marker.msg, kLogMsgCap,
                       "[log_forward] %u log line(s) dropped (ring full)", drops);
         encodeLog(line, marker);
-        if (nn::socket::Send(socket_fd_, line.data(), line.size(), 0) < 0) {
-            // Re-arm so the next pump retries. Fold back into the counter.
+        if (sockSend(socket_fd_, line.data(), line.size()).ret < 0) {
             st.log_drops.fetch_add(drops, std::memory_order_relaxed);
             return;
         }
@@ -843,17 +795,11 @@ void ApClient::pumpOnce() {
     Log lg;
     while (st.outbound_logs.peek(lg)) {
         encodeLog(line, lg);
-        if (nn::socket::Send(socket_fd_, line.data(), line.size(), 0) < 0) return;
+        if (sockSend(socket_fd_, line.data(), line.size()).ret < 0) return;
         st.outbound_logs.popDiscard();
     }
 
-    // M6 phase D — drain pending_pay_snapshots: ship every PayShineNum
-    // snapshot the frame thread (AddPayShineHook tail) has queued. Each
-    // snapshot is complete and idempotent; a failed send just leaves the
-    // entry queued for the next pump (ring is sized 4, never bigger than
-    // a few seconds of toss cadence). No ack tracking — the bridge's
-    // OutstandingMsg response is implicit acknowledgement, and the next
-    // snapshot always supersedes whatever the bridge currently believes.
+    // M6 phase D — drain pending_pay_snapshots.
     ApState::PendingPaySnapshot ps;
     while (st.pending_pay_snapshots.pop(ps)) {
         const int n = sendPaySnapshotMessage(socket_fd_, line, ps);
@@ -867,59 +813,39 @@ void ApClient::pumpOnce() {
 }
 
 bool ApClient::recvIntoBuf() {
-    // Cap incoming read at the headroom remaining in read_buf_. If we already
-    // hold a partial unterminated line that fills the buffer, the next call
-    // to popLine will see the overflow and reset.
     const std::size_t avail = kInboundLineCap - read_buf_len_;
     if (avail == 0) {
-        // No headroom — popLine's overflow guard will reset us next call.
-        // Recv into a small throwaway buffer so we don't stall the socket.
         char drain[256];
-        nn::socket::Recv(socket_fd_, drain, sizeof(drain), 0);
+        sockRecv(socket_fd_, drain, sizeof(drain));
         return true;
     }
     const std::size_t cap = avail < 1024 ? avail : 1024;
-    const int n = nn::socket::Recv(socket_fd_, read_buf_ + read_buf_len_,
-                                   cap, 0);
-    if (n <= 0) {
-        // Distinguish clean EOF (n==0, peer sent FIN) from socket-level
-        // failures (n<0, errno explains why). Common values on this stack:
-        //   ECONNRESET (104): peer sent RST — SMOClient crashed, or the
-        //     kernel surfaced a stale half-open connection.
-        //   ENETUNREACH (101): IP route gone — Switch Wi-Fi blip.
-        //   ETIMEDOUT (110): TCP keepalive or retransmit timer expired.
-        // We log the raw values rather than translating: errno mappings
-        // are libc-version-dependent and the log goes to bridge analysis
-        // anyway, where the mapping is stable.
-        const int err = (n < 0) ? nn::socket::GetLastErrno() : 0;
-        SMOAP_LOG_WARN("[recv] Recv -> %d errno=%d (%s)",
-                       n, err,
-                       n == 0 ? "clean EOF from peer"
-                              : "socket error");
+    const auto r = sockRecv(socket_fd_, read_buf_ + read_buf_len_, cap);
+    if (r.ret <= 0) {
+        SMOAP_LOG_WARN("[recv] recv -> %d errno=%d (%s)",
+                       r.ret, r.err,
+                       r.ret == 0 ? "clean EOF from peer"
+                                  : "socket error");
         return false;
     }
-    read_buf_len_ += static_cast<std::size_t>(n);
+    read_buf_len_ += static_cast<std::size_t>(r.ret);
     return true;
 }
 
 bool ApClient::popLine(char* out, std::size_t& out_len) {
-    // Find first '\n' in [0, read_buf_len_).
     std::size_t nl = read_buf_len_;
     for (std::size_t i = 0; i < read_buf_len_; ++i) {
         if (read_buf_[i] == '\n') { nl = i; break; }
     }
     if (nl == read_buf_len_) {
-        // Cap runaway lines so a malformed peer can't grow the buffer forever.
         if (read_buf_len_ >= kInboundLineCap) {
             SMOAP_LOG_WARN("read_buf overflow without newline; resyncing");
             read_buf_len_ = 0;
         }
         return false;
     }
-    // Copy line bytes to caller. Bounded by kInboundLineCap on both sides.
     for (std::size_t i = 0; i < nl; ++i) out[i] = read_buf_[i];
     out_len = nl;
-    // Shift any remaining bytes left over the consumed line + '\n'.
     const std::size_t consumed = nl + 1;
     const std::size_t remaining = read_buf_len_ - consumed;
     for (std::size_t i = 0; i < remaining; ++i) {
@@ -930,34 +856,21 @@ bool ApClient::popLine(char* out, std::size_t& out_len) {
 }
 
 void ApClient::handleLine(char* line, std::size_t line_len) {
-    // Reader decodes escapes in place — caller's buffer is already mutable.
-    //
-    // DecodedMsg holds large fixed-size buffers (notably CheckedReplay::ids,
-    // 128 × sizeof(ItemRef) ≈ 65 KiB). Stack-allocating it from handleLine
-    // would blow the worker thread's 64 KiB stack. As a function-local
-    // static it lives in BSS — single instance reused across calls. Safe
-    // because handleLine is only ever called from the worker thread, and we
-    // dispatch on m.t so stale variant fields from a previous call are
-    // never read (each `decode` writes whichever variant matches its `t`).
+    // DecodedMsg holds large fixed-size buffers; static so it lives in BSS.
+    // handleLine is only ever called from the worker thread, and we dispatch
+    // on m.t so stale variant fields from a previous call are never read.
     static DecodedMsg m;
     if (!decode(line, line_len, m)) {
         SMOAP_LOG_WARN("malformed message from bridge: %.*s",
                        static_cast<int>(line_len), line);
         return;
     }
-    // Tiny strcmp wrapper — m.t is char[] now, not std::string.
     auto eq = [](const char* a, const char* b) {
         while (*a && *b && *a == *b) { ++a; ++b; }
         return *a == '\0' && *b == '\0';
     };
     if (eq(m.t, "hello_ack")) {
         auto& st = ApState::instance();
-        // Version policing: the bridge rejects with ok=false + err text when
-        // SMOClient and Switch mod versions don't match. Log loudly with
-        // both versions so the user can see the mismatch in lm-log (real
-        // Switch) or stdout (Ryujinx) without needing the Kivy UI handy.
-        // Don't transition to Ready; the bridge will close the socket
-        // momentarily and our recv loop will surface EOF.
         if (!m.hello_ack.ok) {
             SMOAP_LOG_ERROR("hello_ack REJECTED: ok=false bridge=%s mod=%s err=%s",
                             m.hello_ack.client_ver[0] ? m.hello_ack.client_ver : "(unknown)",
@@ -965,18 +878,10 @@ void ApClient::handleLine(char* line, std::size_t line_len) {
                             m.hello_ack.err);
             return;
         }
-        // Publish local_slot + deathlink_enabled BEFORE the conn.store(Ready)
-        // release. The frame thread observes conn == Ready first (acquire),
-        // then reads local_slot — no separate fence needed. Toast filter
-        // compares item.from against local_slot to skip self-grants.
-        // M6.1: HelloAck::slot is now a fixed char[] (not std::string) —
-        // no .c_str() needed. snprintf still safest for length-bounded copy.
         std::snprintf(st.local_slot, sizeof(st.local_slot),
                       "%s", m.hello_ack.slot);
         st.deathlink_enabled.store(m.hello_ack.deathlink_enabled, std::memory_order_relaxed);
         st.conn.store(ConnState::Ready, std::memory_order_release);
-        // M6 phase D: bridge_connected gates AddPayShineHook + ShineNumGetHook.
-        // Set AFTER conn.store so the same release fence orders both.
         st.bridge_connected.store(true, std::memory_order_release);
         SMOAP_LOG_INFO("hello_ack: ok=%d seed=%s slot=%s deathlink_enabled=%d client_ver=%s mod_ver=%s",
                        m.hello_ack.ok ? 1 : 0,
@@ -991,9 +896,6 @@ void ApClient::handleLine(char* line, std::size_t line_len) {
             Check synth{};
             synth.kind = ref.kind;
             copyCheckField(synth.kingdom, ref.kingdom);
-            // ref.shine_id is char[kMediumFieldCap=128]; copyCheckField truncates
-            // to kCheckFieldCap=64. Shine ids historically fit in 64 (see Check's
-            // existing kCheckFieldCap shine_id field) so this is consistent.
             copyCheckField(synth.shine_id, ref.shine_id);
             copyCheckField(synth.cap, ref.cap);
             ApState::instance().locations_checked.tryInsert(ApState::hashCheck(synth));
@@ -1010,28 +912,12 @@ void ApClient::handleLine(char* line, std::size_t line_len) {
     } else if (eq(m.t, "item")) {
         ApState::instance().inbound.push(m.item);
     } else if (eq(m.t, "ap_state")) {
-        // Cappy bubble on ready <-> disconnected transitions. Intermediate
-        // states (waiting_for_switch / connecting / authed) stay silent so
-        // reconnect flaps don't spam the queue. The s_last_ap_state tracker
-        // lives at file scope so the bridge-TCP-disconnect path (disconnect())
-        // can also publish the bubble + reset the tracker — covers the case
-        // where SMOClient dies without sending a graceful ap_state.
         const bool was_ready = (std::strcmp(s_last_ap_state, "ready") == 0);
         const bool now_ready = (std::strcmp(m.ap_state.conn, "ready") == 0);
         const bool now_disconnected =
             (std::strcmp(m.ap_state.conn, "disconnected") == 0);
-        // Honor the rehello suppression window — the matching disconnect()
-        // path skips its bubble within the same window, so a save-load round
-        // trip stays silent on both ends. After the window expires, normal
-        // transition bubbles resume (covers SMOClient genuinely dying).
         const bool bubble_suppressed = ApState::nowMs() <
             suppress_state_bubble_until_ms_.load(std::memory_order_relaxed);
-        // Always cancel any deferred TCP-blip bubble — the bridge is alive
-        // and authoritatively reporting AP state, so either:
-        //   - now=ready: silent recovery, bubble was unnecessary
-        //   - now=disconnected: the was_ready/now_disconnected branch below
-        //     fires the bubble now via the graceful path; the deferred timer
-        //     would double-fire if left armed.
         if (pending_disconnect_bubble_at_ms_.exchange(
                 0, std::memory_order_relaxed) > 0) {
             SMOAP_LOG_INFO("[bubble] cancelling deferred 'Disconnected' "
@@ -1043,14 +929,14 @@ void ApClient::handleLine(char* line, std::size_t line_len) {
                 SMOAP_LOG_INFO("[bubble] suppressing 'Connected to Archipelago' "
                                "(rehello window)");
             } else {
-                enqueueSystemBubble("Connected to Archipelago");
+                smoap::ap::enqueueSystemBubble("Connected to Archipelago");
             }
         } else if (was_ready && now_disconnected) {
             if (bubble_suppressed) {
                 SMOAP_LOG_INFO("[bubble] suppressing 'Disconnected from Archipelago' "
                                "(rehello window, ap_state path)");
             } else {
-                enqueueSystemBubble("Disconnected from Archipelago");
+                smoap::ap::enqueueSystemBubble("Disconnected from Archipelago");
             }
         }
         std::size_t i = 0;
@@ -1059,12 +945,6 @@ void ApClient::handleLine(char* line, std::size_t line_len) {
             ++i;
         }
         s_last_ap_state[i] = '\0';
-        // Save-load deferred announcement — fast path. If the post-save-load
-        // wait window is still armed and we just learned the AP is ready, fire
-        // "Connected to Archipelago" now instead of waiting for the worker
-        // loop's next iteration (saves up to recv_timeout_ms of latency, and
-        // beats the deadline-expiry path's "Not connected" fallback). The
-        // worker-loop branch above handles the no-ap_state-arrives case.
         if (now_ready) {
             const auto deadline = save_load_announce_deadline_ms_.load(
                 std::memory_order_relaxed);
@@ -1072,7 +952,7 @@ void ApClient::handleLine(char* line, std::size_t line_len) {
                 SMOAP_LOG_INFO("[bubble] firing deferred save-load status "
                                "'Connected to Archipelago' (ap_state=ready "
                                "arrived inside wait window)");
-                enqueueSystemBubble("Connected to Archipelago");
+                smoap::ap::enqueueSystemBubble("Connected to Archipelago");
                 save_load_announce_deadline_ms_.store(0, std::memory_order_relaxed);
             }
         }
@@ -1083,42 +963,24 @@ void ApClient::handleLine(char* line, std::size_t line_len) {
     } else if (eq(m.t, "err")) {
         SMOAP_LOG_WARN("bridge err code=%s ctx=%s", m.err.code, m.err.ctx);
     } else if (eq(m.t, "kill")) {
-        // Inbound DeathLink. Collapse to a single pending-bit; multiple
-        // bounces between frames overwrite each other (producer-side debounce).
-        // The frame thread's maybeApplyInboundKill handles the
-        // "Mario already dying" / "too soon since last kill" / "deathlink
-        // disabled in hello_ack" / "no cached PlayerHitPointData yet" gates.
         SMOAP_LOG_INFO("[deathlink in] queued source=%s cause=%s",
                        m.kill.source, m.kill.cause);
         ApState::instance().inbound_kill_pending.store(true, std::memory_order_release);
     } else if (eq(m.t, "moon_label")) {
-        // M6 phase A.5 — Channel A. Publish the label for the upcoming
-        // cutscene to consume. Deadline = now + valid_for_ms; the frame
-        // thread drops anything past deadline.
         const auto now = ApState::nowMs();
         const auto deadline = (m.moon_label.valid_for_ms > 0)
             ? now + m.moon_label.valid_for_ms
-            : 0;  // 0 = never expire (use sparingly; bridge default is 4000)
+            : 0;
         SMOAP_LOG_INFO("[moon_label] seq=%d text='%s' valid_for=%dms",
                        m.moon_label.seq,
-                       m.moon_label.text,  // char[] decays to const char*
+                       m.moon_label.text,
                        m.moon_label.valid_for_ms);
         ApState::instance().setPendingMoonLabel(
             m.moon_label.text, m.moon_label.seq, deadline);
     } else if (eq(m.t, "cappy")) {
-        // Capturesanity check announcement. Bridge composes the verbatim
-        // bubble text ("Got Goomba!" / "Sent Frog -> Player2") and we
-        // route it straight into the speech-bubble queue. Empty text is
-        // a no-op (enqueueSystem guards).
         SMOAP_LOG_INFO("[cappy] system bubble text='%s'", m.cappy.text);
-        enqueueSystemBubble(m.cappy.text);
+        smoap::ap::enqueueSystemBubble(m.cappy.text);
     } else if (eq(m.t, "shine_scouts")) {
-        // AP-classification moon color. Bridge sends one or more chunks of
-        // (shine_uid -> palette) after AP LocationInfo lands, and a full
-        // replay on every HELLO. Push each into the SPSC ring; the frame
-        // thread folds them into ApState::shine_palette in applyOnFrame.
-        // Ring is sized 4096 — well above the seed's ~565 moons — so a full
-        // replay in one HELLO won't backpressure.
         auto& ring = ApState::instance().inbound_scouts;
         std::size_t pushed = 0, dropped = 0;
         for (std::size_t i = 0; i < m.shine_scouts.entry_count; ++i) {
@@ -1136,10 +998,6 @@ void ApClient::handleLine(char* line, std::size_t line_len) {
         SMOAP_LOG_INFO("[shine-color] enqueued %zu palette entries (dropped %zu)",
                        pushed, dropped);
     } else if (eq(m.t, "outstanding")) {
-        // M6 phase D — bridge-authoritative per-kingdom balance. Overwrite
-        // ap_moons_kingdom[bit] for each entry the bridge sent (kingdoms
-        // not present in the message are LEFT UNTOUCHED, allowing partial
-        // updates if a future bridge optimization sends only deltas).
         auto& st = ApState::instance();
         std::size_t applied = 0;
         for (std::size_t i = 0; i < m.outstanding.entry_count; ++i) {

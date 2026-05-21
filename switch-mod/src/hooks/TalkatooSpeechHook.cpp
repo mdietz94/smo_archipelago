@@ -33,15 +33,13 @@
 // of SMO 1.0.0 main.nso pinned `Poetter::exeWait` to the function
 // containing SeededTalkatoo's `TableHookSym` BL offset 0x3afb08).
 
-#include "lib.hpp"
-
-#include "lib/nx/nx.h"
-#include "nn/ro.h"
+#include "hk/hook/Trampoline.h"
+#include "hk/ro/RoUtil.h"
+#include "hk/types.h"
 
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
 
 #include "../ap/ApProtocol.hpp"
@@ -50,15 +48,13 @@
 #include "../game/KingdomUnlock.hpp"
 #include "../util/Log.hpp"
 #include "HookSymbols.hpp"
-#include "SoftInstall.hpp"
 
 namespace smoap::hooks {
 
 namespace {
 
 // xorshift32 — tiny, no allocations, OK for "shuffle three slots from N".
-// Kept here so the existing pickThreeUncollectedFromKingdom helper remains
-// drop-in compatible with the tests (M6.1 allocator-safe RNG without libc).
+// Kept for the >3-pool Fisher-Yates path inside pickThreeUncollectedFromKingdom.
 std::uint32_t cheapRand(std::uint32_t& state) {
     state ^= state << 13;
     state ^= state >> 17;
@@ -68,7 +64,7 @@ std::uint32_t cheapRand(std::uint32_t& state) {
 }
 
 // Vtable address of the Poetter (Talkatoo) class. Read once at install time
-// via nn::ro::LookupSymbol("_ZTV7Poetter"). The symbol address points to the
+// via hk::ro::lookupSymbol("_ZTV7Poetter"). The symbol address points to the
 // start of the vtable; the vptr value SMO stores in each Poetter object is
 // `vtable_start + 0x18` per the Itanium C++ ABI (observed at runtime — 2026-
 // 05-20 user log: vptr=0xa265a70, vtable=0xa265a58, delta=0x18). The 0x18 is
@@ -81,10 +77,6 @@ std::uint32_t cheapRand(std::uint32_t& state) {
 // point inside the primary vtable's 0x1f8 bytes during normal operation, OR
 // inside a construction vtable during the brief construction window — both
 // are Poetter-owned regions, so the wider window has no false-positive risk.
-// A 2026-05-21 tightening to 0x200 was reverted: the moon-name corruption
-// it was attributed to turned out to be downstream of MoonGetHook blocking
-// `setGotShine` and leaving `mLatestGetShineInfo` unset, fixed properly by
-// the "Blocked by Talkatoo!" pending-label fix in MoonGetHook.cpp.
 //
 // Hooks under Talkatoo% mode are no-ops if g_poetter_vtable_addr stays zero
 // (symbol unresolved) so a future SMO version that renames the vtable
@@ -98,10 +90,6 @@ constexpr std::uintptr_t kPoetterVTableSpan = 0x400;
 // holds in normal play (one Poetter per scene); the 4-slot rotation makes it
 // safe even if two speech bubbles overlap, the picker re-rolls within the
 // same frame, or our hook fires in re-entrant edge cases.
-//
-// Allocator-safety per M6.1: zero-init BSS arrays, no std::string growth.
-// kCheckFieldCap (64) matches the apworld's display-name cap so any AP-pool
-// moon name fits. `+ 1` for the null terminator.
 constexpr std::size_t kUtfBufCount = 4;
 char16_t g_utf_buffers[kUtfBufCount][smoap::ap::kCheckFieldCap + 1] = {};
 std::atomic<std::size_t> g_utf_buf_cursor{0};
@@ -136,11 +124,6 @@ std::atomic<bool> g_logged_first_poetter{false};
 // the bring-up env flag is asserted), Talkatoo speaks these instead of any
 // vanilla moon name. They're intentionally non-vanilla so a single
 // substitution is unambiguously visible in the speech bubble.
-//
-// Once the AP-pool wire path is verified working, this hardcoded fallback
-// remains useful as a safety-net display ("Talkatoo% mode is ON but I have
-// no moons to show you right now") rather than silently falling back to
-// vanilla.
 constexpr const char* kHardcodedProbe[3] = {
     "BK Moon #1",
     "BK Moon #2",
@@ -150,12 +133,7 @@ constexpr const char* kHardcodedProbe[3] = {
 // Per-kingdom Talkatoo visit counter. The substitute hook in the AP-pool
 // path advances slot[bit] on each visit and uses (counter % 3) for
 // pick_idx, producing a deterministic 0->1->2->0 cycle through the
-// kingdom's window. Per-kingdom (not global) so visiting Cascade
-// Talkatoo doesn't perturb Sand Talkatoo's cycle.
-//
-// Indexed by kingdom_bit (0..16). kTalkatooKingdomCount mirrors
-// ApState's array dimension; static_assert at install time keeps them
-// in sync if a future kingdom is added.
+// kingdom's window.
 std::atomic<std::size_t> g_talkatoo_visit_counters[
     smoap::ap::ApState::kTalkatooKingdomCount] = {};
 
@@ -256,21 +234,22 @@ bool actorIsPoetter(const void* actor) {
 }
 
 // Forward-declared opaque types — we never deref these, we just pass `actor`
-// through to Orig and read its vptr for the Poetter check. Pulling in the
+// through to orig() and read its vptr for the Poetter check. Pulling in the
 // full al::LiveActor / al::IUseMessageSystem headers here would drag in the
-// LunaKit world; the trampoline signature matches the symbol's mangled
-// shape (PKN2al9LiveActorE, PKN2al17IUseMessageSystemE) so we declare them
-// at the right address-space level for ABI compatibility.
+// OdysseyHeaders mostly for nothing; the trampoline signature matches the
+// symbol's mangled shape (PKN2al9LiveActorE, PKN2al17IUseMessageSystemE) so
+// we declare them at the right address-space level for ABI compatibility.
 struct PoetterOpaqueLiveActor;
 struct PoetterOpaqueMessageSystem;
 
-HOOK_DEFINE_TRAMPOLINE(TryFindShineMessageHook) {
-    static const char16_t* Callback(const PoetterOpaqueLiveActor* actor,
-                                    const PoetterOpaqueMessageSystem* sys,
-                                    int world_id,
-                                    int index)
-    {
-        const char16_t* vanilla = Orig(actor, sys, world_id, index);
+HkTrampoline<const char16_t*,
+             const PoetterOpaqueLiveActor*,
+             const PoetterOpaqueMessageSystem*,
+             int, int> tryFindShineMessageHook =
+    hk::hook::trampoline([](const PoetterOpaqueLiveActor* actor,
+                            const PoetterOpaqueMessageSystem* sys,
+                            int world_id, int index) -> const char16_t* {
+        const char16_t* vanilla = tryFindShineMessageHook.orig(actor, sys, world_id, index);
 
         // Probe 1: confirm the trampoline is wired at all. Logs on the first
         // call only — non-Talkatoo callers (cutscene cards, pause menu) all
@@ -296,11 +275,7 @@ HOOK_DEFINE_TRAMPOLINE(TryFindShineMessageHook) {
             return vanilla;
         }
 
-        // Probe 2: first time we see a Poetter caller. If the FIRST CALL log
-        // fires (proving the trampoline runs) but this one never does, the
-        // vtable filter is rejecting Talkatoo — almost certainly because
-        // Itanium-ABI sub-table offsets put the vptr outside our 0x400 range,
-        // or because nn::ro shifts the vtable load address at runtime.
+        // Probe 2: first time we see a Poetter caller.
         expected = false;
         if (g_logged_first_poetter.compare_exchange_strong(
                 expected, true, std::memory_order_relaxed)) {
@@ -314,13 +289,8 @@ HOOK_DEFINE_TRAMPOLINE(TryFindShineMessageHook) {
                             world_id, index);
         }
 
-        // Gate substitution on talkatoo_mode_on. Phase 4 originally ran
-        // the substitute on every Poetter call as a bring-up aid (the
-        // bridge wire path had been broken on the first end-to-end test,
-        // so probe-mode was kept unconditional to prove the SMO-side hook
-        // worked in isolation). That was meant to be reverted post-bring-
-        // up and got missed; without this gate, non-Talkatoo% players
-        // see "BK Moon #N" instead of vanilla Talkatoo speech.
+        // Gate substitution on talkatoo_mode_on. Without this gate, non-
+        // Talkatoo% players see "BK Moon #N" instead of vanilla Talkatoo speech.
         const bool talkatoo_mode_on =
             smoap::ap::ApState::instance().talkatoo_mode.load(
                 std::memory_order_acquire);
@@ -342,14 +312,13 @@ HOOK_DEFINE_TRAMPOLINE(TryFindShineMessageHook) {
             n > 0;
 
         // Hardcoded probe fallback. Two purposes:
-        //   1. Bring-up check — if the AP-pool wire path is broken (bridge
-        //      doesn't ship talkatoo_pool messages, kingdom bit lookup wrong,
-        //      seqlock retries timing out), substitution still produces a
-        //      visibly distinctive bubble so we know the SMO-side hook works.
+        //   1. Bring-up check — if the AP-pool wire path is broken,
+        //      substitution still produces a visibly distinctive bubble so
+        //      we know the SMO-side hook works.
         //   2. Graceful fallback — when the player hasn't received the pool
-        //      for this kingdom yet (e.g. opens Talkatoo before bridge HELLO
-        //      finishes), we'd rather show "AP TEST MOON" than vanilla names
-        //      that the player can't actually find under Talkatoo% rules.
+        //      for this kingdom yet, we'd rather show "BK Moon #N" than
+        //      vanilla names that the player can't actually find under
+        //      Talkatoo% rules.
         const char* chosen_ascii;
         std::size_t pool_size;
         std::size_t pick_idx;
@@ -357,20 +326,13 @@ HOOK_DEFINE_TRAMPOLINE(TryFindShineMessageHook) {
         if (have_ap_pool) {
             const std::size_t real_n = n;
             // Pad picks[] with probe strings if the AP pool returned <3
-            // real entries (end-of-order in a kingdom with shorter
-            // remaining window, or a kingdom whose pool genuinely has
-            // fewer than 3 ordered moons). Keeps Talkatoo's rotation at
-            // a consistent 3 slots so the player always sees a stable
-            // A/B/C cycle — even if some of those are placeholders.
+            // real entries — keeps Talkatoo's rotation at a consistent 3
+            // slots so the player always sees a stable A/B/C cycle.
             for (std::size_t k = real_n; k < 3; ++k) {
                 std::memcpy(picks[k], kHardcodedProbe[k],
                             std::strlen(kHardcodedProbe[k]) + 1);
             }
-            // Per-kingdom counter for strict 0/1/2 cycling. `index` from
-            // rs::calcShineIndexTableNameAvailable varies per visit but
-            // doesn't monotonically cycle, so `index % n` can land on
-            // the same slot twice in a row before moving on — the
-            // counter eliminates that.
+            // Per-kingdom counter for strict 0/1/2 cycling.
             auto& counter = g_talkatoo_visit_counters[bit];
             pick_idx = counter.fetch_add(1, std::memory_order_relaxed) % 3;
             pool_size = 3;
@@ -378,11 +340,7 @@ HOOK_DEFINE_TRAMPOLINE(TryFindShineMessageHook) {
             chose_padding = (pick_idx >= real_n);
         } else {
             // Probe fallback. Cycle deterministically through #1/#2/#3
-            // across consecutive Poetter visits via an atomic counter —
-            // `index` from rs::calcShineIndexTableNameAvailable does vary
-            // per visit in vanilla, but the counter is bulletproof against
-            // RNG quirks (e.g. early-game seeds where Talkatoo's table
-            // state reproduces the same shine_index on consecutive picks).
+            // across consecutive Poetter visits via an atomic counter.
             static std::atomic<std::size_t> probe_cursor{0};
             pick_idx = probe_cursor.fetch_add(1, std::memory_order_relaxed) % 3;
             pool_size = 3;
@@ -392,11 +350,8 @@ HOOK_DEFINE_TRAMPOLINE(TryFindShineMessageHook) {
 
         // Phase 4: publish the named moon to ApState. Block path in
         // MoonGetHook consults isMoonNamed before letting setGotShine run.
-        // Skipped for the PROBE fallback (kHardcodedProbe entries don't have
-        // shine_uids — they exist only to prove the hook fires) and for
-        // the AP-path's padded probe slots (when the cursor window had <3
-        // real entries we fill from kHardcodedProbe; chose_padding flags
-        // a pick that landed on one of those padding slots).
+        // Skipped for the PROBE fallback and for the AP-path's padded probe
+        // slots (chose_padding flags a pick that landed on one of those).
         if (have_ap_pool && !chose_padding) {
             const int shine_uid =
                 smoap::game::shineUidByDisplayName(chosen_ascii);
@@ -410,13 +365,7 @@ HOOK_DEFINE_TRAMPOLINE(TryFindShineMessageHook) {
             }
         }
 
-        // Log every substitute call — Talkatoo fires the hook once per visit
-        // (one tryFindShineMessage call per Poetter::exeWait composing-speech
-        // path), so the log rate is bounded by player input. Three visits =
-        // three log lines; revisiting the same kingdom gets a fresh pick each
-        // time (vanilla shine_index varies with the Poetter actor's counter
-        // at offset 0x148). Suppress the one-shot gate that masked picks 2-3
-        // during the initial bring-up.
+        // Log every substitute call — Talkatoo fires the hook once per visit.
         SMOAP_LOG_INFO("[talkatoo] substituting: world_id=%d kingdom_bit=%u "
                        "shine_index=%d mode=%d -> %s pick %u/%zu '%s'",
                        world_id, static_cast<unsigned>(bit), index,
@@ -425,8 +374,7 @@ HOOK_DEFINE_TRAMPOLINE(TryFindShineMessageHook) {
                        static_cast<unsigned int>(pick_idx),
                        pool_size, chosen_ascii);
         return substitute;
-    }
-};
+    });
 
 }  // namespace
 
@@ -436,21 +384,21 @@ void installTalkatooSpeechHook() {
     // Orig because actorIsPoetter() returns false). That keeps the module
     // running on a hypothetical future SMO patch that renames the vtable —
     // vanilla speech survives, only Talkatoo% silently disables.
-    std::uintptr_t vt_addr = 0;
-    const Result vt_rc = nn::ro::LookupSymbol(&vt_addr, smoap::sym::kPoetterVTable);
-    if (R_FAILED(vt_rc) || vt_addr == 0) {
-        SMOAP_LOG_ERROR("[talkatoo] LookupSymbol FAILED rc=0x%x sym=%s — "
+    const ptr vt_addr = hk::ro::lookupSymbol(smoap::sym::kPoetterVTable);
+    if (vt_addr == 0) {
+        SMOAP_LOG_ERROR("[talkatoo] lookupSymbol FAILED sym=%s — "
                         "Talkatoo%% mode will be inert (vanilla speech)",
-                        vt_rc, smoap::sym::kPoetterVTable);
+                        smoap::sym::kPoetterVTable);
     } else {
-        SMOAP_LOG_INFO("[talkatoo] Poetter vtable @ 0x%lx", vt_addr);
-        g_poetter_vtable_addr = vt_addr;
+        SMOAP_LOG_INFO("[talkatoo] Poetter vtable @ 0x%lx",
+                       static_cast<unsigned long>(vt_addr));
+        g_poetter_vtable_addr = static_cast<std::uintptr_t>(vt_addr);
     }
 
     SMOAP_LOG_INFO("installing TryFindShineMessageHook -> %s",
                    smoap::sym::kGameDataFunctionTryFindShineMessage);
-    softInstallAtSymbol<TryFindShineMessageHook>(
-        smoap::sym::kGameDataFunctionTryFindShineMessage);
+    tryFindShineMessageHook.installAtSym<
+        "_ZN16GameDataFunction19tryFindShineMessageEPKN2al9LiveActorEPKNS0_17IUseMessageSystemEii">();
 }
 
 }  // namespace smoap::hooks

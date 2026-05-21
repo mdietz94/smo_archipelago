@@ -3,8 +3,8 @@
 #include <array>
 #include <cstring>
 
-#include "lib/nx/nx.h"          // Result, R_FAILED
-#include "nn/ro.h"              // nn::ro::LookupSymbol
+#include <hk/ro/RoUtil.h>
+
 #include "../ap/ApState.hpp"
 #include "../hooks/HookSymbols.hpp"
 #include "../util/Log.hpp"
@@ -33,73 +33,43 @@ const char* kingdomForBit(std::uint8_t bit) {
 }
 
 void installDepositKingdomLookupSymbol() {
-    uintptr_t addr = 0;
-    const Result rc = nn::ro::LookupSymbol(&addr,
+    const ptr addr = hk::ro::lookupSymbol(
         smoap::sym::kGameDataFunctionGetCurrentWorldIdNoDevelop);
-    if (R_FAILED(rc)) {
-        SMOAP_LOG_ERROR("getCurrentWorldIdNoDevelop lookup FAILED rc=0x%x — "
-                        "AddPayShineHook will suppress all snapshots", rc);
+    if (addr == 0) {
+        SMOAP_LOG_ERROR("getCurrentWorldIdNoDevelop lookup FAILED — "
+                        "AddPayShineHook will suppress all snapshots");
         smoap::ap::ApState::instance().get_current_world_id_fn = nullptr;
         return;
     }
     smoap::ap::ApState::instance().get_current_world_id_fn = reinterpret_cast<void*>(addr);
-    SMOAP_LOG_INFO("getCurrentWorldIdNoDevelop resolved @ 0x%lx", addr);
+    SMOAP_LOG_INFO("getCurrentWorldIdNoDevelop resolved @ 0x%lx",
+                   static_cast<unsigned long>(addr));
 }
 
 void installPayShineSnapshotSymbol() {
-    uintptr_t addr = 0;
-    const Result rc = nn::ro::LookupSymbol(&addr,
+    const ptr addr = hk::ro::lookupSymbol(
         smoap::sym::kGameDataFunctionGetPayShineNumByWorld);
-    if (R_FAILED(rc)) {
-        SMOAP_LOG_ERROR("getPayShineNum lookup FAILED rc=0x%x — "
+    if (addr == 0) {
+        SMOAP_LOG_ERROR("getPayShineNum lookup FAILED — "
                         "ApState::buildPaySnapshot will return false and the "
                         "bridge will never derive outstanding (no AP credit "
-                        "ever debited; deposit-then-crash protection inert)", rc);
+                        "ever debited; deposit-then-crash protection inert)");
         smoap::ap::ApState::instance().get_pay_shine_num_fn = nullptr;
         return;
     }
     smoap::ap::ApState::instance().get_pay_shine_num_fn = reinterpret_cast<void*>(addr);
-    SMOAP_LOG_INFO("getPayShineNum resolved @ 0x%lx", addr);
+    SMOAP_LOG_INFO("getPayShineNum resolved @ 0x%lx",
+                   static_cast<unsigned long>(addr));
 }
 
 std::uint8_t kingdomBitForWorldId(int world_id) {
     // 0..16 maps mostly 1:1 to kKingdoms[], with the ONE Sea/Snow swap
-    // documented in KingdomUnlock.hpp. Encoded as a constexpr table for
-    // trivial diffability.
-    //
-    // History: an earlier version of this table also swapped Boss/Sky on the
-    // mistaken assumption that "Boss" was Bowser's Kingdom and "Sky" was
-    // Ruined. Per OdysseyDecomp `getWorldIndexBoss()=11` corresponds to the
-    // home stage whose develop name is "Attack" (AttackWorldHomeStage),
-    // which contains the Ruined-Kingdom shine list (Lord of Lightning, etc.).
-    // `getWorldIndexSky()=12` corresponds to SkyWorldHomeStage, which
-    // contains the Bowser's-Kingdom shine list (Bowser's Castle Timer
-    // Challenge, etc.). Since our kKingdoms[] already orders "Ruined"
-    // before "Bowser" (bits 11 and 12), the SMO order matches the apworld
-    // order here and no swap is needed.
-    //
-    // Symptom of the old bug: the in-game per-kingdom HUD (M6 phase D's
-    // ShineNumGetHook) read from the wrong ap_moons_kingdom slot in
-    // Bowser's / Ruined kingdoms, showing each kingdom the other's
-    // outstanding moon count.
+    // documented in KingdomUnlock.hpp.
     static constexpr std::uint8_t kWorldIdToBit[17] = {
-        0,   // 0  Hat        -> Cap
-        1,   // 1  Waterfall  -> Cascade
-        2,   // 2  Sand       -> Sand
-        3,   // 3  Forest     -> Wooded
-        4,   // 4  Lake       -> Lake
-        5,   // 5  Cloud      -> Cloud
-        6,   // 6  Clash      -> Lost
-        7,   // 7  City       -> Metro
-        9,   // 8  Sea        -> Seaside (bit 9)   <-- SWAP
-        8,   // 9  Snow       -> Snow    (bit 8)   <-- SWAP
-        10,  // 10 Lava       -> Luncheon
-        11,  // 11 Boss(Attack)-> Ruined  (bit 11)  identity — see history above
-        12,  // 12 Sky        -> Bowser  (bit 12)  identity — see history above
-        13,  // 13 Moon       -> Moon
-        14,  // 14 Peach      -> Mushroom
-        15,  // 15 Special1   -> Dark Side
-        16,  // 16 Special2   -> Darker Side
+        0, 1, 2, 3, 4, 5, 6, 7,
+        9,   // 8  Sea  -> Seaside (bit 9)   <-- SWAP
+        8,   // 9  Snow -> Snow    (bit 8)   <-- SWAP
+        10, 11, 12, 13, 14, 15, 16,
     };
     if (world_id < 0 || world_id >= 17) return 0xff;
     return kWorldIdToBit[world_id];
@@ -107,10 +77,6 @@ std::uint8_t kingdomBitForWorldId(int world_id) {
 
 namespace {
 
-// Mirror of KINGDOM_FOR_HOMESTAGE in scripts/extract_shine_map.py — keep in
-// sync. Names match kKingdoms above (so chained lookups
-// homeStage→short→bit→worldId all resolve cleanly via kingdomBitFor +
-// kingdomBitForWorldId).
 struct HomeStageRow {
     const char* home_stage;
     const char* kingdom_short;
@@ -146,9 +112,6 @@ const char* kingdomShortFromHomeStage(const char* home_stage) {
 }
 
 const char* kingdomShortFromWorldId(int world_id) {
-    // Route via kingdomBitForWorldId so the SMO↔apworld Sea/Snow swap
-    // (see hpp comment) is honored. Direct kKingdoms[world_id] would
-    // mis-route the Seaside/Snow M7 gate.
     const std::uint8_t bit = kingdomBitForWorldId(world_id);
     if (bit == 0xff) return nullptr;
     const char* short_name = kingdomForBit(bit);
@@ -158,8 +121,6 @@ const char* kingdomShortFromWorldId(int world_id) {
 int worldIdFromKingdomShort(const char* kingdom_short) {
     const std::uint8_t bit = kingdomBitFor(kingdom_short);
     if (bit == 0xff) return -1;
-    // Scan the SMO worldId -> bit table for the worldId that maps to this
-    // bit. 17 entries, cheap, runs at most twice per gated kingdom-pick.
     for (int wid = 0; wid < 17; ++wid) {
         if (kingdomBitForWorldId(wid) == bit) return wid;
     }

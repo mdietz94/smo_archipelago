@@ -69,6 +69,16 @@ inline void copyFixedField(char (&dst)[N], const char* src) {
     dst[i] = '\0';
 }
 
+// Length-bounded variant — used when the source is a string_view from the
+// inbound JSON Reader (which does NOT null-terminate). Truncates and always
+// null-terminates the destination.
+template <std::size_t N>
+inline void copyFixedFieldN(char (&dst)[N], const char* src, std::size_t n) {
+    const std::size_t take = (n < N - 1) ? n : (N - 1);
+    for (std::size_t i = 0; i < take; ++i) dst[i] = src[i];
+    dst[take] = '\0';
+}
+
 struct Hello {
     std::string mod_ver;
     std::string smo_ver;
@@ -80,16 +90,6 @@ struct Hello {
     // contract) — Nintendo's API returns at most 32 UTF-8 bytes plus null.
     char device_id[kCheckFieldCap] = {};
 };
-
-// Length-bounded variant — used when the source is a string_view from the
-// inbound JSON Reader (which does NOT null-terminate). Truncates and always
-// null-terminates the destination.
-template <std::size_t N>
-inline void copyFixedFieldN(char (&dst)[N], const char* src, std::size_t n) {
-    const std::size_t take = (n < N - 1) ? n : (N - 1);
-    for (std::size_t i = 0; i < take; ++i) dst[i] = src[i];
-    dst[take] = '\0';
-}
 
 struct Check {
     ItemKind kind = ItemKind::Moon;

@@ -371,6 +371,41 @@ Channel B — Cappy speech bubble for items arriving *outside* the moon-get cuts
 
 Bridge-side `CappyMsg` could ship ahead of UI as Channel-B-prime "log only" — the mod just `SMOAP_LOG_INFO`s incoming `cappy` messages until the UI mechanism lands. Useful for proving the AP→Bridge→Switch path works end-to-end before committing to a UI choice.
 
+## M9 — exlaunch → LibHakkun + OdysseyHeaders + sail migration
+
+Landed in two PRs:
+
+- **[#151](https://github.com/mdietz94/smo_archipelago/pull/151)** (2026-05-21) — landed the parallel tree at `switch-mod-hk/` (`subsdk8`) alongside the production `switch-mod/` (`subsdk9`) so main stayed shippable while validation ran. End-to-end ported all 26 production trampolines + ApClient + ApState + game/ + ui/ off `HOOK_DEFINE_TRAMPOLINE` and `nn::ro::LookupSymbol` onto `HkTrampoline + installAtSym<>` + sail's `.sym`-resolved symbol DB. CreditsStartHook was the one inline-at-offset hook in the project — preserved as a Strategy A inline-BL patch at `+0x4C54A4`.
+- **Phase 6 cutover** (2026-05-21 follow-up) — renamed `switch-mod-hk/ → switch-mod/`, flipped `MODULE_BINARY` from subsdk8 to subsdk9, dropped the `lunakit-vendor` + `exlaunch` submodules, updated CI / skills / docs. Talkatoo% Phase 4 + UDP bridge discovery + host tests (all of which had landed in `switch-mod/` after #151 merged) were ported forward to Hakkun primitives during the cutover.
+
+### Why migrate
+
+LibHakkun is the actively maintained subsdk runtime under the SMO modding stack. Production exlaunch + lunakit-vendor had three escalating problems:
+
+1. **libstdc++ allocator NULL-derefs in worker thread** (M6.1 invariant). Whole categories of `std::*` operations were unsafe — leading to the `FlatHashSet` / `LineBuffer` / `copyFixedFieldN` workarounds throughout the codebase. Hakkun's musl + LLVM libc++ + `HeapSourceDynamic` addon (which re-exports `operator new` / `malloc` / `free` from SMO's own thread-safe allocator) lifts the restriction entirely.
+2. **Manual sockaddr construction**. `nn::socket` didn't expose Nintendo's 16-byte FreeBSD-derived sockaddr layout, so we hand-built it in `ApClient.cpp`. `hk::socket::SocketAddrIpv4::parse(host, port)` encapsulates it.
+3. **OdysseyDecomp forward-decl + `aarch64-none-elf-g++ + nm`** is workable for symbol mangling but doesn't scale to vtables, sub-tables, RTTI nodes. Sail's `.sym` DB is more durable.
+
+### Real bugs surfaced + fixed during the migration
+
+1. **AArch64 PC-relative prologue relocator in `HkTrampoline`**. Upstream LibHakkun copied a function's first instruction verbatim into the trampoline pool. For `adrp / adr / b / bl / b.cond / cbz / tbz` the same bytes at a different PC compute wrong addresses. Patched via `scripts/patch_hakkun.py` patches 7a/b/c — expanded TrampolineBackup to 8 slots, page-aligned, and the relocator emits `movz/movk + indirect/direct branch` sequences as needed. Upstream-PR-ready.
+2. **`sm::ServiceManager::initialize()` is non-lazy**. Calling `instance()->getServiceHandle<"bsd:u">()` without the init+pid handshake null-derefs. `ApClient::initNetworking` now explicitly initializes `sm::` before bringing up `hk::socket`.
+3. **Mangled-symbol length-prefix typo trap**. Sail emits whatever you write into `fakesymbols.so`; the linker resolves the typo; the runtime null-derefs because the typo'd name isn't in `main.nso`'s dynsym. Caught StaffRollScene 15→14 and nifm 28→27 / 19→18. Captured in [memory/project_sail_mangling_length_trap.md](../../.claude/projects/C--Users-maxwe-Documents-smo-archipelago/memory/project_sail_mangling_length_trap.md).
+4. **`IUseSceneObjHolder` multi-inheritance offset adjustment**. The load-bearing fix that took 19 bisect phases. `al::Scene` multiply-inherits from `NerveExecutor`, `IUseAudioKeeper`, `IUseCamera`, `IUseSceneObjHolder`; `rs::isActiveCapMessage` / `rs::tryShowCapMessagePriorityLow` take `IUseSceneObjHolder*` and vtable-dispatch on it. Production exlaunch `static_cast<IUseSceneObjHolder*>(al::Scene*)`'d so the compiler inserted the offset; the phase-3b port had a TODO comment "doesn't matter" — wrong. Surfaced as Ryujinx ARMeilleure 0xC0000005 because the null-deref happened inside JIT-translated guest code.
+5. **Worker-thread → CappyMessenger non-atomic state race**. Worker calls `CappyMessenger::enqueueSystem` were writing to non-atomic `queue_[]/tail_/live_count_` from the worker thread while `tryPump` reads + writes them on the frame thread. Routed through a new `inbound_system_bubbles` SPSC ring drained from drawMain.
+6. **CappyMessenger settle gate: frame counter only → frame + wallclock combined**. The frame counter was a 60fps proxy for wallclock; under Ryujinx GPU stalls drawMain pauses (counter freezes) AND the emulator runs guest frames faster than wallclock during catch-up. Gate now requires both 600 frames AND 10000ms wallclock since scene change.
+
+### What stayed the same
+
+The wire protocol between Switch and SMOClient is byte-equivalent. Apworld / SMOClient / PopTracker pack are untouched by M9. The mod's behavior, command surface, and gameplay rules are unchanged — only the build toolchain swapped.
+
+### Followups deferred to phase 7
+
+- Retire the `FlatHashSet` / `LineBuffer` / `copyFixedFieldN` / `snprintf-to-stack-char[]` patterns since the worker thread can now use `std::*` freely. Vestigial; not load-bearing.
+- Multi-version SMO support (1.0.1+) via `@smo:101,110,120,130` blocks in `VersionList.sym`.
+- In-game tracker overlay (deferred M8) via `hk::gfx::DebugRenderer` (the Hakkun addon).
+- Upstream the 10 Windows-port patches in `scripts/patch_hakkun.py` to `fruityloops1/LibHakkun`.
+
 ## Other follow-ups for next agents
 
 - **`docs/extract-moon-data.md` could mention the M6 A.5 dependency**. Today it documents how to generate `shine_map.json` for the M5/M5.7 use case; Channel A *also* hard-depends on it. A new agent might think "I don't need moons resolved, I just want the cutscene labels" and skip the extract step — that's the same fail mode as the M6 A.5 playtest above.

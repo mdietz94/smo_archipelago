@@ -7,8 +7,9 @@ Launcher and connect to the AP server.
 
 > **Platform:** Windows only today. Linux and macOS aren't blocked by
 > design, but the setup wizard and several scripts assume `%APPDATA%`,
-> `C:/devkitPro`, the Windows Python launcher (`py -3.12`), and similar
-> Windows-specific paths. No one has tested the flow on other platforms.
+> `C:\Program Files\LLVM`, `C:\msys64`, the Windows Python launcher
+> (`py -3.12`), and similar Windows-specific paths. No one has tested the
+> flow on other platforms.
 
 ## Hard requirements
 
@@ -16,9 +17,9 @@ Before you start, confirm all three:
 
 | Requirement | Why | What to do if you don't have it |
 |---|---|---|
-| **Super Mario Odyssey 1.0.0** | Every public SMO mod (lunakit, OdysseyDecomp, ours) targets the original 1.0.0 release. 1.1.0+ have different symbol offsets, struct layouts, and patched behaviors — our module won't load on them. | If you're on 1.1.0, 1.2.0, or 1.3.0, downgrade to 1.0.0 using [Istador/odyssey-downgrade](https://github.com/Istador/odyssey-downgrade). Follow that tool's README — it's a one-time process that removes the update overlay so the cartridge / base NSP runs as 1.0.0. |
-| **Switch firmware 21.x or earlier, OR an emulator** | The subsdk9-style modules we rely on use a homebrew lifecycle Nintendo changed in firmware 22. **FW22 is NOT supported** by this project, even though Atmosphere 1.11+ technically boots on it. An emulator loads the same `subsdk9` overlay as a mod and is fully supported. |  |
-| **Atmosphere CFW** running on the above firmware (real Switch only) | The mod ships as an Atmosphere overlay (`exefs/subsdk9`). | Follow one of the community guides — [NH Switch Guide](https://nh-server.github.io/switch-guide/) is the canonical starting point. Make sure you're on FW 21.x BEFORE setting up Atmosphere; don't update past 21.x. |
+| **Super Mario Odyssey 1.0.0** | Every public SMO mod (smo-online, OdysseyDecomp, the Hakkun example, ours) targets the original 1.0.0 release. 1.1.0+ have different symbol offsets, struct layouts, and patched behaviors — our module won't load on them. | If you're on 1.1.0, 1.2.0, or 1.3.0, downgrade to 1.0.0 using [Istador/odyssey-downgrade](https://github.com/Istador/odyssey-downgrade). Follow that tool's README — it's a one-time process that removes the update overlay so the cartridge / base NSP runs as 1.0.0. |
+| **Switch firmware 21.x or 22, OR an emulator** | Both FW 21.x (the historical target) and FW 22 boot the same `subsdk9` overlay cleanly under Atmosphere — validated end-to-end on real hardware via the 2026-05-20 Hakkun real-Switch spike and the post-cutover boot of the current build. An emulator loads the same overlay as a mod and is fully supported. |  |
+| **Atmosphere CFW** running on a supported firmware (real Switch only) | The mod ships as an Atmosphere overlay (`exefs/subsdk9`). | Follow one of the community guides — [NH Switch Guide](https://nh-server.github.io/switch-guide/) is the canonical starting point. |
 
 ## What you'll end up with
 
@@ -47,9 +48,10 @@ back-and-forth:
 |---|---|---|
 | **Archipelago** | The framework SMO Client runs inside | https://github.com/ArchipelagoMW/Archipelago/releases |
 | **Python 3.12** | The moon/capture extractor (`oead` has no Python 3.13+ wheel) | https://www.python.org/downloads/release/python-3120/#files |
-| **devkitPro + devkitA64** | Cross-compiler for the Switch module | https://devkitpro.org/wiki/Getting_Started |
-| **CMake 3.24+** | Build orchestrator | https://cmake.org/download/ |
-| **Ninja** | Build backend | https://github.com/ninja-build/ninja/releases (or `winget install Ninja-build.Ninja`) |
+| **LLVM 19** | Cross-compiler (aarch64-target) for the Switch module | `winget install LLVM.LLVM --version 19.1.7` |
+| **CMake 3.24+** | Build orchestrator | `winget install Kitware.CMake` |
+| **Ninja** | Build backend | `winget install Ninja-build.Ninja` |
+| **msys2 + mingw64 g++** | Host compiler used only to build the host-side sail symbol-DB tool | `winget install MSYS2.MSYS2`, then in a msys2 shell: `pacman -S mingw-w64-x86_64-gcc` |
 | **hactool** | Extracts RomFS from your SMO dump | https://github.com/SciresM/hactool/releases |
 | **prod.keys** (Switch console keys) | hactool needs them to decrypt the dump | Dump with Lockpick_RCM → place at `%USERPROFILE%\.switch\prod.keys` |
 | **title.keys** (XCI only) | NSPs ship a ticket inside the package; XCI cartridge dumps don't, so hactool needs the SMO titlekey from `title.keys` | Dump with Lockpick_RCM (same run as prod.keys) → place at `%USERPROFILE%\.switch\title.keys` |
@@ -133,9 +135,9 @@ command bar in those cases.
 
 ### "Prerequisite missing" but I installed it
 
-Open a fresh terminal — `cmake`, `ninja`, and `hactool` are PATH-based, and
-a shell that was open before you installed them won't see them. devkitPro's
-`DEVKITPRO` env var also needs a fresh shell. Re-launch the wizard from the
+Open a fresh terminal — `cmake`, `ninja`, `clang` (from LLVM), `g++` (from
+msys2 mingw64), and `hactool` are PATH-based, and a shell that was open
+before you installed them won't see them. Re-launch the wizard from the
 Archipelago Launcher and click "Re-check".
 
 ### Extraction fails with "oead build failed"
@@ -147,11 +149,14 @@ source (slow + fragile). Install Python 3.12 from
 https://www.python.org/downloads/release/python-3120/#files alongside any
 other Pythons.
 
-### Build fails with "aarch64-none-elf-g++ not found"
+### Build fails with "clang.exe: command not found" or "sail not found"
 
-devkitPro didn't install devkitA64. Re-run the devkitPro installer and
-make sure the "Switch development" component is selected. The wizard's
-prereq check verifies the cross-compiler binary, not just the env var.
+LLVM 19 isn't on PATH or sail's host build didn't run. The build wrapper
+(`scripts/build_switchmod.py`) sets PATH itself for the LLVM + ninja
+invocation and also builds `sail.exe` on first run via msys2 mingw64 g++.
+If you get a missing-compiler error: re-check that `winget install
+LLVM.LLVM --version 19.1.7` and `winget install MSYS2.MSYS2` (plus
+`pacman -S mingw-w64-x86_64-gcc` inside the msys2 shell) both completed.
 
 ### Switch boots SMO but the mod doesn't load
 

@@ -4,10 +4,10 @@ Two tiers, each independently restartable:
 
 ```
 [ Switch / SMO ]                [ SMOClient (Python, inside .apworld) ]   [ AP server ]
-  exlaunch subsdk9                 asyncio                                   archipelago.gg
-  LunaKit headers                  SMOContext(CommonContext)                 or self-host
-  ImGui overlay (M8)   <--TCP-->   SwitchServer asyncio TCP    <--websocket-->
-  HUD overlay (M3)                 Kivy GUI (Tracker + Connections tabs)
+  LibHakkun subsdk9                asyncio                                   archipelago.gg
+  OdysseyHeaders                   SMOContext(CommonContext)                 or self-host
+  sail (symbol DB)     <--TCP-->   SwitchServer asyncio TCP    <--websocket-->
+  HUD + Cappy bubbles              Kivy GUI (Tracker + Connections tabs)
                                    Forked apworld (in-zip, same package)
 ```
 
@@ -92,8 +92,10 @@ SMO frame → CaptureStartHook (HOOK_DEFINE_REPLACE if locked path)
 | Tracker | — | yes (Kivy GUI Tracker tab) |
 | In-game HUD overlay | yes (HUD M3, ImGui M8) | — |
 
-## Why we link LunaKit but don't fork it
+## Why we build on LibHakkun + OdysseyHeaders + sail
 
-LunaKit is the closest mod to ours in spirit (also `subsdk9`, also exlaunch). We need its `tryGetGameDataHolder`, `tryGetPlayerActorHakoniwa`, `tryGetStageScene`, `warpPlayer`, the `DevGuiWindow` base for M8, and its working `nn::socket` bring-up sequence. Forking LunaKit means tracking its rapid churn forever; linking against it as a submodule lets us update at our own pace.
+[LibHakkun](https://github.com/fruityloops1/LibHakkun) is an actively maintained subsdk runtime with musl + LLVM libc++ + the `HeapSourceDynamic` addon (which re-exports `operator new` / `malloc` / `free` from SMO's own thread-safe allocator). [OdysseyHeaders](https://github.com/MonsterDruide1/OdysseyHeaders) ships full SMO 1.0.0 type layouts (`al::`, `agl::`, `game::`, `sead::`, `nn::`, ...). Sail is Hakkun's symbol-DB resolver — a host-side tool that reads `switch-mod/syms/*.sym` at build time and emits a `fakesymbols.so` stub library plus a runtime resolver that patches in real addresses against `main.nso`'s dynsym at module load.
 
-Coexistence: only one `subsdk9` can be installed at a time. M8 ships a combined LunaKit+AP build for users who want both. Until then, users pick one.
+We migrated to this stack from exlaunch + lunakit-vendor on 2026-05-21 (M9 cutover, see [milestones.md](milestones.md#m9)). The migration surfaced 5 real bugs that affected real-Switch behavior, including an AArch64 PC-relative prologue relocation gap in LibHakkun's trampoline pool that we patched via `scripts/patch_hakkun.py` (upstream-PR-ready). The full list lives in the M9 narrative.
+
+Coexistence: only one `subsdk9` can be installed at a time. Users running mods like LunaKit must rename one slot or pick one.

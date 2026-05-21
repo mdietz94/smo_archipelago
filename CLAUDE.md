@@ -38,16 +38,17 @@ This repository is open-source and built on a careful line: **functional identif
 
 ## What we're building
 
-A real Archipelago client for **Super Mario Odyssey on a modded Switch (FW 21.2, native SMO 1.0.0 install, Atmosphere CFW)**. Builds on the data layout from [empathy-mp3/SMO-manual-AP](https://github.com/empathy-mp3/SMO-manual-AP) (an earlier honor-system, tick-the-boxes-by-hand world) with an in-game module that detects moons/captures/scenario events automatically, applies received items live, and enforces capture locks until the AP item arrives.
+A real Archipelago client for **Super Mario Odyssey on a modded Switch (FW 21.2 or FW 22, native SMO 1.0.0 install, Atmosphere CFW)**. Builds on the data layout from [empathy-mp3/SMO-manual-AP](https://github.com/empathy-mp3/SMO-manual-AP) (an earlier honor-system, tick-the-boxes-by-hand world) with an in-game module that detects moons/captures/scenario events automatically, applies received items live, and enforces capture locks until the AP item arrives.
 
 ### Architecture (two tiers)
 
 ```
 [ Switch / SMO ]  <--TCP/JSON LAN-->  [ PC Client (Python, inside apworld) ]  <--websocket-->  [ AP server ]
-   exlaunch                              SMOContext(CommonContext)                              archipelago.gg
-   LunaKit headers                       Kivy GUI (Tracker + Connections tabs)                  or self-host
-   ImGui overlay (M8)                    SwitchServer asyncio TCP on :17777
-   HUD overlay (M3)                      Forked apworld machinery
+   LibHakkun subsdk9                     SMOContext(CommonContext)                              archipelago.gg
+   OdysseyHeaders                        Kivy GUI (Tracker + Connections tabs)                  or self-host
+   sail (symbol DB)                      SwitchServer asyncio TCP on :17777
+   ImGui overlay (M8)                    Forked apworld machinery
+   HUD overlay (M3)
 ```
 
 The PC client (formerly the standalone "bridge" process) lives inside the apworld at `apworld/smo_archipelago/client/` and ships in the .apworld zip. Archipelago's Launcher auto-discovers it via the `Component("SMO Client", ...)` registration in the apworld's `__init__.py`. One process, one Kivy window, one install artifact.
@@ -62,8 +63,8 @@ The client owns AP-protocol complexity (websocket + deflate + TLS + reconnect, a
 | **Archipelago as git submodule, not pip install or vendored copy** | Their `setup.py` blocks pip; copying ~15 transitive files would drift fast. Submodule under `vendor/Archipelago/` is drift-proof and also enables seed generation in the same checkout |
 | **Forked apworld, not vendored unchanged** | M8 will add automation-only features (deathlink, traps, hint system, progressive moon gating) the upstream honor-system world can't enforce |
 | **Web tracker priority, in-game ImGui later** | User preference. Web tracker (M5) ships before in-game tracker (M8) |
-| **LunaKit as soft dep (link headers), not fork** | LunaKit churns fast; submodule lets us pin without inheriting their bugs |
-| **Target SMO 1.0.0** | Canonical version every public mod (lunakit, smo-online, smo-practice, OdysseyDecomp) targets. User has a native 1.0.0 install on a downgraded FW 21.2 Switch |
+| **LibHakkun + OdysseyHeaders + sail (since 2026-05-21 cutover)** | Hakkun is the actively maintained subsdk runtime (musl + LLVM libc++ + HeapSourceDynamic re-exporting SMO's allocator), OdysseyHeaders ships full SMO 1.0.0 type layouts, sail is its symbol-DB resolver. Replaced the exlaunch + lunakit-vendor toolchain we used through M0–M7. Pre-cutover details and the 5 real bugs the migration surfaced live in [docs/milestones.md#m9](docs/milestones.md). 10 Windows-port patches to upstream LibHakkun ride in `scripts/patch_hakkun.py` (upstream-PR-ready) |
+| **Target SMO 1.0.0** | Canonical version every public mod (smo-online, smo-practice, OdysseyDecomp, the Hakkun example) targets. User has a native 1.0.0 install on FW 21.2 or FW 22 (both validated; the 2026-05-20 Hakkun real-Switch spike falsified the prior "FW 22 unsupported" claim) |
 | **Bit-index capture table generated from apworld** | `scripts/sync_capture_table.py` regenerates `switch-mod/src/ap/capture_table.h` from `data/items.json` so Switch and bridge can't drift on cap-name → bit-index assignment |
 | **Game name `Spicy Meatball Overdrive`, zip `meatballs.apworld`** | AP-protocol name set 2026-05-16 (dropped a prior framework-derived prefix; we ship a real client with in-game enforcement). Deployed zip renamed `smo_archipelago.apworld` → `smo.apworld` (2026-05-16) → `meatballs.apworld` (2026-05-20). The 2026-05-20 hop moved us off the `worlds.smo` slot that an existing upstream apworld already owns under the `.apsmo` namespace. Archipelago derives the module name from the zip stem, so the world imports as `worlds.meatballs` and the host.yaml settings key is `meatballs_options`. The per-player file extension is `.meatballsap` (was `.smoap`). The in-repo source folder stayed `apworld/smo_archipelago/` to avoid churning every dev-workflow path reference; see the identifier table in the preamble |
 | **Two-stage connect gate (SNI-style)** | SMOClient never auto-dials AP on launch. Clicking Connect (or `/connect` / `--connect`) parks the request until the Switch HELLOs; `SMOContext.connect()` overrides `CommonContext.connect` to dial AP from the Switch-ready callback. State tracked as `disconnected → waiting_for_switch → connected`. Mirrors SNIClient (user-cited gold standard); pre-fix, the default `archipelago.gg` host produced "Connection refused" the moment the user opened the Launcher button. Any new AP-dial path (auto-reconnect, scripted launch) must route through `SMOContext.connect()` — never `asyncio.create_task(server_loop(ctx))` directly. `disconnect()` clears the pending state so a stale dial doesn't fire on the next Switch reconnect. Tests: `apworld/smo_archipelago/tests/test_connect_gate.py` |
@@ -74,7 +75,7 @@ Shipped as v0.1.x-alpha (see `git tag`). All planned milestones (M0 through M7) 
 
 Pattern invariants worth knowing even without reading the milestone narratives:
 
-- **M6.1 — libstdc++ allocator NULL-derefs in subsdk9** (worker thread is NOT a safe haven — proven 2026-05-16). Any thread that hits `std::set`, `std::vector<T>::push_back` (incl. `<bool>`), `std::string` growth past SSO (~15 chars), `std::to_string`, or `std::mutex` construction NULL-derefs inside `nn::os::GetTlsValue` reading slot 0. Cause: most likely libstdc++'s allocator reaches for a `nn::os::TlsSlot` our init never `AllocateTlsSlot`'d. Use instead: `FlatHashSet<N>` (open-addressing, `uint64_t[N]`) for dedupe, `char[N]` + `copyFixedFieldN` / `readIntoField<N>` for variable strings, `LineBuffer` (caller-owned `char[8 KiB]`) for encode output, `snprintf` to stack `char[24]` for int→string, fixed `T[N]` + count for vectors, release-store-publish atomics (the `pending_moon_label` pattern) for cross-thread handoff instead of mutexes. Strings ≤ 15 chars (SSO, no heap) are OK on any thread. Long-term fix would be an early `nn::os::AllocateTlsSlot` + libnx heap-init in `exl_main`; not investigated.
+- **M6.1 — libstdc++ allocator NULL-derefs in subsdk9** (**retired post-Hakkun cutover 2026-05-21** — kept for historical context). Under the exlaunch + lunakit-vendor build, any worker-thread allocation past SSO (~15 chars) NULL-derefed inside `nn::os::GetTlsValue` because libstdc++'s allocator reached for a `nn::os::TlsSlot` exlaunch never `AllocateTlsSlot`'d. Hakkun's musl + LLVM libc++ + `HeapSourceDynamic` addon (which re-exports `operator new` / `malloc` / `free` from SMO's own thread-safe allocator) lifts the restriction entirely. `std::string` / `std::set` / `std::vector` / `std::mutex` are safe on any thread under the current build. The fixed-buffer / `FlatHashSet` / `LineBuffer` / `snprintf-to-stack-char[]` patterns from M6.1 are vestigial workarounds — they still ship because the wire-format shapes are committed contracts and rewriting the hooks isn't load-bearing for parity. Phase 7 polish PR may retire them.
 - **M6 phase D**: when sending the post-HELLO item replay, **skip Moon items** — `OutstandingMsg` carries authoritative per-kingdom balance, re-sending Moons double-counts. See [docs/milestones.md#m6-phase-d](docs/milestones.md#m6-phase-d).
 - **M7 Path A**: future "lie to the game" hooks need the three-layer pattern (UI query → cinematic state → stage commit) — catch upstream of the visible state change, not just at commit. See [docs/milestones.md#m7-path-a--kingdom-order-gate](docs/milestones.md#m7-path-a--kingdom-order-gate).
 - **Phase 4 (Talkatoo% block)**: SMO's Shine actor has FIVE entry points into `GameDataFunction::setGotShine` (`Shine::get`, `getDirect`, `getDirectWithDemo`, `receiveMsg`, `exeWaitRequestDemo`). Hooking any single one misses 4/5 collection paths. The universal chokepoint is `GameDataFile::setGotShine(ShineInfo*)` — already hooked since M4 as `MoonGetHook`. Anything that wants to gate moon collection lives in that one trampoline. See [docs/milestones.md#phase-4--talkatoo-mode](docs/milestones.md#phase-4--talkatoo-mode).
@@ -87,7 +88,7 @@ C:\Users\maxwe\Documents\smo_archipelago\
   CLAUDE.md                      ← this file
   LICENSE                        MIT
   .gitignore                     Note: third_party/ ignored; vendor/ tracked
-  .gitmodules                    Submodules (vendor/Archipelago, lunakit-vendor)
+  .gitmodules                    Submodules (vendor/Archipelago, switch-mod/sys, switch-mod/lib/OdysseyHeaders)
   .claude/skills/                Project skills (smo-build, smo-loopback-test, ...)
   apworld/smo_archipelago/       The apworld + Python client
     __init__.py                  World class + SMOSettings + "SMO Client" Component reg
@@ -117,31 +118,56 @@ C:\Users\maxwe\Documents\smo_archipelago\
       pyproject.toml             Self-contained pytest config (importmode=importlib)
       conftest.py                Inserts apworld/smo_archipelago/ into sys.path
       seeds/                     Loopback test seeds (smo_loopback.yaml + gitignored out/)
-  switch-mod/                    exlaunch C++ module — unchanged by the client merge
-    CMakeLists.txt               Builds subsdk9 from lunakit stock templates
+  switch-mod/                    LibHakkun C++ module (subsdk9)
+    CMakeLists.txt               Builds subsdk9 via the Hakkun + sail CMake includes
+    config/{config.cmake,npdm.json,VersionList.sym}
+                                 Module-binary slot (subsdk9), title id, NPDM
+                                 capabilities, SMO 1.0.0 build-id pin
+    sys/                         LibHakkun submodule (musl + LLVM libc++ + HeapSourceDynamic
+                                 addon + sail; Windows-port patches applied by
+                                 scripts/patch_hakkun.py at build time)
+    lib/OdysseyHeaders/          OdysseyHeaders submodule — SMO 1.0.0 type layouts
+                                 (al::, agl::, game::, nn::, sead::, ...)
+    syms/                        sail symbol DB
+      game/SmoApSymbols.sym      All mangled SMO function + vtable symbols we hook
+                                 (~50 entries — `grep -c '^_Z' for the current count)
+      nn/nifm.sym                nn::nifm::{Initialize,SubmitNetworkRequestAndWait,
+                                 IsNetworkAvailable} resolved against SMO's dynsym
     src/
-      main.cpp                   exl_main entry — installs hooks, spawns worker
-      ap/{ApClient,ApState,ApConfig,ApFrameBridge,ApProtocol}.{cpp,hpp}
+      main.cpp                   hkMain entry — installs hooks, spawns worker
+      ap/{ApClient,ApState,ApConfig,ApFrameBridge,ApProtocol,ApDiscovery}.{cpp,hpp}
+                                 ApClient owns a parallel hk::socket::Socket client
+                                 against bsd:u (separate from SMO's nn::socket); ApDiscovery
+                                 runs the UDP probe chain (loopback / broadcast / unicast
+                                 fallback) before TCP connect.
       ap/capture_table.h         AUTO-GENERATED (42 cap names) — run sync_capture_table.py
-      hooks/HookSymbols.hpp      Mangled SMO 1.0.0 symbols — `grep -c '^inline constexpr'`
-                                 for the current count (was 8 at M0, grew through M6/M7).
-      hooks/*.cpp                One file per hook target; see directory listing. Covers
-                                 moon get/label, capture start/lock, scenario flag, save
-                                 load, world-map select, addPayShine debit, addHackDictionary
-                                 gating, Cappy message routing, shine appearance, death-link.
+      ap/shine_table.h           AUTO-GENERATED (436 moons) — run sync_shine_table.py
+      ap/shine_lookup.hpp        Linear-scan helpers over shine_table.h (Phase 4)
+      hooks/HookSymbols.hpp      C++ string constants mirroring syms/*.sym; used by
+                                 HkTrampoline<>::installAtSym<> and hk::ro::lookupSymbol.
+                                 Must stay in sync with the .sym files.
+      hooks/*.cpp                One file per hook target. Covers moon get/label, capture
+                                 start/lock, scenario flag, save load, world-map select,
+                                 addPayShine debit, addHackDictionary gating, Cappy message
+                                 routing, shine appearance, death-link, credits-roll goal,
+                                 Talkatoo% speech substitution.
       game/{MoonApply,CaptureGate,KingdomUnlock,KingdomOrderGate}.{cpp,hpp}
                                  KingdomUnlock retains the kingdom name ↔ bit ↔ worldId
                                  tables M6-D + M7-A depend on, despite its now-legacy name.
       ui/ApHudOverlay.{cpp,hpp}  Heartbeat-mode HUD (kept for debug logging surface).
       ui/CappyMessenger.{cpp,hpp}  In-game speech-bubble notifications via SMO's CappyMessenger
                                  (used by M6-C reconciliation, M7-A lock messaging, etc.).
+                                 Settle gate now requires BOTH a frame-counter threshold
+                                 AND a wallclock interval (post-Hakkun Ryujinx JIT timing
+                                 bug — see M9 in docs/milestones.md).
       util/{Json,Log}.{cpp,hpp}
+    tests/                       Host-runnable C++ tests (test_json, test_protocol,
+                                 test_cappy_messenger, test_shine_lookup). Same SMOAP_HOST_TEST
+                                 guards as before. Run via smo-host-tests skill.
     romfs/ap_config.json         INFORMATIONAL ONLY — bridge IP/port are baked in at
-                                 compile time via CMake -DBRIDGE_HOST/-DBRIDGE_PORT. The
-                                 runtime SD-read path was abandoned (MountSdCardForDebug
-                                 fails on retail/newer FW). See ApConfig.cpp:1-8. Editing
-                                 this JSON on the SD does NOTHING — rebuild instead.
-    lunakit-vendor/              Vendored LunaKit submodule
+                                 compile time via CMake -DBRIDGE_HOST/-DBRIDGE_PORT.
+                                 Runtime UDP discovery (ApDiscovery) overrides this at
+                                 connect time when SMOClient is reachable on the LAN.
   scripts/
     switch_smoke_test.py         Fake-Switch end-to-end test
     sync_capture_table.py        items.json → capture_table.h
@@ -149,7 +175,15 @@ C:\Users\maxwe\Documents\smo_archipelago\
     install_apworld.py           Zips apworld/smo_archipelago/ → vendor/.../custom_worlds/
     ap_generate.py, ap_server.py Archipelago Generate/MultiServer wrappers (auto-pip suppressed)
     build_poptracker_pack.py     PopTracker pack generator
-    check_nso_symbols.py         Offline symbol-resolution check against main.nso
+    build_switchmod.py           One-shot Switch-mod build wrapper (LLVM 19 + sail +
+                                 LibHakkun Windows-port patches; see smo-build skill)
+    patch_hakkun.py              Applies the 10 Windows-port patches to the pinned
+                                 LibHakkun submodule (idempotent)
+    setup_sail_winpath.py        One-time sail host-binary compile via msys2 mingw64
+    fix_hakkun_symlinks.py       Stub for converting OdysseyHeaders symlinks (no-op
+                                 in current layout; ready for future use)
+    sync_shine_table.py          Generates switch-mod/src/ap/shine_table.h from
+                                 apworld locations × shine_map.json
     .extract-venv/               Auto-created Python 3.12 venv (gitignored)
   docs/
     architecture.md              Two-tier diagram, threading, responsibilities
@@ -187,10 +221,10 @@ C:\Users\maxwe\Documents\smo_archipelago\
 
 Project skills live in `.claude/skills/`. They auto-load when triggered by their description keywords:
 
-- **smo-build** — build switch-mod, deploy to Ryujinx/Switch, capture_table sync, libnx + worktree gotchas, fresh-worktree setup, the SMO-already-inits-socket rule.
+- **smo-build** — build switch-mod via scripts/build_switchmod.py (LLVM 19 + sail + LibHakkun patches), deploy to Ryujinx/Switch, capture_table sync, worktree gotchas, fresh-worktree setup, the SMO-already-inits-socket rule.
 - **smo-loopback-test** — AP loopback E2E without booting SMO (3-pane setup + scripted pytest path).
-- **smo-host-tests** — C++ host tests (test_json, test_protocol) via msys2 mingw64 g++.
-- **smo-symbol-discovery** — add new hook targets; OdysseyDecomp forward-decls + aarch64 mangling + check_nso_symbols.py verification.
+- **smo-host-tests** — 4 C++ host tests (test_json, test_protocol, test_cappy_messenger, test_shine_lookup) via msys2 mingw64 g++ + the ApState::nowMs stub pattern.
+- **smo-symbol-discovery** — add new hook targets; OdysseyDecomp forward-decls + aarch64 mangling + sail .sym + llvm-nm `fakesymbols.so` verification.
 - **smo-extract-data** — regenerate `shine_map.json` + `capture_map.json` from a 1.0.0 NSP.
 - **smo-poptracker** — build / iterate / debug the PopTracker pack.
 

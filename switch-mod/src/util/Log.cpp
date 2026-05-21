@@ -1,20 +1,17 @@
-// Logging — kernel debug log, optionally also an SD-card file dump.
+// Logging — kernel debug log + bridge log forwarder.
 //
 // Every SMOAP_LOG_* call goes through log(), which:
-//   1. svcOutputDebugString — kernel debug log (Ryujinx surface; on real
+//   1. hk::svc::OutputDebugString — kernel debug log (Ryujinx surface; on real
 //      Switch with Atmosphere it goes to lm, where binlog visibility is
 //      spotty and we mostly don't rely on it).
-//   2. If SMOAP_DEBUG_SD_LOG is defined at compile time: also accumulates
-//      to an 8 KiB in-memory ring buffer, drained one-shot to sd:/smo_ap.txt
-//      at ~5 seconds into drawMain. Useful for boot-time debugging when
-//      neither lm nor svcOutputDebugString is visible. Off by default;
-//      enable via -DSMOAP_DEBUG_SD_LOG=ON at cmake configure.
+//   2. Forwards messages at or above SMOAP_LOG_FORWARD_MIN_LEVEL to the
+//      PC client via the bridge's outbound_logs ring.
 //
-// Allocator discipline (M6.1): the ring buffer is a plain char array, the
-// position guarded by std::atomic_flag spinlock + std::atomic<u32>. No
-// std::string, no std::mutex (the libstdc++ allocator NULL-derefs on the
-// worker thread). All callers — init, worker, frame, hook callbacks — go
-// through the same lock-free-write path.
+// Note (Hakkun migration 2026-05-20): the exlaunch-era SMOAP_DEBUG_SD_LOG
+// boot-time SD-card capture path has been removed during the phase 3a port —
+// it depended on `nn::fs::*` which Hakkun does not yet wrap. `markFsReady`
+// and `drainPendingToFile` are retained as no-op stubs so unchanged callers
+// (DrawMainHook is the only one) keep linking.
 
 #include "Log.hpp"
 
@@ -22,16 +19,9 @@
 #include <cstdio>
 #include <cstring>
 
-#include "lib/nx/nx.h"
+#include <hk/svc/api.h>
 
 #include "../ap/ApFrameBridge.hpp"
-
-#ifdef SMOAP_DEBUG_SD_LOG
-#  include <atomic>
-#  include "nn/fs/fs_mount.hpp"
-#  include "nn/fs/fs_files.hpp"
-#  include "nn/fs/fs_types.hpp"
-#endif
 
 // Compile-time threshold: only INFO+ get mirrored to the PC client by default.
 // DEBUG forwarding would flood the wire (some per-frame hook paths log at
@@ -41,13 +31,10 @@
 #  define SMOAP_LOG_FORWARD_MIN_LEVEL 1
 #endif
 
-// Compile-time threshold for the kernel debug-log sink (svcOutputDebugString
+// Compile-time threshold for the kernel debug-log sink (hk::svc::OutputDebugString
 // → Ryujinx, lm on real Switch). Same scale as above; default INFO keeps the
 // per-frame DEBUG diagnostics out of normal Ryujinx logs. Rebuild with
 // -DSMOAP_LOG_SINK_MIN_LEVEL=0 to surface DEBUG when investigating an issue.
-// The SMOAP_DEBUG_SD_LOG ring (when enabled) is independent — it always
-// captures the full stream, since its whole purpose is exhaustive boot
-// capture in environments where the debug log isn't visible.
 #ifndef SMOAP_LOG_SINK_MIN_LEVEL
 #  define SMOAP_LOG_SINK_MIN_LEVEL 1
 #endif
@@ -76,84 +63,10 @@ const char* wireLevelName(LogLevel lvl) {
     return "info";
 }
 
-// Why no thread_local re-entry guard: subsdk9 has no thread-local memory
-// allocator registered (it's a custom exlaunch runtime, not a full
-// nnSdk-app environment). Any `thread_local` variable in this TU causes
-// nnSdk's `SetMemoryAllocatorForThreadLocal` to Abort at module load,
-// 0x24 bytes into exl_main, before any of our code runs. Crash signature:
-// Result 0xCA8, User Break, stack ends at SetMemoryAllocatorForThreadLocal.
-//
-// enqueueRemoteLog() and ApClient::pumpOnce's drain block both contain
-// zero SMOAP_LOG_* calls, so no recursion path exists today. If a future
-// edit adds logging inside the forward path, prefer a `static
-// std::atomic<int> g_recursion_depth` with a thread-id check, NOT
-// thread_local — same module-load abort applies.
-
-#ifdef SMOAP_DEBUG_SD_LOG
-
-// Ring buffer for SD logging. Holds enough text to cover the init burst
-// + the worker thread's first ~5s of activity (the window we capture).
-constexpr std::size_t kRingCap = 8192;
-char g_ring[kRingCap];
-std::atomic<std::uint32_t> g_ring_used{0};
-// Single spinlock guarding {g_ring, g_ring_used}. Atomic_flag is safe in
-// our subsdk environment; std::mutex would NULL-deref via the libstdc++
-// allocator (see M6.1 notes in CLAUDE.md).
-std::atomic_flag g_ring_lock = ATOMIC_FLAG_INIT;
-
-// One-shot drain strategy. Sustained file I/O from the frame thread aborts
-// in nn::fs (Result 0xCA8 from internal FlushFile, hit 5+ times during
-// development). The proven-working LmSinkFlushDiagToFile prototype only
-// ever wrote once and that worked, so we mimic that: drain ONCE at
-// kDrainAtFrame (~5s of drawMain), set g_drain_done, never touch nn::fs
-// again. ~5s is enough for the worker thread to attempt its first connect
-// and log success/timeout — which is the only thing this diagnostic is
-// for in practice.
-constexpr std::uint32_t kDrainAtFrame = 300;  // ~5 seconds at 60 fps
-std::uint32_t g_drawmain_frames = 0;
-std::atomic<bool> g_drain_done{false};
-
-// SD root, NOT under atmosphere/contents/<TID>/ — Atmosphere writes
-// romfs_metadata.bin into that directory during boot and the resulting
-// dir-level lock conflict made our WriteFile abort with TargetLocked
-// (Result 0xCA8). Root SD path avoids the conflict.
-const char* kLogFilePath = "sd:/smo_ap.txt";
-
-class SpinGuard {
-public:
-    SpinGuard() {
-        while (g_ring_lock.test_and_set(std::memory_order_acquire)) {
-            // Spin. Drainer holds for ~ms during file I/O; writers (60Hz
-            // frame, 1Hz heartbeat, sporadic hooks) wait briefly.
-        }
-    }
-    ~SpinGuard() { g_ring_lock.clear(std::memory_order_release); }
-};
-
-void ringAppend(const char* buf, std::size_t len) {
-    if (len == 0) return;
-    SpinGuard g;
-    std::uint32_t used = g_ring_used.load(std::memory_order_relaxed);
-    if (used + len > kRingCap) {
-        // Drop oldest by shifting. Keeps newest log lines visible even when
-        // the buffer fills before our one-shot drain fires.
-        std::uint32_t drop = used + static_cast<std::uint32_t>(len) - kRingCap;
-        if (drop > used) drop = used;
-        std::memmove(g_ring, g_ring + drop, used - drop);
-        used -= drop;
-    }
-    std::memcpy(g_ring + used, buf, len);
-    g_ring_used.store(used + static_cast<std::uint32_t>(len),
-                      std::memory_order_relaxed);
-}
-
-#endif  // SMOAP_DEBUG_SD_LOG
-
 }  // namespace
 
 void markFsReady() {
-    // Kept as a no-op for source compat. drainPendingToFile() mounts SD
-    // itself on first use.
+    // No-op stub kept for source compat with older call sites.
 }
 
 void log(LogLevel lvl, const char* fmt, ...) {
@@ -188,55 +101,13 @@ void log(LogLevel lvl, const char* fmt, ...) {
     buf[total++] = '\n';
 
     if (static_cast<int>(lvl) >= SMOAP_LOG_SINK_MIN_LEVEL) {
-        svcOutputDebugString(buf, total);
+        hk::svc::OutputDebugString(buf, total);
     }
-
-#ifdef SMOAP_DEBUG_SD_LOG
-    ringAppend(buf, total);
-#endif
 }
 
 void drainPendingToFile() {
-#ifdef SMOAP_DEBUG_SD_LOG
-    // One-shot: drain exactly once per session, at frame kDrainAtFrame.
-    // All other calls are cheap atomic-load early returns.
-    if (g_drain_done.load(std::memory_order_acquire)) return;
-    if (++g_drawmain_frames < kDrainAtFrame) return;
-
-    // Mark done FIRST so a re-entry (shouldn't happen on single-threaded
-    // drawMain, but defensive) doesn't double-write.
-    g_drain_done.store(true, std::memory_order_release);
-
-    char snapshot[kRingCap];
-    std::size_t snap_len = 0;
-    {
-        SpinGuard g;
-        snap_len = g_ring_used.load(std::memory_order_relaxed);
-        if (snap_len == 0) return;
-        std::memcpy(snapshot, g_ring, snap_len);
-    }
-
-    // Exact lunakit FsHelper::writeFileToPath pattern (lunakit-vendor/src/
-    // helpers/fsHelper.cpp): CreateFile sized to the EXACT data we're
-    // about to write, not 0. CreateFile(0) + WriteFile(N) extends the
-    // file and aborts in nn::fs past trivial sizes (Result 0xCA8 in
-    // FlushFile). Pre-sizing eliminates the extension path entirely.
-    (void)nn::fs::MountSdCardForDebug("sd");
-    nn::fs::DeleteFile(kLogFilePath);
-    if (R_FAILED(nn::fs::CreateFile(kLogFilePath,
-                                    static_cast<std::int64_t>(snap_len)))) {
-        return;
-    }
-
-    nn::fs::FileHandle fh;
-    if (R_FAILED(nn::fs::OpenFile(&fh, kLogFilePath, 2))) return;
-
-    // Per lunakit: bail without CloseFile on WriteFile failure.
-    nn::fs::WriteOption opt = nn::fs::WriteOption::CreateOption(
-        nn::fs::WriteOptionFlag_Flush);
-    if (R_FAILED(nn::fs::WriteFile(fh, 0, snapshot, snap_len, opt))) return;
-    nn::fs::CloseFile(fh);
-#endif  // SMOAP_DEBUG_SD_LOG
+    // No-op stub. The exlaunch-era SD-card boot-capture diagnostic is gone;
+    // see the file-top comment for rationale.
 }
 
 }  // namespace smoap::util

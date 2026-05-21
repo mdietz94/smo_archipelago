@@ -22,10 +22,10 @@ zip with three logical regions:
 | Inside the zip | Source | What for |
 |---|---|---|
 | `meatballs/...` | `apworld/smo_archipelago/` (default install) | The apworld itself — items, locations, regions, hooks, SMOClient |
-| `meatballs/_setup/switch_mod/...` | `switch-mod/` + lunakit-vendor + exlaunch submodules | C++ source tree the wizard compiles on the user's machine |
-| `meatballs/_setup/scripts/...` | `scripts/extract_shine_map.py` + `sync_capture_table.py` + `check_nso_symbols.py` | Extractor + helpers the wizard invokes |
+| `meatballs/_setup/switch_mod/...` | `switch-mod/` + LibHakkun (`sys/`) + OdysseyHeaders (`lib/OdysseyHeaders/`) submodules | C++ source tree the wizard compiles on the user's machine |
+| `meatballs/_setup/scripts/...` | `scripts/extract_shine_map.py` + `sync_capture_table.py` + `sync_shine_table.py` + `build_switchmod.py` + `patch_hakkun.py` + `setup_sail_winpath.py` | Extractor + Switch-build wrappers the wizard invokes |
 
-Size budget is about 25 MB compressed (most of it lunakit-vendor sources).
+Size budget is about 25 MB compressed (most of it OdysseyHeaders + LibHakkun sources).
 
 ## What never gets shipped (IP discipline)
 
@@ -82,7 +82,7 @@ Before pushing a release tag, verify:
 - `SMOAP_LIVE_AP=1 SMOAP_GEN_TEST_FAST=1 python -m pytest apworld/smo_archipelago/tests/test_apworld_generation.py` is green
 - The wizard actually runs end-to-end on a clean
   `%APPDATA%/SMOArchipelago/` directory (the only path that can't be
-  unit-tested — needs real devkitPro, real hactool, real NSP)
+  unit-tested — needs real LLVM 19 + msys2 + hactool + NSP)
 - `docs/first-time-setup.md` reflects any prereq changes
 - `CLAUDE.md` and the active plan file have been updated if architecture
   shifted

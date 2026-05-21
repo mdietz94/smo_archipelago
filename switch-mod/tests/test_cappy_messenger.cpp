@@ -28,6 +28,20 @@
 using namespace smoap::ap;
 using namespace smoap::ui;
 
+// Host-test stub for smoap::ap::ApState::nowMs(). CappyMessenger uses a
+// frame-count + wallclock-ms combined settle gate; the full ApState.cpp
+// pulls in hk:: services we don't link here, so provide a deterministic
+// monotonic stub instead.
+#include "ap/ApState.hpp"
+namespace {
+std::int64_t g_test_now_ms = 0;
+}  // namespace
+std::int64_t smoap::ap::ApState::nowMs() {
+    // Advance by 1 ms per call so successive comparisons in the settle gate
+    // see forward progress without needing the host clock.
+    return ++g_test_now_ms;
+}
+
 namespace {
 
 int g_failures = 0;

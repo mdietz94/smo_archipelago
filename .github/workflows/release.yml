@@ -25,10 +25,10 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
-          # Bundling switch-mod sources needs both lunakit-vendor and
-          # exlaunch submodules materialized. Archipelago submodule is
-          # also needed because install_apworld.py writes into its
-          # custom_worlds/ before we copy out.
+          # Bundling switch-mod sources needs the LibHakkun + OdysseyHeaders
+          # submodules materialized. Archipelago submodule is also needed
+          # because install_apworld.py writes into its custom_worlds/ before
+          # we copy out.
           submodules: recursive
           fetch-depth: 0
 

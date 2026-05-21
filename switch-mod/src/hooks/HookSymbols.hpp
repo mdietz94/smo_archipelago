@@ -87,32 +87,6 @@ inline constexpr const char* kPlayerHackKeeperStartHack =
 inline constexpr const char* kPlayerHackKeeperForceKillHack =
     "_ZN16PlayerHackKeeper13forceKillHackEv";
 
-// PlayerHackKeeper::tryEscapeHack()
-// Source: MonsterDruide1/OdysseyDecomp src/Player/PlayerHackKeeper.h
-// Gentler release path than forceKillHack: doesn't despawn the captured
-// actor, just lets Mario pop out. Safe for inanimate captures that don't
-// have an intro state machine to race against (Cactus, Tree, Manhole,
-// Pole, Boulder, Mini Rocket, Volbonan). KGamer77's
-// SuperMarioOdysseyArchipelago uses the same split for the same 7 caps
-// in Mod/source/main.cpp:75 (see also third_party/Kgamer77-SMOAP for
-// reference). CaptureStartHook branches on hack name and falls back to
-// forceKillHack if this symbol fails to resolve.
-inline constexpr const char* kPlayerHackKeeperTryEscapeHack =
-    "_ZN16PlayerHackKeeper13tryEscapeHackEv";
-
-// PlayerHackKeeper::isActiveHackStartDemo() const
-// Source: MonsterDruide1/OdysseyDecomp src/Player/PlayerHackKeeper.h
-// Returns true while the capture-entry "dive in" cinematic is still
-// playing. We poll this from tickPendingUncapture so the deny path
-// releases the moment the demo ends — instead of waiting on a fixed
-// wall-clock delay (which prior versions tuned per-cap because the demo
-// length varies). KGamer77 uses the same gate in Mod/source/main.cpp:73.
-// If this symbol fails to resolve, CaptureStartHook's deny path is
-// disabled (same fallback shape as forceKillHack) — better to leak the
-// capture than to fire forceKillHack mid-cinematic.
-inline constexpr const char* kPlayerHackKeeperIsActiveHackStartDemo =
-    "_ZNK16PlayerHackKeeper21isActiveHackStartDemoEv";
-
 // --- Scenario flag set ---
 // GameDataFile::setMainScenarioNo(s32)  (s32 = int on aarch64)
 // Source: MonsterDruide1/OdysseyDecomp src/System/GameDataFile.h:456
@@ -390,17 +364,6 @@ inline constexpr const char* kAlSetModelMaterialParameterF32 =
 inline constexpr const char* kAlIsExistMaterial =
     "_ZN2al15isExistMaterialEPKNS_9LiveActorEPKc";
 
-// al::isExistModel(const LiveActor*) — null-safe model-keeper presence
-// probe. Required GUARD before any model-touching call (isExistMaterial,
-// setMaterialProgrammable, setModelMaterialParameter*) — those derefs
-// mModelKeeper unconditionally and crash if the actor hasn't allocated
-// its model. Hit during Cascade reload after the first multi-moon: an
-// already-collected linked-Shine inside an AppearSwitchTimer is init'd
-// by rs::tryInitLinkShine without a model archive. OdysseyDecomp uses
-// this same probe in AppearSwitchTimer/CapTargetInfo for the same reason.
-inline constexpr const char* kAlIsExistModel =
-    "_ZN2al12isExistModelEPKNS_9LiveActorE";
-
 // =============================================================================
 // M7 Path A — fork-cinematic kingdom-order gate (two-layer architecture).
 // =============================================================================
@@ -454,61 +417,14 @@ inline constexpr const char* kGameDataFunctionTryChangeNextStageWithWorldWarpHol
     "_ZN16GameDataFunction35tryChangeNextStageWithWorldWarpHoleE20GameDataHolderWriterPKc";
 
 // =============================================================================
-// Talkatoo% mode — Phase 3 speech substitution.
+// Talkatoo% mode — speech-bubble substitution.
 // =============================================================================
 //
-// Goal: when the player consults Talkatoo in Talkatoo% mode, his speech bubble
-// names AP-pool moons from the current kingdom instead of vanilla picks.
-//
-// Mechanism (decided over the in-code-paint approach): trampoline
-// GameDataFunction::tryFindShineMessage, the runtime moon-name-message
-// resolver. Talkatoo's Poetter::exeWait picks a shine_index from a calc table
-// (rs::calcShineIndexTableNameAvailable) and calls tryFindShineMessage to
-// turn it into a UTF-16 display message, then stores the pointer at
-// `Poetter+0x130` for the TalkShow nerve / EventFlow to read. We let
-// vanilla pick the index, then override the returned UTF-16 string with an
-// AP-pool moon's name — Talkatoo speaks our names through the normal SMO
-// speech pipeline, no pane discovery needed.
-//
-// Why not hook Poetter::exeWait directly: exeWait runs every frame in the
-// Wait nerve, paints no pane itself (a downstream EventFlow does), and would
-// require either tracking "did vanilla just compose speech this frame?" or
-// guessing the Layout pane name. Hooking tryFindShineMessage with a vtable
-// filter for Poetter is one-shot per speech-bubble pop, naturally scoped.
-//
-// Why not hook calcShineIndexTableName{Available,Unlockable}: the int* array
-// they fill is per-kingdom shine *indices* into the game's internal ShineList
-// (resolved via findShine(world_id, index) → ShineInfo* per OdysseyDecomp's
-// src/System/GameDataFunction.cpp), NOT shine_uids. Mapping (world_id, index)
-// → shine_uid requires either decompressing SMO's per-kingdom ShineList at
-// runtime or a baked compile-time table — both are heavier than substituting
-// at the message-text layer.
-//
-// Discovery provenance:
-//   - Talkatoo's actor class = `Poetter` (German for "poet"), confirmed via
-//     OdysseyDecomp's src/Scene/ProjectActorFactory.cpp `{"Poetter", nullptr}`
-//     and the SMO-SeededTalkatoo mod (MrKatzenGaming/SMO-SeededTalkatoo)
-//     which hooks the BL inside Poetter::exeWait at the SeededTalkatoo
-//     `TableHookSym = 0x003afb08` (1.0.0). The dynsym scan of main.nso at
-//     2026-05-20 confirmed `_ZN7Poetter7exeWaitEv` is exactly the function
-//     containing that BL and the BL targets `rs::calcShineIndexTableName
-//     Unlockable` + `al::getRandom`.
-//   - tryFindShineMessage overload chosen: the (LiveActor*, IUseMessageSystem*,
-//     s32 world_id, s32 index) one, called from Poetter::exeWait+0x350 with
-//     this=actor, this+0x108=message-system sub-object, w20=world_id,
-//     w3=chosen shine_index. OdysseyDecomp src/System/GameDataFunction.h:151
-//     forward-decls it; the mangled name was passed through aarch64-none-elf-g++
-//     to derive the symbol below.
-//   - Poetter vtable address resolved via the `_ZTV7Poetter` symbol so we can
-//     vtable-filter the trampoline callback (the actor* arg) — vanilla
-//     tryFindShineMessage is also called from non-Talkatoo paths (cutscenes,
-//     pause menu, AchievementHint), so unfiltered substitution would replace
-//     moon names everywhere.
-//
-// All 3 verified against SMO 1.0.0 main.nso 2026-05-20 via
-// scripts/check_nso_symbols.py.
+// Hook target + filter symbol for the Phase 3 substitution. See
+// hooks/TalkatooSpeechHook.cpp for the design rationale (vtable filter rather
+// than per-callsite hook so cutscenes / pause menu / hint UI fall through).
 
-// Talkatoo's vtable. Read via nn::ro::LookupSymbol once at install time;
+// Talkatoo's vtable. Read via hk::ro::lookupSymbol once at install time;
 // the trampoline compares actor*->vtable (offset 0) against this to confirm
 // the caller is a Poetter before substituting.
 inline constexpr const char* kPoetterVTable =
@@ -522,28 +438,6 @@ inline constexpr const char* kPoetterVTable =
 // UTF-16 buffer holding an AP-pool moon name when caller is Poetter.
 inline constexpr const char* kGameDataFunctionTryFindShineMessage =
     "_ZN16GameDataFunction19tryFindShineMessageEPKN2al9LiveActorEPKNS0_17IUseMessageSystemEii";
-
-// Poetter::exeWait — kept for reference / future hooks. Not currently
-// trampolined: substitution happens at tryFindShineMessage which is downstream
-// of exeWait's pick logic. See discovery write-up at the top of this section
-// + memory/project_talkatoo_internal_names.md for why.
-inline constexpr const char* kPoetterExeWait =
-    "_ZN7Poetter7exeWaitEv";
-
-// Shine::get — Phase 4 candidate that we DIDN'T end up hooking. Kept here
-// for reference. It's one of five Shine entry points that funnel into
-// GameDataFunction::setGotShine (the others: getDirect, getDirectWithDemo,
-// receiveMsg, exeWaitRequestDemo) — verified by BL-target scan of the .text
-// segment 2026-05-20. Mario's "Chomp Through the Rocks" collection in the
-// live Ryujinx test went through one of the OTHER four, not Shine::get,
-// so a hook here misses the chokepoint.
-//
-// Universal chokepoint is GameDataFile::setGotShine (already hooked as
-// MoonGetHook for AP credit reporting since M4) — every path through the
-// 5 Shine entry points ends up calling GameDataFunction::setGotShine which
-// is an 8-byte stub that calls GameDataFile::setGotShine. Block lives there.
-inline constexpr const char* kShineGet =
-    "_ZN5Shine3getEv";
 
 // =============================================================================
 // Legacy / aliasing — kept so existing call sites don't break.

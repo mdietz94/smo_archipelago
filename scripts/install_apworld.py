@@ -97,7 +97,11 @@ MOD_SKIP_SUFFIXES = {".exe", ".dll", ".pdb", ".obj", ".o", ".a"}
 BUNDLED_SCRIPT_NAMES = (
     "extract_shine_map.py",
     "sync_capture_table.py",
-    "check_nso_symbols.py",
+    "sync_shine_table.py",
+    "build_switchmod.py",
+    "patch_hakkun.py",
+    "setup_sail_winpath.py",
+    "fix_hakkun_symlinks.py",
 )
 
 

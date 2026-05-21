@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build switch-mod-hk/ (Hakkun-based) with Windows-native CMake + LLVM + Ninja.
+"""Build switch-mod/ (LibHakkun-based subsdk9) with Windows-native CMake + LLVM + Ninja.
 
 Wraps the CMake invocation so it works on Windows out of the box — Hakkun
 upstream assumes Linux paths in several places (msys2 cmake on PATH first
@@ -7,7 +7,7 @@ breaks the build; sail binary lacks .exe extension; setup_libcxx output
 location resolves wrong from a bash cwd; etc.). This wrapper handles all of
 that.
 
-Run from anywhere; this script always operates against switch-mod-hk/ next to
+Run from anywhere; this script always operates against switch-mod/ next to
 itself in the repo.
 """
 
@@ -17,7 +17,7 @@ import subprocess
 import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SWITCH_MOD = os.path.join(REPO_ROOT, "switch-mod-hk")
+SWITCH_MOD = os.path.join(REPO_ROOT, "switch-mod")
 BUILD_DIR = os.path.join(SWITCH_MOD, "build")
 
 # Windows-native binaries (the spike confirmed these versions; LLVM 19 is
@@ -44,7 +44,7 @@ def ensure_hakkun_patched() -> None:
 def ensure_sail_built() -> None:
     """Sail is a Windows-native host binary built once per machine.
 
-    `sail.cmake` looks for the binary at `switch-mod-hk/hakkun/sys/sail/build/sail`
+    `sail.cmake` looks for the binary at `switch-mod/hakkun/sys/sail/build/sail`
     (no .exe). If it doesn't exist, cmake re-runs setup_sail.py during
     configure, which rmtree's the build dir — meaning even a freshly-built
     sail.exe disappears on the next configure unless the no-extension copy
@@ -93,7 +93,7 @@ def main() -> int:
     # Extra cmake args (after the script name) are forwarded to the configure
     # call. Use this to override BRIDGE_HOST / BRIDGE_PORT / SMO_AP_MOD_VERSION
     # without editing CMakeLists.txt. Example:
-    #   python scripts/build_switchmod_hk.py -DBRIDGE_HOST=127.0.0.1
+    #   python scripts/build_switchmod.py -DBRIDGE_HOST=127.0.0.1
     cmake_extra = sys.argv[1:]
     cfg = subprocess.run(
         [cmake, "-S", SWITCH_MOD, "-B", BUILD_DIR, "-G", "Ninja",

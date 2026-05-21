@@ -48,3 +48,17 @@ _ZN16GameDataFunction35tryChangeNextStageWithWorldWarpHoleE20GameDataHolderWrite
 // the original target — al::Scene::initDrawSystemInfo. Sail needs to
 // resolve initDrawSystemInfo so our callback can reach it.
 _ZN2al5Scene18initDrawSystemInfoERKNS_13SceneInitInfoE
+
+// Talkatoo% mode (Phase 3): substitution at the speech-resolve chokepoint.
+// GameDataFunction::tryFindShineMessage(actor*, sys*, world_id, index)
+// returns the per-shine display char16_t* for the speech bubble. We
+// trampoline it and replace the return value with an AP-pool moon name
+// when the caller is a Poetter (Talkatoo) actor.
+_ZN16GameDataFunction19tryFindShineMessageEPKN2al9LiveActorEPKNS0_17IUseMessageSystemEii
+
+// Poetter (Talkatoo) primary vtable. Read at install time via
+// hk::ro::lookupSymbol — used as a range filter to scope substitution to
+// Talkatoo-only callsites. The trampoline above runs for every caller
+// (cutscenes, pause menu, hint UI), so without this we'd substitute moon
+// names project-wide.
+_ZTV7Poetter

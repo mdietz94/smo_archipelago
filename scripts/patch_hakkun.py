@@ -19,7 +19,7 @@ Patches applied:
   4. sys/cmake/sail.cmake — expand sys/addons/*/syms glob (cmd.exe doesn't).
   5. sys/cmake/generate_exefs.cmake — prefix elf2nso.py with `python`.
   6. (env only) Copy sys/sail/build/sail.exe → sys/sail/build/sail (no ext).
-     Handled by scripts/build_switchmod_hk.py.
+     Handled by scripts/build_switchmod.py.
 
   7. (correctness) include/hk/hook/Trampoline.h + src/hk/hook/Trampoline.cpp:
      Add AArch64 PC-relative prologue relocation to TrampolineHook. Upstream
@@ -37,7 +37,7 @@ import os
 import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HAKKUN = os.path.join(REPO_ROOT, "switch-mod-hk", "sys")
+HAKKUN = os.path.join(REPO_ROOT, "switch-mod", "sys")
 
 
 def patch_file(path: str, old: str, new: str, sentinel: str) -> str:

@@ -1,4 +1,8 @@
 // See ApDiscovery.hpp for the design rationale.
+//
+// Hakkun port of the exlaunch-era ApDiscovery.cpp. Maps nn::socket::*
+// (lunakit wrapper) → hk::socket::Socket::instance()->* and the manual
+// FreeBSD sockaddr workaround → hk::socket::SocketAddrIpv4::parse.
 
 #include "ApDiscovery.hpp"
 
@@ -6,8 +10,11 @@
 #include <cstdint>
 #include <cstring>
 
-#include "nn/socket.hpp"
-#include "lib/nx/nx.h"
+#include "hk/Span.h"
+#include "hk/services/socket/address.h"
+#include "hk/services/socket/poll.h"
+#include "hk/services/socket/service.h"
+#include "hk/types.h"
 
 #include "../util/Json.hpp"
 #include "../util/Log.hpp"
@@ -17,13 +24,11 @@ namespace smoap::ap {
 
 namespace {
 
-// BSD socket constants (not exposed by lunakit's nn/socket.hpp). Mirrors the
-// set in ApClient.cpp — kept duplicated rather than extern'd to keep the
-// discovery TU self-contained.
-constexpr int kAfInet     = 2;
-constexpr int kSockDgram  = 2;
-constexpr int kSolSocket  = 0xffff;
-constexpr int kSoBroadcast = 0x0020;
+// Socket-option levels and names. hk::socket doesn't re-export the BSD
+// constants; values match Nintendo's bsd:u service (FreeBSD-derived).
+// Mirrors the matching block in ApClient.cpp.
+constexpr s32 kSolSocket   = 0xffff;
+constexpr s32 kSoBroadcast = 0x0020;
 
 // Probe timeouts (ms).
 constexpr std::uint32_t kLoopbackProbeMs  = 250;
@@ -50,39 +55,50 @@ std::size_t buildProbe(char* dst, std::size_t cap) {
     return take;
 }
 
-// Fill `addr` with the (host, port) tuple. Returns false on InetAton failure
-// (i.e. host wasn't a dotted-quad). Caller is responsible for socket-fd
-// lifetime; this just sets the destination address.
-bool makeSockaddr(sockaddr& addr, const char* host, std::uint16_t port) {
-    std::memset(&addr, 0, sizeof(addr));
-    addr.family = static_cast<u8>(kAfInet);
-    addr.port = nn::socket::InetHtons(port);
-    return nn::socket::InetAton(host, &addr.address) != 0;
-}
-
 // Open a UDP socket, optionally enabling SO_BROADCAST. Returns -1 on
-// failure. Caller closes via nn::socket::Close.
-int openUdpSocket(bool enable_broadcast) {
-    const int fd = nn::socket::Socket(kAfInet, kSockDgram, 0);
+// failure. Caller closes via hk::socket::Socket::close.
+s32 openUdpSocket(bool enable_broadcast) {
+    auto* sock = hk::socket::Socket::instance();
+    if (!sock) return -1;
+    auto vor = sock->socket(hk::socket::AddressFamily::Ipv4,
+                            hk::socket::Type::Datagram,
+                            hk::socket::Protocol::Udp);
+    if (!vor.hasValue()) return -1;
+    auto t = vor.getInnerValue();
+    const s32 fd = t.a;
     if (fd < 0) return -1;
     if (enable_broadcast) {
-        const int on = 1;
-        nn::socket::SetSockOpt(fd, kSolSocket, kSoBroadcast, &on, sizeof(on));
+        // Use the explicit Span-taking overload — the templated convenience
+        // form `setSockOpt(fd, level, opt, T&)` fails to compile because its
+        // body constructs Span<const u8> directly from `&opt` (an `s32*`),
+        // and Span's constructor wants `const u8*`. Same trap ApClient hit.
+        const s32 on = 1;
+        auto _ = sock->setSockOpt(
+            fd, kSolSocket, kSoBroadcast,
+            hk::Span<const u8>(reinterpret_cast<const u8*>(&on),
+                               sizeof(on)));
+        (void)_;
     }
     return fd;
 }
 
 // Wait up to `timeout_ms` for incoming data on `fd`. Returns true when
-// data is readable, false on timeout / select error.
-bool waitReadable(int fd, std::uint32_t timeout_ms) {
-    fd_set rfds;
-    FD_ZERO(&rfds);
-    FD_SET(fd, &rfds);
-    timeval tv{};
-    tv.tv_sec  = static_cast<long>(timeout_ms / 1000);
-    tv.tv_usec = static_cast<long>((timeout_ms % 1000) * 1000);
-    const s32 rc = nn::socket::Select(fd + 1, &rfds, nullptr, nullptr, &tv);
-    return rc > 0 && FD_ISSET(fd, &rfds);
+// data is readable, false on timeout / poll error.
+bool waitReadable(s32 fd, std::uint32_t timeout_ms) {
+    auto* sock = hk::socket::Socket::instance();
+    if (!sock) return false;
+    hk::socket::PollFd pfd[1] = {
+        {.fd = fd,
+         .requestedEvents = hk::socket::PollEvents::CanRead,
+         .returnedEvents  = hk::socket::PollEvents::Default},
+    };
+    auto vor = sock->poll(hk::Span<hk::socket::PollFd>(pfd, 1),
+                          static_cast<s32>(timeout_ms));
+    if (!vor.hasValue()) return false;
+    const auto t = vor.getInnerValue();
+    if (t.a <= 0) return false;
+    using PE = hk::socket::PollEvents;
+    return (pfd[0].returnedEvents & PE::CanRead) != 0;
 }
 
 // Parse a `{"t":"bridge","host":"<ip>","port":<int>,...}` reply into out.
@@ -139,33 +155,54 @@ bool parseReply(const char* data, std::size_t len, BridgeTarget& out) {
 
 // One probe: send `probe_data` to (host, port), wait up to timeout_ms for a
 // reply. On a successful parse, fill `out` and return true. On any failure
-// (sendto / select-timeout / parse-fail) return false. Caller manages the
-// outer socket lifetime so we can reuse it across the loopback / fallback
-// unicast pair.
-bool oneProbe(int fd, const char* probe_data, std::size_t probe_len,
+// (sendto / poll-timeout / parse-fail) return false.
+bool oneProbe(s32 fd, const char* probe_data, std::size_t probe_len,
               const char* host, std::uint16_t port,
               std::uint32_t timeout_ms, BridgeTarget& out) {
-    sockaddr addr;
-    if (!makeSockaddr(addr, host, port)) {
-        SMOAP_LOG_WARN("[discover] InetAton failed for %s", host);
+    auto* sock = hk::socket::Socket::instance();
+    if (!sock) return false;
+    // SocketAddrIpv4::parse encapsulates the Nintendo 16-byte sockaddr
+    // layout that production exlaunch had to construct by hand.
+    auto parsed = hk::socket::SocketAddrIpv4::parse(host, port);
+    if (!parsed.hasValue()) {
+        SMOAP_LOG_WARN("[discover] SocketAddrIpv4::parse failed for %s", host);
         return false;
     }
-    const s32 sent = nn::socket::SendTo(
-        fd, probe_data, probe_len, 0, &addr, sizeof(addr));
-    if (sent < 0) {
-        const int err = nn::socket::GetLastErrno();
-        SMOAP_LOG_WARN("[discover] SendTo %s:%u failed errno=%d",
-                       host, port, err);
+    const hk::socket::SocketAddrIpv4 addr = parsed.getInnerValue();
+    auto send_vor = sock->sendTo(
+        fd,
+        hk::Span<const u8>(reinterpret_cast<const u8*>(probe_data), probe_len),
+        0, addr);
+    if (!send_vor.hasValue()) {
+        SMOAP_LOG_WARN("[discover] sendTo %s:%u failed (IPC error)", host, port);
         return false;
+    }
+    {
+        const auto t = send_vor.getInnerValue();
+        if (t.a < 0) {
+            SMOAP_LOG_WARN("[discover] sendTo %s:%u failed errno=%d",
+                           host, port, t.b);
+            return false;
+        }
     }
     if (!waitReadable(fd, timeout_ms)) return false;
     char buf[kReplyBufBytes];
-    sockaddr from{};
-    u32 from_len = sizeof(from);
-    const s32 n = nn::socket::RecvFrom(
-        fd, buf, sizeof(buf), 0, &from, &from_len);
-    if (n <= 0) return false;
-    return parseReply(buf, static_cast<std::size_t>(n), out);
+    hk::socket::SocketAddrIpv4 from{};
+    auto recv_vor = sock->recvFrom(
+        fd,
+        hk::Span<u8>(reinterpret_cast<u8*>(buf), sizeof(buf)),
+        0, from);
+    if (!recv_vor.hasValue()) return false;
+    const auto rt = recv_vor.getInnerValue();
+    if (rt.a <= 0) return false;
+    return parseReply(buf, static_cast<std::size_t>(rt.a), out);
+}
+
+void closeSocket(s32 fd) {
+    auto* sock = hk::socket::Socket::instance();
+    if (!sock) return;
+    auto _ = sock->close(fd);
+    (void)_;
 }
 
 }  // namespace
@@ -177,14 +214,14 @@ bool resolveBridge(BridgeTarget& out, const BridgeTarget& fallback,
     if (probe_len == 0) return false;
 
     // ---- Step 1: loopback (Ryujinx-on-same-host) ----
-    int fd = openUdpSocket(/*enable_broadcast=*/false);
+    s32 fd = openUdpSocket(/*enable_broadcast=*/false);
     if (fd >= 0) {
         BridgeTarget t;
         const bool ok = oneProbe(
             fd, probe, probe_len,
             "127.0.0.1", discovery_port,
             kLoopbackProbeMs, t);
-        nn::socket::Close(fd);
+        closeSocket(fd);
         if (ok) {
             SMOAP_LOG_INFO("[discover] resolved via loopback -> %s:%u",
                            t.host.c_str(), t.port);
@@ -206,7 +243,7 @@ bool resolveBridge(BridgeTarget& out, const BridgeTarget& fallback,
                 "255.255.255.255", discovery_port,
                 kBroadcastProbeMs, t);
         }
-        nn::socket::Close(fd);
+        closeSocket(fd);
         if (resolved) {
             SMOAP_LOG_INFO("[discover] resolved via broadcast -> %s:%u",
                            t.host.c_str(), t.port);
@@ -226,7 +263,7 @@ bool resolveBridge(BridgeTarget& out, const BridgeTarget& fallback,
                 fd, probe, probe_len,
                 fallback.host.c_str(), discovery_port,
                 kFallbackProbeMs, t);
-            nn::socket::Close(fd);
+            closeSocket(fd);
             if (ok) {
                 SMOAP_LOG_INFO("[discover] resolved via fallback-unicast -> %s:%u",
                                t.host.c_str(), t.port);

@@ -44,19 +44,17 @@ The setup wizard captures your PC's LAN IP silently and bakes it as the fallback
 For manual / dev-loop builds:
 
 ```pwsh
-cd C:\Users\maxwe\Documents\smo_archipelago\switch-mod
-& "C:/Program Files/CMake/bin/cmake.exe" -S . -B build -G Ninja `
-    -DCMAKE_TOOLCHAIN_FILE=lunakit-vendor/cmake/toolchain.cmake `
+cd C:\Users\maxwe\Documents\smo_archipelago
+python scripts\build_switchmod.py `
     -DBRIDGE_HOST=192.168.1.187     # your PC's LAN IP (fallback only)
 # Optional:
 #   -DBRIDGE_PORT=17777
 #   -DDISCOVERY_PORT=17776
 #   -DBRIDGE_RETRY_MS=3000
 #   -DBRIDGE_RECV_TIMEOUT_MS=200
-#   -DBRIDGE_LOG_LEVEL=info
 ```
 
-The values are sticky in the cmake cache so `--build` and `--install` reuse them. Editing `ap_config.json` on the SD after install has no effect — it's a documentation artifact only on retail.
+The wrapper drives Windows-native CMake + LLVM 19 + Ninja against the Hakkun + OdysseyHeaders submodules. Editing `ap_config.json` on the SD after install has no effect — it's a documentation artifact only on retail.
 
 ### Multi-Switch setup
 
@@ -117,7 +115,7 @@ The M3 build delivers:
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| SMO crashes on launch (boot loop or hang on splash) | NPDM/ABI mismatch, OR a hook symbol missed on 1.0.0 (we abort fail-loud) | Rebuild from clean. Check lm log for `R_ABORT_UNLESS` failure naming the missing mangled symbol — cross-reference the comments in `switch-mod/src/hooks/HookSymbols.hpp` for the fallback (delta-poll the relevant field from `drawMain`) |
+| SMO crashes on launch (boot loop or hang on splash) | NPDM/ABI mismatch, OR a hook symbol missed on 1.0.0 (we abort fail-loud) | Rebuild from clean. Check lm log for a `lookupSymbol FAILED` line naming the missing mangled symbol — cross-reference `switch-mod/syms/game/SmoApSymbols.sym` to find the entry, fix the mangle, rebuild. See the [smo-symbol-discovery skill](../.claude/skills/smo-symbol-discovery/SKILL.md). |
 | No `switch HELLO` in SMOClient log | Stale bridge IP baked into `subsdk9` (PC moved networks since last setup), PC firewall blocking 17777, or NIFM not up on Switch | Type `/setup` in SMOClient to rebuild with current LAN IP; verify firewall rule (`New-NetFirewallRule -DisplayName "SMO AP" -Direction Inbound -Protocol TCP -LocalPort 17777 -Action Allow`); check mod log for `nn::nifm::Initialize failed` or `connect failed` lines |
 | HELLO arrives but `hello_ack` never logged on Switch | SMOClient can't decode our HELLO (wire-protocol skew between mod and apworld versions) | SMOClient log shows the parse error; rebuild with `/setup` to refresh the mod to match the apworld |
 | Switch ConnState stuck on `CONN` (heartbeat lines) | Socket connected but SMOClient not listening on the IP/port the mod was built against | Verify SMOClient is running; check `netstat -ano \| findstr 17777` on PC shows LISTENING |

@@ -1,6 +1,6 @@
 // TCP client to the bridge.
 //
-// Owns a single nn::socket TCP connection; runs its own background thread.
+// Owns a single hk::socket TCP connection; runs its own background thread.
 // Reads line-delimited JSON, dispatches into ApState. Writes outbound messages
 // from ApState rings.
 //
@@ -32,8 +32,9 @@ public:
     static ApClient& instance();
 
     // Call ONCE from a frame-thread context (GameSystemInit hook callback,
-    // after Orig). Does the nifm + nn::socket bring-up that requires an
-    // nn-aware thread. start() depends on this having completed.
+    // after Orig). Does the nifm bring-up (requires an nn-aware thread) and
+    // initializes the hk::socket::Socket client against bsd:u. start() depends
+    // on this having completed.
     void initNetworking();
 
     void start(const BridgeTarget& target);
