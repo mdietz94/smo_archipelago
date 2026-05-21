@@ -764,7 +764,9 @@ def run_build_switchmod(
     so the build uses the SAME toolchain the prereq check passed —
     not whatever's first on the user's PATH.
     """
-    from .prereqs import resolved_llvm_bin, resolved_mingw_bin
+    from .prereqs import (
+        resolved_llvm_bin, resolved_mingw_bin, resolved_python312_bin,
+    )
 
     script = bundled_script("build_switchmod.py")
     mod_root = bundled_switch_mod()
@@ -778,6 +780,16 @@ def run_build_switchmod(
     mingw = resolved_mingw_bin()
     if mingw:
         env["SMOAP_MINGW_BIN"] = mingw
+    # Pin Python to the EXACT 3.12 that install_sail_python_deps pip-
+    # installed lz4 into. Without this, build_switchmod.py falls back to
+    # dirname(sys.executable), which is whatever Python is currently
+    # running the wizard — and that can be 3.14 if Archipelago's
+    # launcher chose a system Python via its fallback chain. cmake's
+    # bare `python elf2nso.py` would then resolve to 3.14, which doesn't
+    # have lz4 (lz4 lives in 3.12's user-site).
+    python312 = resolved_python312_bin()
+    if python312:
+        env["SMOAP_PYTHON_BIN"] = python312
     # The wrapper hardcodes its source dir relative to its own location,
     # so it'll find `<bundled>/switch_mod/` correctly when invoked as
     # `python <bundled>/scripts/build_switchmod.py`.

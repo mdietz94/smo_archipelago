@@ -69,6 +69,7 @@ def isolated_portable_roots(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(prereqs, "_resolved_llvm_bin", None)
     monkeypatch.setattr(prereqs, "_resolved_mingw_bin", None)
+    monkeypatch.setattr(prereqs, "_resolved_python312_bin", None)
 
 
 # ---------- check_python312 ----------
@@ -123,6 +124,43 @@ def test_python312_found_at_winget_path_even_when_not_on_path(
     assert str(py_exe) in r.detail
     import os
     assert str(launcher_dir) in os.environ["PATH"].split(os.pathsep)
+
+
+def test_python312_caches_resolved_bin_dir(
+    monkeypatch, tmp_path, fake_run, isolated_portable_roots,
+) -> None:
+    """`check_python312` should cache the actual python.exe parent dir
+    in `_resolved_python312_bin`, resolved via `-c "import sys;
+    print(sys.executable)"` when the probe entry is a launcher.
+    `build.py` reads this and sets `SMOAP_PYTHON_BIN` on the build
+    subprocess so cmake's bare `python elf2nso.py` resolves to the SAME
+    3.12 install_sail_python_deps pip-installed lz4 into — not whatever
+    Python is currently running the wizard (which can be 3.14 under
+    Archipelago's launcher fallback chain)."""
+    interp_dir = tmp_path / "Programs" / "Python" / "Python312"
+    interp_dir.mkdir(parents=True)
+    python_exe = interp_dir / "python.exe"
+    python_exe.write_text("")
+    launcher_dir = tmp_path / "Programs" / "Python" / "Launcher"
+    launcher_dir.mkdir(parents=True)
+    py_exe = launcher_dir / "py.exe"
+    py_exe.write_text("")
+    monkeypatch.setattr(
+        prereqs, "_winget_python312_commands",
+        lambda: [[str(py_exe), "-3.12", "--version"]],
+    )
+    fake_run({
+        f"{py_exe} -3.12 --version": (0, "Python 3.12.7\n", ""),
+        f"{py_exe} -3.12 -c import sys; print(sys.executable)":
+            (0, f"{python_exe}\n", ""),
+    })
+
+    r = check_python312()
+    assert r.ok
+    # The cache should point at the interpreter's parent dir — NOT the
+    # launcher dir. Build PATH-prepends this, so we want the real
+    # python.exe to land first.
+    assert prereqs.resolved_python312_bin() == str(interp_dir)
 
 
 # ---------- check_llvm19 ----------

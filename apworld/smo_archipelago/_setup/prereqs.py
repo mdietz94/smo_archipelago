@@ -211,6 +211,43 @@ def _prepend_path(dir_path: Path) -> None:
     os.environ["PATH"] = s + os.pathsep + cur if cur else s
 
 
+# Module-level cache of the resolved Python 3.12 `python.exe` dir. Build
+# step reads this via `resolved_python312_bin()` and exports it as
+# `SMOAP_PYTHON_BIN` to the build subprocess, so cmake's bare `python`
+# invocation of elf2nso.py resolves to the SAME 3.12 that
+# install_sail_python_deps pip-installed lz4 into — regardless of what
+# Python is currently running the wizard. (The wizard can be launched
+# under 3.14 e.g. via Archipelago's launcher fallback chain when `py
+# -3.12` isn't installed; without this pin, build_switchmod.py would
+# fall back to dirname(sys.executable) = the 3.14 dir, and cmake's
+# `python elf2nso.py` would resolve to 3.14, which doesn't have lz4.)
+_resolved_python312_bin: str | None = None
+
+
+def resolved_python312_bin() -> str | None:
+    """Return the dir containing the wizard-verified Python 3.12
+    `python.exe`, or None if `check_python312` hasn't run yet or didn't
+    resolve a 3.12 install. Used by build.py to pin SMOAP_PYTHON_BIN
+    explicitly instead of relying on sys.executable inference."""
+    return _resolved_python312_bin
+
+
+def _resolve_python_exe(prefix: list[str]) -> str | None:
+    """Given an invocation prefix (e.g. `["py.exe", "-3.12"]` or
+    `["python3.12"]`), return the absolute path of the actual
+    `python.exe` it launches — by asking the interpreter itself via
+    `-c "import sys; print(sys.executable)"`. Used to recover the
+    interpreter dir when the prefix is a launcher (py.exe) rather than
+    the interpreter directly. Returns None on any failure."""
+    r = _safe_run([*prefix, "-c", "import sys; print(sys.executable)"])
+    if r is None or r[0] != 0:
+        return None
+    path = (r[1] or "").strip().splitlines()[0] if (r[1] or "").strip() else ""
+    if not path or not Path(path).is_file():
+        return None
+    return path
+
+
 def _ensure_python3_shim(python_exe: Path) -> None:
     """Create a `python3.exe` copy of `python_exe` in the same directory.
 
@@ -272,6 +309,8 @@ def check_python312() -> PrereqResult:
     is prepended to `os.environ["PATH"]` so the build step's bare-name
     `shutil.which("py")` lookup finds it without a shell restart.
     """
+    global _resolved_python312_bin
+
     for cmd in _winget_python312_commands():
         r = _safe_run(cmd)
         if r is None:
@@ -279,12 +318,17 @@ def check_python312() -> PrereqResult:
         rc, out, err = r
         if rc == 0:
             _prepend_path(Path(cmd[0]).parent)
-            # Self-heal the python3.exe shim. Only meaningful when cmd[0]
-            # is python.exe itself (not py.exe — those live in different
-            # dirs under winget's layout).
             exe = Path(cmd[0])
+            # Resolve the actual python.exe (cmd[0] may be py.exe — a
+            # launcher in a different dir than the interpreter itself).
+            # Cache that dir so build.py can pin SMOAP_PYTHON_BIN to it.
             if exe.name.lower() == "python.exe":
-                _ensure_python3_shim(exe)
+                python_exe_path: str | None = str(exe)
+            else:
+                python_exe_path = _resolve_python_exe(list(cmd[:-1]))
+            if python_exe_path:
+                _resolved_python312_bin = str(Path(python_exe_path).parent)
+                _ensure_python3_shim(Path(python_exe_path))
             ver = (out + err).strip()
             return PrereqResult("python312", "Python 3.12", True,
                                 f"{ver} ({cmd[0]})",
@@ -295,6 +339,13 @@ def check_python312() -> PrereqResult:
             continue
         rc, out, err = r
         if rc == 0:
+            # PATH-resolved fallback. Resolve the actual python.exe (py
+            # launcher case) so SMOAP_PYTHON_BIN points at the real
+            # interpreter dir, not the launcher dir.
+            python_exe_path = _resolve_python_exe(list(cmd[:-1]))
+            if python_exe_path:
+                _resolved_python312_bin = str(Path(python_exe_path).parent)
+                _ensure_python3_shim(Path(python_exe_path))
             ver = (out + err).strip()
             return PrereqResult("python312", "Python 3.12", True, ver,
                                 auto_installable=True)
