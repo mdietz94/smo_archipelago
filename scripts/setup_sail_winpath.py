@@ -22,9 +22,15 @@ import os
 import subprocess
 import sys
 
-CMAKE_BIN = r"C:\Program Files\CMake\bin"
-NINJA_BIN = r"C:\Users\maxwe\AppData\Local\Microsoft\WinGet\Packages\Ninja-build.Ninja_Microsoft.Winget.Source_8wekyb3d8bbwe"
-MINGW_BIN = r"C:\msys64\mingw64\bin"
+# Each binary dir is overridable via the matching SMOAP_* env var so the
+# wizard can point MINGW_BIN at the WinLibs portable install. Defaults match
+# a winget + msys2 hand-install so repo devs keep working unchanged.
+CMAKE_BIN = os.environ.get("SMOAP_CMAKE_BIN", r"C:\Program Files\CMake\bin")
+NINJA_BIN = os.environ.get(
+    "SMOAP_NINJA_BIN",
+    r"C:\Users\maxwe\AppData\Local\Microsoft\WinGet\Packages\Ninja-build.Ninja_Microsoft.Winget.Source_8wekyb3d8bbwe",
+)
+MINGW_BIN = os.environ.get("SMOAP_MINGW_BIN", r"C:\msys64\mingw64\bin")
 
 # The script runs from switch-mod/ (cwd contains `hakkun/` submodule).
 SWITCH_MOD = os.getcwd()

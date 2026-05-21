@@ -163,7 +163,12 @@ def test_every_run_step_has_both_timeouts_configured(monkeypatch) -> None:
     """Each `run_*` function must pass BOTH wall_timeout_s and
     stall_timeout_s to _stream_subprocess. Catches the case where a new
     runner is added and someone forgets the timeout kwargs — the
-    wizard would silently get a child that can hang forever."""
+    wizard would silently get a child that can hang forever.
+
+    Post-Hakkun the build is driven by a single `run_build_switchmod`
+    wrapper (replaces the old cmake_configure + cmake_build pair), so
+    the runner count is 3 not 4. If a future change re-splits the build
+    step or adds a new runner, this list needs to grow."""
     from _setup import build
 
     captured: list[dict] = []
@@ -179,8 +184,6 @@ def test_every_run_step_has_both_timeouts_configured(monkeypatch) -> None:
         return BuildResult(ok=True, returncode=0, log="")
 
     monkeypatch.setattr(build, "_stream_subprocess", fake_stream)
-    # Stub the bundle-extraction so we don't need a real zip on disk;
-    # bundled_* functions just need to return any path-like object.
     from pathlib import Path
     monkeypatch.setattr(build, "bundled_script", lambda name: Path(name))
     monkeypatch.setattr(build, "bundled_data_file", lambda name: Path(name))
@@ -190,17 +193,13 @@ def test_every_run_step_has_both_timeouts_configured(monkeypatch) -> None:
     )
     monkeypatch.setattr(build, "data_dir", lambda: Path("/fake/data"))
     monkeypatch.setattr(build, "build_dir", lambda: Path("/fake/build"))
-    monkeypatch.setattr(
-        "_setup.prereqs.resolved_cmake", lambda: "/fake/cmake"
-    )
 
     # Drive each runner. Each must emit one entry with both timeouts.
     build.run_sync_capture_table()
-    build.run_cmake_configure("10.0.0.1")
-    build.run_cmake_build()
+    build.run_build_switchmod("10.0.0.1")
     build.run_extract_maps(Path("fake.nsp"))
 
-    assert len(captured) == 4
+    assert len(captured) == 3
     for entry in captured:
         cmd_str = " ".join(str(c) for c in entry["cmd"])
         assert entry["wall"] is not None, (

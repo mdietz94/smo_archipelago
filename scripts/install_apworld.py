@@ -201,17 +201,28 @@ def main(argv: list[str] | None = None) -> int:
             print(f"FAIL: --bundle-mod requested but {mod_root} missing",
                   file=sys.stderr)
             return 2
-        # Submodule presence check: if lunakit-vendor/cmake/toolchain.cmake
-        # isn't there the build will fail on the user's machine for an
-        # entirely cosmetic reason. Catch it now.
-        toolchain = mod_root / "lunakit-vendor" / "cmake" / "toolchain.cmake"
-        if not toolchain.exists():
-            print(
-                f"FAIL: --bundle-mod requested but {toolchain} missing "
-                f"(run `git submodule update --init --recursive` first)",
-                file=sys.stderr,
-            )
-            return 2
+        # Submodule presence check: post-Hakkun the two load-bearing
+        # submodules are switch-mod/sys/ (LibHakkun) and
+        # switch-mod/lib/OdysseyHeaders/. Sentinel each on a file that's
+        # guaranteed to exist in a populated submodule so the failure
+        # surfaces here (with a clear init instruction) rather than later
+        # as a cmake error on the user's machine.
+        hakkun_sentinel = mod_root / "sys" / "hakkun" / "include" / "hk"
+        odyssey_sentinel = (
+            mod_root / "lib" / "OdysseyHeaders" / "CMakeLists.txt"
+        )
+        for sentinel, label in (
+            (hakkun_sentinel, "LibHakkun (switch-mod/sys)"),
+            (odyssey_sentinel, "OdysseyHeaders (switch-mod/lib/OdysseyHeaders)"),
+        ):
+            if not sentinel.exists():
+                print(
+                    f"FAIL: --bundle-mod requested but {label} submodule is "
+                    f"missing — {sentinel} not found. Run "
+                    f"`git submodule update --init --recursive` first.",
+                    file=sys.stderr,
+                )
+                return 2
         bundled_mod_files = _collect_files(
             mod_root,
             skip_names=MOD_SKIP_NAMES,

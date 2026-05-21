@@ -9,7 +9,7 @@ The wizard's job is to turn a fresh machine into one that can:
   - resolve raw SMO identifiers to apworld names (extract shine/capture maps
     from the user's own SMO 1.0.0 NSP — Nintendo IP cannot be shipped)
   - run a Switch module compiled for the user's bridge PC IP (bake the IP
-    into `subsdk9` via the devkitPro/lunakit cross-compile)
+    into `subsdk9` via the LLVM 19 + WinLibs cross-compile)
   - deploy the result either to a real Switch's SD card or to Ryujinx's
     mods directory.
 
@@ -17,8 +17,12 @@ The packages here are organized so each step is independently testable:
 
   - `smoap_file.py`  — JSON metadata read/write (no I/O dependencies)
   - `net.py`         — LAN-IP autodetect
-  - `prereqs.py`     — detect devkitPro, hactool, prod.keys, Python 3.12, …
-  - `build.py`       — drive `cmake` + `extract_shine_map` + `sync_capture_table`
+  - `prereqs.py`     — detect LLVM 19, WinLibs g++, sail Python deps,
+                       hactool, prod.keys, Python 3.12, …
+  - `installers.py`  — silent installers; LLVM + WinLibs land portable
+                       under `%LOCALAPPDATA%/SMOArchipelago/`
+  - `build.py`       — drive `build_switchmod.py` wrapper +
+                       `extract_shine_map` + `sync_capture_table`
   - `deploy.py`      — copy outputs to SD card or Ryujinx
   - `wizard.py`      — Kivy multi-page UI (imports Kivy lazily so the rest
                        of the package stays importable on AP-gen hosts)

@@ -8,13 +8,19 @@ and calling main directly) catches argument-parsing and exit-code regressions.
 Skipped when run outside the repo (e.g. against a zip-installed apworld via
 the in-zip tests/, which we don't ship — tests are excluded from the zip).
 
-`--bundle-mod` tests self-skip when `switch-mod/lunakit-vendor/` isn't
-populated — the python-unit CI job intentionally doesn't init the C++
-submodules (they're AArch64-only and the host tests don't use them); the
-release workflow does init them, so the bundling code is still exercised
-end-to-end when it actually matters. Per-submodule guard rather than a
-single broad skip so `--bundle-scripts` keeps running even when the
-switch-mod submodule is absent.
+`--bundle-mod` tests self-skip when the Hakkun + OdysseyHeaders submodules
+aren't populated — the python-unit CI job intentionally doesn't init the
+C++ submodules (they're AArch64-only and the host tests don't use them);
+the release workflow does init them, so the bundling code is still
+exercised end-to-end when it actually matters.
+
+Post-Hakkun the two load-bearing submodules are:
+  - switch-mod/sys/ (LibHakkun, with nested tools/senobi/)
+  - switch-mod/lib/OdysseyHeaders/
+
+Both must be present for `--bundle-mod` to succeed; either being absent
+should produce a clear FAIL message from install_apworld.py rather than a
+silent half-bundle.
 """
 
 from __future__ import annotations
@@ -30,21 +36,25 @@ import pytest
 REPO = Path(__file__).resolve().parents[3]
 INSTALL_SCRIPT = REPO / "scripts" / "install_apworld.py"
 OUTPUT_PATH = REPO / "vendor" / "Archipelago" / "custom_worlds" / "meatballs.apworld"
-LUNAKIT_TOOLCHAIN = REPO / "switch-mod" / "lunakit-vendor" / "cmake" / "toolchain.cmake"
+HAKKUN_SENTINEL = REPO / "switch-mod" / "sys" / "hakkun" / "include" / "hk"
+ODYSSEY_SENTINEL = REPO / "switch-mod" / "lib" / "OdysseyHeaders" / "CMakeLists.txt"
 
 
 def _switch_mod_submodule_present() -> bool:
-    """True iff the switch-mod submodules are populated (toolchain.cmake
-    is the sentinel — install_apworld.py also checks this exact file)."""
-    return LUNAKIT_TOOLCHAIN.exists()
+    """True iff both Hakkun + OdysseyHeaders submodules are populated
+    (install_apworld.py checks these exact sentinels)."""
+    return HAKKUN_SENTINEL.exists() and ODYSSEY_SENTINEL.exists()
 
 
 # Module-level skip marker for tests that need the C++ submodules.
 needs_switch_mod_submodule = pytest.mark.skipif(
     not _switch_mod_submodule_present(),
-    reason=f"switch-mod submodules not populated ({LUNAKIT_TOOLCHAIN} "
-           f"missing); run `git submodule update --init --recursive` to "
-           f"enable --bundle-mod tests",
+    reason=(
+        f"switch-mod submodules not populated "
+        f"({HAKKUN_SENTINEL} or {ODYSSEY_SENTINEL} missing); "
+        f"run `git submodule update --init --recursive` to enable "
+        f"--bundle-mod tests"
+    ),
 )
 
 
@@ -124,15 +134,43 @@ def test_default_install_excludes_setup_bundle(install_script_present) -> None:
 
 @needs_switch_mod_submodule
 def test_bundle_mod_includes_switch_mod_sources(install_script_present) -> None:
+    """Post-Hakkun, --bundle-mod must ship the LibHakkun and
+    OdysseyHeaders submodules alongside switch-mod/src so the wizard's
+    build step on the user's machine can compile subsdk9 end-to-end.
+    lunakit-vendor is no longer in the tree (retired by the cutover);
+    its absence is the inverse pin — see
+    `test_bundle_mod_excludes_lunakit_vendor` below."""
     rc, out, err = _run_install(["--bundle-mod"])
     assert rc == 0, f"exit {rc}: stdout={out!r} stderr={err!r}"
     members = _zip_members(OUTPUT_PATH)
     for required in (
         "meatballs/_setup/switch_mod/CMakeLists.txt",
         "meatballs/_setup/switch_mod/src/main.cpp",
-        "meatballs/_setup/switch_mod/lunakit-vendor/cmake/toolchain.cmake",
+        # LibHakkun submodule — headers + cmake + the nested senobi tools
+        # the build invokes for npdm/pfs0 generation.
+        "meatballs/_setup/switch_mod/sys/hakkun/include/hk/hook/Trampoline.h",
+        "meatballs/_setup/switch_mod/sys/cmake/generate_exefs.cmake",
+        "meatballs/_setup/switch_mod/sys/tools/senobi/build_npdm.py",
+        # OdysseyHeaders submodule — SMO function declarations the
+        # cross-compile needs at every TU.
+        "meatballs/_setup/switch_mod/lib/OdysseyHeaders/CMakeLists.txt",
     ):
         assert required in members, f"missing {required}"
+
+
+@needs_switch_mod_submodule
+def test_bundle_mod_excludes_lunakit_vendor(install_script_present) -> None:
+    """The lunakit-vendor submodule was retired by the Hakkun cutover.
+    If any path under that name shows up in the bundled zip, the tree
+    re-introduced a stale dependency that doesn't belong."""
+    rc, _, _ = _run_install(["--bundle-mod"])
+    assert rc == 0
+    members = _zip_members(OUTPUT_PATH)
+    leaked = [m for m in members if "lunakit-vendor" in m]
+    assert not leaked, (
+        f"lunakit-vendor submodule paths leaked into the bundled zip: "
+        f"{leaked[:5]}"
+    )
 
 
 @needs_switch_mod_submodule
@@ -149,12 +187,19 @@ def test_bundle_mod_excludes_build_artifacts(install_script_present) -> None:
 
 
 def test_bundle_scripts_includes_extractor(install_script_present) -> None:
+    """--bundle-scripts must ship the extractor + sync helper AND the
+    Hakkun wrappers the wizard's build step invokes
+    (build_switchmod.py + patch_hakkun.py + setup_sail_winpath.py).
+    Without these the wizard's build phase can't actually compile."""
     rc, _, _ = _run_install(["--bundle-scripts"])
     assert rc == 0
     members = _zip_members(OUTPUT_PATH)
     for required in (
         "meatballs/_setup/scripts/extract_shine_map.py",
         "meatballs/_setup/scripts/sync_capture_table.py",
+        "meatballs/_setup/scripts/build_switchmod.py",
+        "meatballs/_setup/scripts/patch_hakkun.py",
+        "meatballs/_setup/scripts/setup_sail_winpath.py",
     ):
         assert required in members, f"missing {required}"
 

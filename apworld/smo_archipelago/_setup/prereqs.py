@@ -31,21 +31,64 @@ from pathlib import Path
 # No-op on non-Windows.
 _NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
-# Hard min for cmake — lunakit's toolchain file uses target_link_options
-# (3.13+) and project(... LANGUAGES CXX) policies (3.24 enables CMP0135),
-# and our switch-mod uses target features that landed in 3.24.
+# Hard min for cmake — switch-mod / LibHakkun use target features that landed
+# in 3.24 (project(... LANGUAGES CXX) policies, CMP0135).
 MIN_CMAKE = (3, 24)
 
-# Install pages we link to from the wizard. Kept in this module so the
-# wizard layer is pure layout; copy-paste from
-# https://devkitpro.org/wiki/Getting_Started → the Windows-installer page
-# is the canonical entry.
+# LibHakkun's libc++ headers are ABI-pinned to LLVM 19. Anything 20+ fails to
+# link at sail's host-compile step; anything pre-19 lacks the C++23 features
+# the cross-compile relies on. The wizard refuses both directions.
+LLVM_MAJOR = 19
+
+
+def appdata_root() -> Path:
+    """Per-user APPDATA root used by the wizard's caches. Avoids importing
+    `_setup.appdata_root` here so this module stays Kivy-free at import."""
+    base = os.environ.get("APPDATA")
+    if base:
+        return Path(base) / "SMOArchipelago"
+    return Path.home() / ".local" / "share" / "SMOArchipelago"
+
+
+def localappdata_tools_root() -> Path:
+    """Per-user LOCALAPPDATA root for portable toolchain installs. Distinct
+    from `appdata_root()` because LOCALAPPDATA is roaming-profile-excluded
+    (a domain user wouldn't want a ~4 GB toolchain following them across
+    machines) and tools are machine-specific anyway."""
+    base = os.environ.get("LOCALAPPDATA")
+    if base:
+        return Path(base) / "SMOArchipelago"
+    # POSIX fallback — same dir as the appdata one. Users on POSIX don't
+    # actually run the wizard (it's Windows-only), but tests touch this.
+    return appdata_root()
+
+
+# Where the wizard's portable LLVM / WinLibs / sail-deps marker land. Single
+# source of truth so installers + detectors stay in lockstep.
+def llvm_portable_root() -> Path:
+    return localappdata_tools_root() / "llvm"
+
+
+def winlibs_portable_root() -> Path:
+    return localappdata_tools_root() / "winlibs"
+
+
+def sail_deps_marker_path() -> Path:
+    """Marker file that records when `install_sail_python_deps` last
+    succeeded. Faster than re-running `pip show` on every wizard open."""
+    return localappdata_tools_root() / "sail_python_deps.ok"
+
+
+# Install pages surfaced by the wizard's "Install..." fallback link when
+# auto-install isn't available. Kept here so the wizard layer is pure layout.
 INSTALL_URLS = {
     # #files anchor scrolls past the release-notes prose straight to the
     # download table. Without it, first-time users land at the top of the
     # page and reported being confused about what to click.
     "python312": "https://www.python.org/downloads/release/python-3120/#files",
-    "devkitpro": "https://devkitpro.org/wiki/Getting_Started",
+    "llvm19": "https://github.com/llvm/llvm-project/releases/tag/llvmorg-19.1.7",
+    "winlibs": "https://winlibs.com/",
+    "sail_python_deps": "",
     "cmake": "https://cmake.org/download/",
     "ninja": "https://github.com/ninja-build/ninja/releases",
     "hactool": "https://github.com/SciresM/hactool/releases",
@@ -219,95 +262,300 @@ def check_python312() -> PrereqResult:
     )
 
 
-# Default install roots probed when DEVKITPRO env var is missing. The
-# Windows installer does NOT reliably set the system env var (devkitPro
-# uses its msys2 shell to set it for that shell only), so a brand-new
-# devkitPro install often shows up with no env var visible to a fresh
-# Python process. We fall back to these well-known defaults so the wizard
-# Just Works on a vanilla install. Order matters: most-specific first.
-_DEVKITPRO_DEFAULT_ROOTS = (
-    Path("C:/devkitPro"),
-    Path("/opt/devkitpro"),
-    Path("/usr/local/devkitpro"),
-)
+# ---------------------------------------------------------------------------
+# LLVM 19.1.x — cross-compiler for the Switch target.
+# ---------------------------------------------------------------------------
+
+# Module-level cache of the resolved LLVM bin dir, so build.py can mirror
+# the path the prereq check passed without re-probing.
+_resolved_llvm_bin: str | None = None
 
 
-def _devkitpro_gxx_under(root: Path) -> Path | None:
-    """Return the cross-compiler path under `root` if it exists. Tries
-    both Windows (.exe) and POSIX layouts."""
-    win = root / "devkitA64" / "bin" / "aarch64-none-elf-g++.exe"
-    if win.exists():
-        return win
-    posix = root / "devkitA64" / "bin" / "aarch64-none-elf-g++"
-    if posix.exists():
-        return posix
+def resolved_llvm_bin() -> str | None:
+    """Return the LLVM `bin/` dir resolved by the most recent `check_llvm19`
+    call, or None if detection hasn't been run or didn't find one."""
+    return _resolved_llvm_bin
+
+
+def _parse_clang_version(text: str) -> tuple[int, int, int] | None:
+    """`clang --version` prints `clang version 19.1.7 ...` on portable
+    builds and `(...) clang version 19.1.7 ...` on Apple/Linux distros.
+    Capture the dotted triple regardless of leading prose."""
+    m = re.search(r"clang version (\d+)\.(\d+)(?:\.(\d+))?", text)
+    if not m:
+        return None
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3) or "0"))
+
+
+def _llvm_gate_version(ver: tuple[int, int, int]) -> str | None:
+    """Return None if `ver` is an acceptable LLVM 19.1.x, else a short
+    string explaining why it was rejected. LibHakkun's libc++ headers
+    won't link against LLVM 20+; pre-19.1 lacks the C++23 features
+    sail and the cross-compile rely on."""
+    if ver[0] != LLVM_MAJOR:
+        return (f"need LLVM {LLVM_MAJOR}.x (got {ver[0]}.{ver[1]}.{ver[2]}); "
+                f"LibHakkun's libc++ ABI is pinned at 19")
+    if ver[1] < 1:
+        return (f"need LLVM 19.1.x (got 19.{ver[1]}.{ver[2]}); 19.0.x "
+                f"predates the libc++ features sail uses")
     return None
 
 
-def check_devkitpro() -> PrereqResult:
-    """devkitPro installation (devkitA64 cross-compiler).
+def check_llvm19() -> PrereqResult:
+    """LLVM 19.1.x cross-compiler.
 
-    Probes a chain of candidate install roots in order; the first one
-    with a working cross-compiler wins. The chain is:
+    Probe order:
+      1. Portable install at `%LOCALAPPDATA%\\SMOArchipelago\\llvm\\bin\\clang.exe`
+         — the path the wizard's auto-installer writes to. Wins
+         unconditionally so a user with the wrong LLVM on PATH still
+         gets the version the wizard built against.
+      2. `clang --version` on PATH — accept only if the version is 19.1.x.
+         Lets a developer with their own (correct) LLVM install skip
+         the ~3.3 GB download.
 
-      1. `DEVKITPRO` env var, if set.
-      2. Well-known default install roots (`_DEVKITPRO_DEFAULT_ROOTS`).
-
-    Important: the env var is checked AND the defaults are probed even
-    when the env var IS set. On Windows the devkitPro installer often
-    sets `DEVKITPRO=/opt/devkitpro` — its msys2-rooted convention path,
-    which a native-Windows Python process resolves to a non-existent
-    `\\opt\\devkitpro\\…`. Falling through to the defaults (where
-    `C:/devkitPro` is the real install root) is how we recover.
-
-    Side effect: on success, sets `os.environ["DEVKITPRO"]` to the
-    resolved-working path so downstream `run_cmake_configure` subprocess
-    invocations inherit a value that actually resolves. This OVERRIDES
-    a bogus env-var value (like the msys2-form `/opt/devkitpro` above)
-    rather than passing the broken value through to cmake. The mutation
-    is process-local; nothing persists to the user's environment.
+    Side effects: on success, sets module-level `_resolved_llvm_bin` so
+    `build.py` can prepend the same dir to the build subprocess's PATH
+    without re-probing.
     """
-    candidates: list[tuple[Path, str]] = []
-    env_val = os.environ.get("DEVKITPRO")
-    if env_val:
-        candidates.append((Path(env_val), f"DEVKITPRO env var ({env_val})"))
-    for default in _DEVKITPRO_DEFAULT_ROOTS:
-        if not any(str(c) == str(default) for c, _ in candidates):
-            candidates.append((default, f"default install path ({default})"))
+    global _resolved_llvm_bin
 
-    tried: list[str] = []
-    for root, source in candidates:
-        gxx = _devkitpro_gxx_under(root)
-        if gxx is not None:
-            # Overwrite env so cmake sees the path that actually works,
-            # even when the user's environment had a bogus value.
-            os.environ["DEVKITPRO"] = str(root)
-            return _verify_devkitpro_gxx(gxx, str(root))
-        tried.append(source)
+    portable_clang = llvm_portable_root() / "bin" / "clang.exe"
+    if portable_clang.is_file():
+        r = _safe_run([str(portable_clang), "--version"])
+        if r and r[0] == 0:
+            ver = _parse_clang_version(r[1] or r[2])
+            if ver is not None:
+                reason = _llvm_gate_version(ver)
+                if reason is None:
+                    _resolved_llvm_bin = str(portable_clang.parent)
+                    return PrereqResult(
+                        "llvm19", "LLVM 19.1.x", True,
+                        f"{ver[0]}.{ver[1]}.{ver[2]} ({portable_clang}) [portable]",
+                        auto_installable=True,
+                    )
+                # Portable install exists but its version is wrong — surface
+                # that explicitly so the user knows to delete + re-install
+                # rather than the wizard trying to "fix" it silently.
+                return PrereqResult(
+                    "llvm19", "LLVM 19.1.x", False,
+                    f"portable install at {portable_clang.parent} has wrong "
+                    f"version: {reason}",
+                    INSTALL_URLS["llvm19"],
+                    note=(
+                        "Delete %LOCALAPPDATA%\\SMOArchipelago\\llvm\\ "
+                        "and click Auto-install to download LLVM 19.1.7."
+                    ),
+                    auto_installable=True,
+                )
 
+    # PATH fallback. A developer-installed LLVM has to be 19.1.x to count.
+    r = _safe_run(["clang", "--version"])
+    if r is None or r[0] != 0:
+        return PrereqResult(
+            "llvm19", "LLVM 19.1.x", False,
+            "not found (need LLVM 19.1.7 for the Switch cross-compile)",
+            INSTALL_URLS["llvm19"],
+            note=(
+                "Click Auto-install to download LLVM 19.1.7 (~806 MB, "
+                "~3.3 GB on disk) to %LOCALAPPDATA%\\SMOArchipelago\\llvm\\. "
+                "Or install manually and add to PATH."
+            ),
+            auto_installable=True,
+        )
+    ver = _parse_clang_version(r[1] or r[2])
+    if ver is None:
+        return PrereqResult(
+            "llvm19", "LLVM 19.1.x", False,
+            "found on PATH but couldn't parse `clang --version` output",
+            INSTALL_URLS["llvm19"],
+            auto_installable=True,
+        )
+    reason = _llvm_gate_version(ver)
+    if reason is not None:
+        # User has a different LLVM on PATH. Don't touch it — the wizard
+        # installs a portable LLVM alongside and adds THAT to its build
+        # PATH only. Surface the version mismatch as actionable.
+        return PrereqResult(
+            "llvm19", "LLVM 19.1.x", False,
+            f"PATH has LLVM {ver[0]}.{ver[1]}.{ver[2]} — {reason}",
+            INSTALL_URLS["llvm19"],
+            note=(
+                "Your system-installed LLVM stays untouched. Click "
+                "Auto-install to add a parallel LLVM 19.1.7 under "
+                "%LOCALAPPDATA%\\SMOArchipelago\\llvm\\."
+            ),
+            auto_installable=True,
+        )
+    # PATH LLVM is valid 19.1.x.
+    path_clang = shutil.which("clang")
+    if path_clang:
+        _resolved_llvm_bin = str(Path(path_clang).parent)
     return PrereqResult(
-        "devkitpro", "devkitPro / devkitA64", False,
-        f"aarch64-none-elf-g++ not found at any of: {'; '.join(tried)}",
-        INSTALL_URLS["devkitpro"],
+        "llvm19", "LLVM 19.1.x", True,
+        f"{ver[0]}.{ver[1]}.{ver[2]} (PATH)",
         auto_installable=True,
     )
 
 
-def _verify_devkitpro_gxx(gxx: Path, root: str) -> PrereqResult:
-    """Run `g++ --version` against a discovered cross-compiler; return the
-    success/failure PrereqResult for it."""
-    r = _safe_run([str(gxx), "--version"])
-    if r and r[0] == 0:
+# ---------------------------------------------------------------------------
+# WinLibs — host C++ compiler (mingw gcc/g++) for sail.
+# ---------------------------------------------------------------------------
+
+# Module-level cache of the resolved host-compiler bin dir.
+_resolved_mingw_bin: str | None = None
+
+
+def resolved_mingw_bin() -> str | None:
+    """Return the host-compiler `bin/` dir resolved by `check_winlibs`,
+    or None. Used by build.py to prepend the same dir to the build
+    subprocess's PATH."""
+    return _resolved_mingw_bin
+
+
+# Probe order. Portable WinLibs install first; then standalone WinLibs at the
+# project page's recommended root; then a hand-installed msys2 at the path
+# `pacman -S mingw-w64-x86_64-gcc` produces. First match wins — no
+# re-download if a usable g++ already exists.
+def _winlibs_probe_paths() -> list[tuple[str, Path]]:
+    return [
+        ("portable", winlibs_portable_root() / "bin" / "g++.exe"),
+        ("C:\\winlibs", Path("C:/winlibs/mingw64/bin/g++.exe")),
+        ("C:\\msys64 mingw64", Path("C:/msys64/mingw64/bin/g++.exe")),
+    ]
+
+
+def check_winlibs() -> PrereqResult:
+    """WinLibs (or any working mingw-w64 g++) for sail's host compile.
+
+    Sail is LibHakkun's host-side symbol-DB resolver. setup_sail.py
+    invokes it with CC=gcc / CXX=g++ — clang can't easily compile a
+    Windows native binary without MSVC's STL, so we use mingw gcc.
+
+    Probe order (first match wins, no download if any is usable):
+      1. `%LOCALAPPDATA%\\SMOArchipelago\\winlibs\\bin\\g++.exe` — the
+         wizard's portable install.
+      2. `C:\\winlibs\\mingw64\\bin\\g++.exe` — the WinLibs project's
+         recommended standalone install.
+      3. `C:\\msys64\\mingw64\\bin\\g++.exe` — a hand-installed msys2
+         (what dev machines typically have).
+
+    On success, sets `_resolved_mingw_bin` so the build step can prepend
+    the same dir to its subprocess PATH.
+    """
+    global _resolved_mingw_bin
+
+    tried: list[str] = []
+    for label, gxx in _winlibs_probe_paths():
+        if not gxx.is_file():
+            tried.append(f"{label}: {gxx} (missing)")
+            continue
+        r = _safe_run([str(gxx), "--version"])
+        if r is None or r[0] != 0:
+            tried.append(f"{label}: {gxx} (exists but --version failed)")
+            continue
         first_line = (r[1] or r[2]).splitlines()[0] if (r[1] or r[2]) else "ok"
+        _resolved_mingw_bin = str(gxx.parent)
         return PrereqResult(
-            "devkitpro", "devkitPro / devkitA64", True,
-            f"{root} ({first_line})",
+            "winlibs", "WinLibs / mingw64 g++", True,
+            f"{first_line} ({gxx}) [{label}]",
             auto_installable=True,
         )
+
     return PrereqResult(
-        "devkitpro", "devkitPro / devkitA64", False,
-        f"DEVKITPRO={root}; binary exists but failed to run --version",
-        INSTALL_URLS["devkitpro"],
+        "winlibs", "WinLibs / mingw64 g++", False,
+        "no usable g++ found (need mingw-w64 gcc for sail's host build)",
+        INSTALL_URLS["winlibs"],
+        note=(
+            "Click Auto-install to download WinLibs (~262 MB, ~0.9 GB on "
+            "disk) to %LOCALAPPDATA%\\SMOArchipelago\\winlibs\\. Won't "
+            "touch any existing msys2/WinLibs install you have elsewhere."
+        ),
+        auto_installable=True,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Sail's Python deps: pyelftools + mmh3 + lz4
+# ---------------------------------------------------------------------------
+
+# The three packages sail's host tools import. lz4 is for the symbol-DB
+# compression sail emits; pyelftools parses .nso/.elf; mmh3 hashes symbols.
+# LibHakkun's README typos the second one as "mmh"; the actual import is
+# `mmh3`. Pin a min version where the API matters: lz4 < 4.0 lacks
+# block-mode bindings sail uses; pyelftools < 0.30 lacks the ELF section
+# enum sail's symbol scanner reads.
+_SAIL_PY_PACKAGES = ("pyelftools", "mmh3", "lz4")
+
+
+def _sail_py_module_names() -> tuple[str, ...]:
+    """Distribution name → import name mapping. pyelftools imports as
+    `elftools`; the others are import-as-name."""
+    return ("elftools", "mmh3", "lz4")
+
+
+def check_sail_python_deps() -> PrereqResult:
+    """Verify sail's three host-Python deps (pyelftools + mmh3 + lz4) are
+    importable from the Python that the wizard resolved via
+    `check_python312`. The marker file at
+    `%LOCALAPPDATA%\\SMOArchipelago\\sail_python_deps.ok` short-circuits
+    the import probe when we know we've installed them recently."""
+    marker = sail_deps_marker_path()
+    if marker.is_file():
+        # Trust the marker. The wizard wipes it on Remove-deps so a stale
+        # marker after uninstall isn't possible.
+        return PrereqResult(
+            "sail_python_deps", "Python sail deps (pyelftools mmh3 lz4)", True,
+            f"installed (marker at {marker})",
+            auto_installable=True,
+        )
+
+    # No marker → probe by import. Use whichever Python the launcher
+    # resolved (py -3.12 / python3.12 / sys.executable equivalent).
+    py_cmds: list[list[str]] = []
+    # Try winget-installed py first, then bare-name.
+    for cmd in _winget_python312_commands():
+        py_cmds.append([*cmd[:-1], "-c"])  # drop "--version", append "-c"
+    py_cmds.append(["py", "-3.12", "-c"])
+    py_cmds.append(["python3.12", "-c"])
+
+    probe = "import " + ", ".join(_sail_py_module_names())
+    missing: list[str] = []
+    for cmd in py_cmds:
+        r = _safe_run([*cmd, probe])
+        if r is None:
+            continue
+        rc, out, err = r
+        if rc == 0:
+            # Write the marker so the next wizard run skips the probe.
+            try:
+                marker.parent.mkdir(parents=True, exist_ok=True)
+                marker.write_text("ok\n", encoding="utf-8")
+            except OSError:
+                pass
+            return PrereqResult(
+                "sail_python_deps", "Python sail deps (pyelftools mmh3 lz4)", True,
+                f"importable via {cmd[0]}",
+                auto_installable=True,
+            )
+        # Capture the ModuleNotFoundError so the failure detail is useful.
+        combined = (out + err).strip().splitlines()
+        missing.extend(line for line in combined if "ModuleNotFoundError" in line)
+        break
+
+    detail = (
+        "not installed (sail's host symbol-DB needs `pyelftools`, `mmh3`, "
+        "and `lz4`)"
+    )
+    if missing:
+        detail = f"missing: {missing[0]}"
+    return PrereqResult(
+        "sail_python_deps", "Python sail deps (pyelftools mmh3 lz4)", False,
+        detail,
+        INSTALL_URLS["sail_python_deps"],
+        note=(
+            "Click Auto-install to `pip install --user pyelftools mmh3 lz4` "
+            "into your resolved Python 3.12. ~5 MB."
+        ),
         auto_installable=True,
     )
 
@@ -660,7 +908,12 @@ def check_all(
     flows from `prodkeys_path`. Pass None on first invocation or when
     the user has not yet picked a custom location for that prereq."""
     return [
-        check_devkitpro(),
+        # Cross-compile toolchain (replaces devkitPro since the 2026-05-21
+        # Hakkun cutover) — these two are the heaviest and most likely to be
+        # missing, so they go first.
+        check_llvm19(),
+        check_winlibs(),
+        check_sail_python_deps(),
         check_cmake(),
         check_ninja(),
         check_python312(),

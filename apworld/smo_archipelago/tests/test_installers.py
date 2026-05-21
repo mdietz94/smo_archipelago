@@ -13,13 +13,19 @@ All shell-outs and network calls are monkeypatched. We assert on:
   - Hactool download → unzip → cache path matches the detector's
     `bundled_hactool_path()` (drift here means a successful install
     that the prereq check still reports as failed — silent UX bug).
-  - install_devkitpro refuses to run on non-Windows (no ShellExecuteW).
+  - Post-Hakkun portable installs: LLVM 19 + WinLibs land under
+    `%LOCALAPPDATA%\\SMOArchipelago\\<tool>\\`. Disk-space precheck
+    refuses to start when free space is short. SHA-256 mismatches
+    are rejected (no cache poisoning).
+  - cleanup_portable_deps removes the two portable dirs on demand
+    but leaves the surrounding wizard state alone.
 """
 
 from __future__ import annotations
 
 import io
 import sys
+import tarfile
 import zipfile
 from pathlib import Path
 
@@ -50,7 +56,6 @@ def test_winget_install_builds_correct_command(monkeypatch, tmp_path) -> None:
     def _fake_popen(cmd, **kwargs):
         return _FakeProc(cmd)
 
-    # Pretend winget exists on PATH.
     monkeypatch.setattr(installers.shutil, "which",
                         lambda name: "C:/winget.exe" if name == "winget" else None)
     monkeypatch.setattr(installers.subprocess, "Popen", _fake_popen)
@@ -61,8 +66,6 @@ def test_winget_install_builds_correct_command(monkeypatch, tmp_path) -> None:
     assert cmd[0] == "C:/winget.exe"
     assert cmd[1:4] == ["install", "-e", "--id"]
     assert "Kitware.CMake" in cmd
-    # Each of these flags is load-bearing — winget will prompt without
-    # them. Checked individually so a regression names the missing flag.
     assert "--silent" in cmd
     assert "--accept-package-agreements" in cmd
     assert "--accept-source-agreements" in cmd
@@ -70,9 +73,6 @@ def test_winget_install_builds_correct_command(monkeypatch, tmp_path) -> None:
 
 
 def test_winget_install_surfaces_winget_missing(monkeypatch) -> None:
-    """If winget itself isn't on PATH (LTSC, stripped Win11), the
-    installer must fail cleanly with a "install App Installer" hint —
-    NOT trip an unrelated stack trace from Popen("winget", ...)."""
     monkeypatch.setattr(installers.shutil, "which", lambda name: None)
     r = installers.winget_install("Kitware.CMake")
     assert not r.ok
@@ -82,11 +82,6 @@ def test_winget_install_surfaces_winget_missing(monkeypatch) -> None:
 # ---------- post-install PATH prepending ----------
 
 def test_install_ninja_prepends_winget_path(monkeypatch, tmp_path) -> None:
-    """After `winget install Ninja-build.Ninja` returns success, the
-    installer must prepend the install dir to os.environ["PATH"] for
-    the current process. Without this, cmake's bare-name `ninja` spawn
-    inside `cmake --build` fails to find ninja even though winget just
-    put it in place — Windows doesn't refresh PATH for running procs."""
     pkg_dir = tmp_path / "Ninja-build.Ninja_winget_x64"
     pkg_dir.mkdir(parents=True)
     ninja = pkg_dir / "ninja.exe"
@@ -148,27 +143,15 @@ def test_install_python312_prepends_winget_path(monkeypatch, tmp_path) -> None:
 def test_install_hactool_downloads_and_unzips_to_bundled_path(
     monkeypatch, tmp_path,
 ) -> None:
-    """End-to-end install_hactool: stub the download to feed a real zip
-    containing hactool.exe, verify the .exe lands at exactly
-    bundled_hactool_path() so the prereq detector picks it up on the
-    next Re-check without any state update.
-
-    Drift between installer destination and detector probe = silent
-    UX bug (install succeeds, prereq stays red, user confused).
-    """
-    # Redirect bundled_hactool_path to a temp location so the test
-    # doesn't write into the real %APPDATA%.
     cache = tmp_path / "bundled" / "hactool.exe"
     monkeypatch.setattr(prereqs, "bundled_hactool_path", lambda: cache)
     monkeypatch.setattr(installers, "bundled_hactool_path", lambda: cache)
 
-    # Build a fake hactool-1.4.0-win.zip in memory.
     zip_bytes = io.BytesIO()
     with zipfile.ZipFile(zip_bytes, "w") as zf:
         zf.writestr("hactool.exe", b"FAKE_HACTOOL_BINARY")
     zip_bytes.seek(0)
 
-    # Stub urlopen to serve our in-memory zip.
     class _FakeResp:
         def __init__(self, data: bytes):
             self._buf = io.BytesIO(data)
@@ -191,21 +174,17 @@ def test_install_hactool_downloads_and_unzips_to_bundled_path(
 
     r = installers.install_hactool()
     assert r.ok, f"install_hactool should succeed; detail={r.detail!r}"
-    assert cache.is_file(), "hactool.exe must land at bundled_hactool_path()"
+    assert cache.is_file()
     assert cache.read_bytes() == b"FAKE_HACTOOL_BINARY"
 
 
 def test_install_hactool_skips_when_already_installed(monkeypatch, tmp_path) -> None:
-    """Idempotent: if the .exe already exists at the cache location,
-    skip the download entirely. Re-clicking Auto-install must not
-    burn 5 MB of bandwidth on every redo."""
     cache = tmp_path / "bundled" / "hactool.exe"
     cache.parent.mkdir(parents=True)
     cache.write_text("existing")
     monkeypatch.setattr(prereqs, "bundled_hactool_path", lambda: cache)
     monkeypatch.setattr(installers, "bundled_hactool_path", lambda: cache)
 
-    # Make urlopen explode if called — proves the download was skipped.
     def _explode(*a, **kw):
         raise AssertionError("download should not happen on already-installed")
 
@@ -213,13 +192,10 @@ def test_install_hactool_skips_when_already_installed(monkeypatch, tmp_path) -> 
 
     r = installers.install_hactool()
     assert r.ok
-    assert cache.read_text() == "existing"  # untouched
+    assert cache.read_text() == "existing"
 
 
 def test_install_hactool_rejects_sha256_mismatch(monkeypatch, tmp_path) -> None:
-    """If a SHA-256 is pinned and the download doesn't match, the
-    installer must reject the file (no quarantine in the cache) and
-    return failure. Tamper detection is the whole point of pinning."""
     cache = tmp_path / "bundled" / "hactool.exe"
     monkeypatch.setattr(prereqs, "bundled_hactool_path", lambda: cache)
     monkeypatch.setattr(installers, "bundled_hactool_path", lambda: cache)
@@ -250,75 +226,298 @@ def test_install_hactool_rejects_sha256_mismatch(monkeypatch, tmp_path) -> None:
     r = installers.install_hactool()
     assert not r.ok
     assert "sha256" in r.log.lower()
-    assert not cache.exists(), "rejected download must not land in cache"
+    assert not cache.exists()
 
 
-# ---------- install_devkitpro ----------
+# ---------- disk-space precheck ----------
 
-def test_install_devkitpro_refuses_on_non_windows(monkeypatch) -> None:
-    """The installer uses ShellExecuteW for UAC elevation, which only
-    exists on Windows. On Linux/macOS it must fail cleanly with a
-    "install manually" message — not crash trying to load shell32."""
+def test_check_disk_space_passes_when_room(monkeypatch, tmp_path) -> None:
+    """Sanity: enough free space → no exception raised."""
+    import collections
+    stat = collections.namedtuple("usage", "total used free")
+    monkeypatch.setattr(installers.shutil, "disk_usage",
+                        lambda p: stat(total=100 * 1024**3,
+                                       used=10 * 1024**3,
+                                       free=90 * 1024**3))
+    installers._check_disk_space(tmp_path / "nope", 1 * 1024**3)
+
+
+def test_check_disk_space_refuses_when_short(monkeypatch, tmp_path) -> None:
+    """Refuse to start a download we can't complete — surface a clear
+    "need X GiB, have Y GiB on Z" so the user knows exactly what to
+    free up."""
+    import collections
+    stat = collections.namedtuple("usage", "total used free")
+    monkeypatch.setattr(installers.shutil, "disk_usage",
+                        lambda p: stat(total=100 * 1024**3,
+                                       used=99 * 1024**3,
+                                       free=1 * 1024**3))
+    with pytest.raises(installers.InsufficientDiskError) as exc:
+        installers._check_disk_space(tmp_path / "nope", 4 * 1024**3)
+    msg = str(exc.value)
+    assert "need" in msg.lower()
+    assert "GiB" in msg
+
+
+def test_check_disk_space_walks_up_to_existing_parent(monkeypatch, tmp_path) -> None:
+    """Target dir doesn't exist yet (first install). We must walk up to
+    the nearest existing parent before calling disk_usage — otherwise
+    shutil.disk_usage on a non-existent path raises and the install
+    fails for a non-disk-space reason."""
+    queried: list[str] = []
+    import collections
+    stat = collections.namedtuple("usage", "total used free")
+
+    def _fake_usage(p):
+        queried.append(str(p))
+        return stat(total=100 * 1024**3, used=0, free=100 * 1024**3)
+
+    monkeypatch.setattr(installers.shutil, "disk_usage", _fake_usage)
+    target = tmp_path / "does" / "not" / "exist" / "yet"
+    installers._check_disk_space(target, 1 * 1024**3)
+    assert queried, "disk_usage was never called"
+    # The path queried must be an existing ancestor.
+    assert Path(queried[0]).exists()
+
+
+# ---------- install_llvm19 ----------
+
+def test_install_llvm19_refuses_on_non_windows(monkeypatch) -> None:
+    """LLVM tarball is the Windows-MSVC build; the installer should
+    refuse on other platforms with an actionable hint."""
     monkeypatch.setattr(installers.sys, "platform", "linux")
-    r = installers.install_devkitpro()
+    r = installers.install_llvm19()
     assert not r.ok
-    assert "Windows-only" in r.detail or "devkitpro.org" in r.detail
+    assert "Windows-only" in r.detail or "MSVC" in r.detail
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="ShellExecuteW is win32-only")
-def test_install_devkitpro_calls_shellexecutew_with_runas(monkeypatch, tmp_path) -> None:
-    """The NSIS /S flag silently fails without admin elevation. We MUST
-    spawn the installer through ShellExecuteW with lpVerb='runas' so
-    Windows shows the UAC consent dialog — otherwise the user sees
-    "installing for 10 minutes" while nothing happens, then a timeout.
-    """
-    captured: dict = {}
+@pytest.mark.skipif(sys.platform != "win32", reason="LLVM installer is win32-only")
+def test_install_llvm19_skips_when_clang_already_present(monkeypatch, tmp_path) -> None:
+    """Idempotent: an existing portable install with clang.exe present
+    must skip the ~806 MB download. Re-clicking Install must not burn
+    bandwidth on a redo."""
+    dst = tmp_path / "llvm"
+    (dst / "bin").mkdir(parents=True)
+    (dst / "bin" / "clang.exe").write_text("existing")
+    monkeypatch.setattr(installers, "llvm_portable_root", lambda: dst)
 
-    monkeypatch.setattr(
-        installers, "_find_devkitpro_asset",
-        lambda on_line=None: "https://example.invalid/installer.exe",
-    )
+    def _explode(*a, **kw):
+        raise AssertionError("download should not happen on already-installed")
 
-    # Stub _download to fake a successful download.
-    def _fake_download(url, dst, *, on_line=None, timeout=600.0, expected_sha256=""):
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_bytes(b"fake-installer")
-        return installers.InstallResult(ok=True, returncode=0, log=str(dst), detail=str(dst))
+    monkeypatch.setattr(installers.urllib.request, "urlopen", _explode)
+    r = installers.install_llvm19()
+    assert r.ok
+    assert (dst / "bin" / "clang.exe").read_text() == "existing"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="LLVM installer is win32-only")
+def test_install_llvm19_refuses_when_insufficient_disk(monkeypatch, tmp_path) -> None:
+    """Disk-space precheck fires BEFORE the download starts — no
+    partial download lying around to clean up."""
+    dst = tmp_path / "llvm"
+    monkeypatch.setattr(installers, "llvm_portable_root", lambda: dst)
+
+    import collections
+    stat = collections.namedtuple("usage", "total used free")
+    monkeypatch.setattr(installers.shutil, "disk_usage",
+                        lambda p: stat(total=100 * 1024**3,
+                                       used=99 * 1024**3,
+                                       free=1 * 1024**3))
+
+    def _explode(*a, **kw):
+        raise AssertionError("download should not start when disk is full")
+
+    monkeypatch.setattr(installers.urllib.request, "urlopen", _explode)
+    r = installers.install_llvm19()
+    assert not r.ok
+    assert "free space" in r.detail.lower() or "GiB" in r.detail
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="LLVM installer is win32-only")
+def test_install_llvm19_extracts_and_strips_top_level_dir(
+    monkeypatch, tmp_path,
+) -> None:
+    """The LLVM tarball is laid out as
+    `clang+llvm-19.1.7-x86_64-pc-windows-msvc/bin/clang.exe`. We MUST
+    strip the top-level dir so the final layout is
+    `<dst>/bin/clang.exe` — drift here means the detector won't find
+    clang.exe and the install gets re-tried forever."""
+    dst = tmp_path / "llvm"
+    monkeypatch.setattr(installers, "llvm_portable_root", lambda: dst)
+    # Plenty of disk.
+    import collections
+    stat = collections.namedtuple("usage", "total used free")
+    monkeypatch.setattr(installers.shutil, "disk_usage",
+                        lambda p: stat(total=100 * 1024**3,
+                                       used=0,
+                                       free=100 * 1024**3))
+
+    # Build an in-memory tar.xz with the same top-level layout as the
+    # real LLVM tarball.
+    tar_path = tmp_path / "src" / "fake-llvm.tar.xz"
+    tar_path.parent.mkdir()
+    with tarfile.open(tar_path, "w:xz") as tf:
+        for entry in (
+            ("clang+llvm-19.1.7-x86_64-pc-windows-msvc/bin/clang.exe", b"CLANGBIN"),
+            ("clang+llvm-19.1.7-x86_64-pc-windows-msvc/bin/clang++.exe", b"CLANGXX"),
+            ("clang+llvm-19.1.7-x86_64-pc-windows-msvc/lib/clang/19/include/x.h", b"hdr"),
+        ):
+            data = entry[1]
+            info = tarfile.TarInfo(entry[0])
+            info.size = len(data)
+            tf.addfile(info, io.BytesIO(data))
+
+    # Stub the download to write our local tarball to dst.
+    def _fake_download(url, dst_path, *, on_line=None, timeout=600.0,
+                       expected_sha256=""):
+        dst_path.parent.mkdir(parents=True, exist_ok=True)
+        dst_path.write_bytes(tar_path.read_bytes())
+        return installers.InstallResult(ok=True, returncode=0,
+                                        log=str(dst_path), detail=str(dst_path))
+
     monkeypatch.setattr(installers, "_download", _fake_download)
 
-    # Stub ShellExecuteW: capture args, return success (33) so the
-    # installer proceeds into its polling loop. We exit the polling
-    # loop by faking a gxx binary at one of the default roots before
-    # the loop spins up.
-    class _FakeShell:
-        @staticmethod
-        def ShellExecuteW(hwnd, verb, file, params, cwd, show):
-            captured["verb"] = verb
-            captured["file"] = file
-            captured["params"] = params
-            return 33  # > 32 = success
+    r = installers.install_llvm19()
+    assert r.ok, f"install_llvm19 failed: {r.detail!r}\nlog: {r.log}"
+    assert (dst / "bin" / "clang.exe").read_bytes() == b"CLANGBIN"
+    assert (dst / "bin" / "clang++.exe").read_bytes() == b"CLANGXX"
+    # Top-level dir must NOT survive — the detector looks for
+    # <dst>/bin/clang.exe, not <dst>/clang+llvm-.../bin/clang.exe.
+    assert not (dst / "clang+llvm-19.1.7-x86_64-pc-windows-msvc").exists()
 
-    class _FakeWinDLL:
-        shell32 = _FakeShell()
 
-    import ctypes
-    monkeypatch.setattr(ctypes, "windll", _FakeWinDLL(), raising=False)
+# ---------- install_winlibs ----------
 
-    # Plant a fake devkitPro install so the polling loop returns
-    # immediately.
-    fake_root = tmp_path / "devkitPro"
-    bindir = fake_root / "devkitA64" / "bin"
-    bindir.mkdir(parents=True)
-    (bindir / "aarch64-none-elf-g++.exe").write_text("")
-    monkeypatch.setattr(installers, "_DEVKITPRO_DEFAULT_ROOTS", (fake_root,))
+def test_install_winlibs_refuses_on_non_windows(monkeypatch) -> None:
+    monkeypatch.setattr(installers.sys, "platform", "linux")
+    r = installers.install_winlibs()
+    assert not r.ok
+    assert "Windows-only" in r.detail or "Windows" in r.detail
 
-    r = installers.install_devkitpro()
-    assert r.ok, f"install should succeed once gxx appears; detail={r.detail!r}"
-    # The "runas" verb is what triggers UAC. Without it, NSIS /S
-    # silently fails and the install never completes.
-    assert captured["verb"] == "runas"
-    assert "/S" in captured["params"]
-    assert "C:\\devkitPro" in captured["params"]
+
+@pytest.mark.skipif(sys.platform != "win32", reason="WinLibs installer is win32-only")
+def test_install_winlibs_skips_when_already_installed(monkeypatch, tmp_path) -> None:
+    dst = tmp_path / "winlibs"
+    (dst / "bin").mkdir(parents=True)
+    (dst / "bin" / "g++.exe").write_text("existing")
+    monkeypatch.setattr(installers, "winlibs_portable_root", lambda: dst)
+
+    def _explode(*a, **kw):
+        raise AssertionError("download should not happen on already-installed")
+
+    monkeypatch.setattr(installers.urllib.request, "urlopen", _explode)
+    r = installers.install_winlibs()
+    assert r.ok
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="WinLibs installer is win32-only")
+def test_install_winlibs_extracts_and_strips_top_level_dir(
+    monkeypatch, tmp_path,
+) -> None:
+    """WinLibs zip is laid out as `mingw64/bin/g++.exe`. We MUST strip
+    the `mingw64/` top-level dir so the final layout is
+    `<dst>/bin/g++.exe` — matches what the detector probes for."""
+    dst = tmp_path / "winlibs"
+    monkeypatch.setattr(installers, "winlibs_portable_root", lambda: dst)
+    import collections
+    stat = collections.namedtuple("usage", "total used free")
+    monkeypatch.setattr(installers.shutil, "disk_usage",
+                        lambda p: stat(total=100 * 1024**3,
+                                       used=0,
+                                       free=100 * 1024**3))
+
+    zip_path = tmp_path / "src" / "fake-winlibs.zip"
+    zip_path.parent.mkdir()
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("mingw64/bin/g++.exe", b"GPPBIN")
+        zf.writestr("mingw64/bin/gcc.exe", b"GCCBIN")
+        zf.writestr("mingw64/lib/libstdc++.a", b"libdata")
+
+    def _fake_download(url, dst_path, *, on_line=None, timeout=600.0,
+                       expected_sha256=""):
+        dst_path.parent.mkdir(parents=True, exist_ok=True)
+        dst_path.write_bytes(zip_path.read_bytes())
+        return installers.InstallResult(ok=True, returncode=0,
+                                        log=str(dst_path), detail=str(dst_path))
+
+    monkeypatch.setattr(installers, "_download", _fake_download)
+
+    r = installers.install_winlibs()
+    assert r.ok, f"install_winlibs failed: {r.detail!r}\nlog: {r.log}"
+    assert (dst / "bin" / "g++.exe").read_bytes() == b"GPPBIN"
+    assert (dst / "bin" / "gcc.exe").read_bytes() == b"GCCBIN"
+    assert not (dst / "mingw64").exists()
+
+
+# ---------- install_sail_python_deps ----------
+
+def test_install_sail_python_deps_uses_pip_install_user(monkeypatch, tmp_path) -> None:
+    """`pip install --user` writes the marker file on success so the
+    detector skips its import-probe on the next Re-check."""
+    captured: list[list[str]] = []
+
+    def fake_stream(cmd, *, cwd=None, env=None, on_line=None,
+                    wall_timeout_s=None, stall_timeout_s=None):
+        captured.append(cmd)
+        return installers.InstallResult(ok=True, returncode=0, log="")
+
+    monkeypatch.setattr(installers, "_stream_subprocess", fake_stream)
+    monkeypatch.setattr(installers, "_winget_python312_commands",
+                        lambda: [["py.exe", "-3.12", "--version"]])
+    marker = tmp_path / "sail_python_deps.ok"
+    monkeypatch.setattr(installers, "sail_deps_marker_path", lambda: marker)
+
+    r = installers.install_sail_python_deps()
+    assert r.ok, f"install failed: {r.detail!r}"
+    assert marker.is_file()
+    # Verify the pip install command was issued with the three packages.
+    pip_cmds = [c for c in captured if "pip" in c]
+    assert pip_cmds, f"no pip command in {captured}"
+    cmd = pip_cmds[0]
+    assert "install" in cmd
+    assert "--user" in cmd
+    assert "pyelftools" in cmd
+    assert "mmh3" in cmd
+    assert "lz4" in cmd
+
+
+# ---------- cleanup_portable_deps ----------
+
+def test_cleanup_removes_both_portable_dirs(monkeypatch, tmp_path) -> None:
+    """User picked Remove after build → both LLVM + WinLibs dirs go
+    away, but the parent SMOArchipelago dir and sibling state stay."""
+    smoap = tmp_path / "SMOArchipelago"
+    llvm = smoap / "llvm"
+    winlibs = smoap / "winlibs"
+    other = smoap / "wizard.json"  # sibling state that MUST NOT be touched
+    for d in (llvm, winlibs):
+        (d / "bin").mkdir(parents=True)
+        (d / "bin" / "tool.exe").write_text("tool")
+    other.write_text('{"keep_portable_deps": false}')
+
+    monkeypatch.setattr(installers, "llvm_portable_root", lambda: llvm)
+    monkeypatch.setattr(installers, "winlibs_portable_root", lambda: winlibs)
+
+    r = installers.cleanup_portable_deps()
+    assert r.ok
+    assert not llvm.exists()
+    assert not winlibs.exists()
+    # Sibling state untouched.
+    assert other.is_file()
+    assert smoap.exists()
+
+
+def test_cleanup_is_idempotent_when_dirs_absent(monkeypatch, tmp_path) -> None:
+    """Already-clean state must return ok=True (idempotent), not error
+    out on missing dirs — the user might click Remove twice."""
+    smoap = tmp_path / "SMOArchipelago"
+    monkeypatch.setattr(installers, "llvm_portable_root",
+                        lambda: smoap / "llvm")
+    monkeypatch.setattr(installers, "winlibs_portable_root",
+                        lambda: smoap / "winlibs")
+    r = installers.cleanup_portable_deps()
+    assert r.ok
+    assert "nothing to remove" in r.detail.lower() or "no portable" in r.detail.lower()
 
 
 # ---------- preflight ----------
@@ -334,25 +533,25 @@ def test_check_winget_surfaces_clear_msi_message_when_missing(monkeypatch) -> No
     monkeypatch.setattr(installers.shutil, "which", lambda name: None)
     r = installers.check_winget()
     assert not r.ok
-    # The wizard surfaces this string verbatim. App Installer + Microsoft
-    # Store are the load-bearing keywords that tell the user what to
-    # search for.
     assert "App Installer" in r.detail
     assert "Microsoft Store" in r.detail
 
 
 # ---------- registry ----------
 
-def test_INSTALLERS_registry_covers_every_auto_installable_detector() -> None:
+def test_INSTALLERS_registry_covers_every_auto_installable_detector(
+    monkeypatch, tmp_path,
+) -> None:
     """If a detector sets auto_installable=True there MUST be a matching
     entry in INSTALLERS. Without the entry, the wizard's Auto-install
     button silently no-ops — and the user has no way to recover from
     the prereq page."""
-    # Run check_all with stubs that force everything into the "failed
-    # auto-installable" path, then assert every key has a registry entry.
+    # Redirect portable-tool roots to avoid touching the real machine.
+    monkeypatch.setattr(prereqs, "llvm_portable_root", lambda: tmp_path / "llvm")
+    monkeypatch.setattr(prereqs, "winlibs_portable_root", lambda: tmp_path / "winlibs")
+    monkeypatch.setattr(prereqs, "sail_deps_marker_path",
+                        lambda: tmp_path / "sail_python_deps.ok")
     from _setup.prereqs import check_all
-    # We just need to enumerate the keys; the actual detector outcomes
-    # don't matter for this test.
     results = check_all()
     auto_keys = {r.key for r in results if r.auto_installable}
     missing = auto_keys - set(installers.INSTALLERS.keys())
@@ -362,8 +561,20 @@ def test_INSTALLERS_registry_covers_every_auto_installable_detector() -> None:
     )
 
 
-def test_INSTALL_ORDER_puts_devkitpro_first() -> None:
-    """devkitPro's UAC prompt must fire first so the user clears it
-    while attention is fresh; the winget tools are background noise
-    that doesn't compete for focus. Ordering is load-bearing UX."""
-    assert installers.INSTALL_ORDER[0] == "devkitpro"
+def test_INSTALL_ORDER_runs_heavy_downloads_first() -> None:
+    """LLVM is the heaviest (~806 MB) so it goes first to fail-fast on
+    disk-space / network issues while user attention is fresh.
+    sail_python_deps requires Python 3.12, so Python must precede it."""
+    order = installers.INSTALL_ORDER
+    assert order[0] == "llvm19", (
+        f"LLVM should be installed first (heaviest, fail-fast on disk space); "
+        f"got order[0]={order[0]!r}"
+    )
+    # Order is total over only the keys present. Python 3.12 install
+    # must come before sail's pip install --user step.
+    assert order.index("python312") < order.index("sail_python_deps"), (
+        "Python 3.12 must be installed before sail_python_deps "
+        "(pip install --user needs the resolved Python)"
+    )
+    # devkitpro must be absent (post-Hakkun) — guard against re-introduction.
+    assert "devkitpro" not in order

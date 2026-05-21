@@ -439,14 +439,14 @@ _TIMEOUTS = {
     # Tiny script, no network, no cross-compile — should finish in
     # under a second on a warm cache, a few seconds cold.
     "sync_capture":      {"wall": 120.0,  "stall": 60.0},
-    # CMake configure does network IO if the toolchain pulls anything
-    # (it doesn't currently, but might in the future); be slightly
-    # generous.
-    "cmake_configure":   {"wall": 600.0,  "stall": 180.0},
-    # Ninja build of switch-mod takes ~30-90s warm, ~3 min cold; a
-    # single template-heavy compilation unit can be silent for a long
-    # time so the stall cap is more lenient than wall would suggest.
-    "cmake_build":       {"wall": 1800.0, "stall": 600.0},
+    # build_switchmod.py wraps the full Hakkun compile: patch_hakkun
+    # (idempotent, fast), sail build (~30-90s first run, instant after),
+    # cmake configure (~10s), ninja build (~30s warm, ~3 min cold). A
+    # single template-heavy compilation unit can be silent for minutes
+    # so the stall cap is more lenient than wall would suggest. First
+    # cold build pulls / re-patches sail and may compile sail's host
+    # binary, so the wall cap covers a ~5-minute worst case.
+    "build_switchmod":   {"wall": 1800.0, "stall": 600.0},
 }
 
 
@@ -739,42 +739,55 @@ def run_extract_maps(
     )
 
 
-def run_cmake_configure(
+def run_build_switchmod(
     bridge_host: str,
     *,
-    devkitpro: str | None = None,
     on_line: ProgressFn | None = None,
 ) -> BuildResult:
-    """CMake configure step: produces the Ninja build files.
+    """Drive the full Switch mod build via `scripts/build_switchmod.py`.
 
-    `bridge_host` is baked into the resulting binary via the toolchain's
-    `add_compile_definitions(BRIDGE_HOST_STRING=...)`. This is the choice
-    point that makes one user's `subsdk9` different from another's.
-    `DEVKITPRO` must be in env (set by the devkitPro installer); pass
-    explicitly here only for tests / non-standard installs.
+    The wrapper script does its own patch_hakkun → setup_sail → cmake
+    configure → ninja build in a single subprocess, so the wizard goes
+    from two build-step screens (configure + build) down to one. This
+    matches what `smo-build` runs from the dev machine.
+
+    `bridge_host` is baked into `subsdk9` at compile time via cmake's
+    `-DBRIDGE_HOST=` arg — it's the only configurable that makes one
+    user's `subsdk9` different from another's, since the runtime UDP
+    discovery handles the IP-changes-later case but still needs an
+    initial fallback.
+
+    PATH wiring: the wrapper reads `SMOAP_LLVM_BIN` / `SMOAP_MINGW_BIN`
+    / `SMOAP_CMAKE_BIN` / `SMOAP_NINJA_BIN` env vars (defaulting to
+    a dev's winget paths) and prepends them to the subprocess PATH.
+    We populate those vars from the prereq checker's resolved bin dirs
+    so the build uses the SAME toolchain the prereq check passed —
+    not whatever's first on the user's PATH.
     """
+    from .prereqs import resolved_llvm_bin, resolved_mingw_bin
+
+    script = bundled_script("build_switchmod.py")
     mod_root = bundled_switch_mod()
     env = os.environ.copy()
-    if devkitpro:
-        env["DEVKITPRO"] = devkitpro
-    toolchain = mod_root / "lunakit-vendor" / "cmake" / "toolchain.cmake"
-    # Use the cmake binary the prereq check resolved (Windows-native if
-    # available). A bare `"cmake"` here would re-resolve via PATH, and
-    # devkitPro's installer puts `C:\devkitPro\msys2\usr\bin` ahead of
-    # the Windows CMake install dir — msys2 cmake then mangles
-    # `C:\Users\...` paths into `/c/cwd/C:/Users/...` because it treats
-    # `:` as a path separator rather than a drive-letter marker.
-    from .prereqs import resolved_cmake
-    t = _TIMEOUTS["cmake_configure"]
+    # Hand the wrapper its toolchain dirs explicitly. None means "let the
+    # script's hardcoded default win" (the dev machine layout), which is
+    # also what happens if the prereq check didn't run yet.
+    llvm = resolved_llvm_bin()
+    if llvm:
+        env["SMOAP_LLVM_BIN"] = llvm
+    mingw = resolved_mingw_bin()
+    if mingw:
+        env["SMOAP_MINGW_BIN"] = mingw
+    # The wrapper hardcodes its source dir relative to its own location,
+    # so it'll find `<bundled>/switch_mod/` correctly when invoked as
+    # `python <bundled>/scripts/build_switchmod.py`.
+    args = [
+        *_python_invoker(), "-u", str(script),
+        f"-DBRIDGE_HOST={bridge_host}",
+    ]
+    t = _TIMEOUTS["build_switchmod"]
     return _stream_subprocess(
-        [
-            resolved_cmake(),
-            "-S", str(mod_root),
-            "-B", str(build_dir() / "cmake"),
-            "-G", "Ninja",
-            f"-DCMAKE_TOOLCHAIN_FILE={toolchain}",
-            f"-DBRIDGE_HOST={bridge_host}",
-        ],
+        args,
         env=env,
         on_line=on_line,
         wall_timeout_s=t["wall"],
@@ -782,36 +795,32 @@ def run_cmake_configure(
     )
 
 
-def run_cmake_build(on_line: ProgressFn | None = None) -> BuildResult:
-    """CMake build step: invokes Ninja under the hood, produces
-    `subsdk9`, `subsdk9.elf`, `main.npdm`, `ap_config.json` inside
-    `%APPDATA%/SMOArchipelago/build/cmake/`."""
-    # Same Windows-vs-msys2 cmake-binary rationale as run_cmake_configure.
-    from .prereqs import resolved_cmake
-    t = _TIMEOUTS["cmake_build"]
-    return _stream_subprocess(
-        [resolved_cmake(), "--build", str(build_dir() / "cmake")],
-        on_line=on_line,
-        wall_timeout_s=t["wall"],
-        stall_timeout_s=t["stall"],
-    )
-
-
 def collect_build_outputs() -> dict[str, Path]:
-    """Returns {logical_name: path} for the three artifacts the deploy
+    """Returns {logical_name: path} for the two artifacts the deploy
     step needs (or raises FileNotFoundError if any is missing — caller
-    should treat that as a build failure even if cmake returned 0)."""
-    cmake_build = build_dir() / "cmake"
+    should treat that as a build failure even if cmake returned 0).
+
+    `build_switchmod.py` lays its output under `switch_mod/build/sd/...`
+    (matching the dev-machine convention from the smo-build skill).
+    Subsdk9 lands inside `atmosphere/contents/0100000000010000/exefs/`;
+    the deploy step copies the whole `sd/atmosphere/...` subtree.
+
+    ap_config.json used to ship alongside (legacy exefs-runtime SD-read
+    path) but the Hakkun cutover retired that read path — bridge IP is
+    baked into subsdk9 at compile time via the wizard's BRIDGE_HOST
+    cmake arg, and runtime UDP discovery handles the IP-changes case.
+    Matches the two-key shape of deploy.py's _sd_layout / _ryujinx_layout."""
+    mod_root = bundled_switch_mod()
+    sd = mod_root / "build" / "sd" / "atmosphere" / "contents" / "0100000000010000"
     outputs = {
-        "subsdk9": cmake_build / "subsdk9",
-        "main.npdm": cmake_build / "main.npdm",
-        "ap_config.json": cmake_build / "ap_config.json",
+        "subsdk9": sd / "exefs" / "subsdk9",
+        "main.npdm": sd / "exefs" / "main.npdm",
     }
     missing = [name for name, p in outputs.items() if not p.exists()]
     if missing:
         raise FileNotFoundError(
             f"build did not produce expected outputs: {missing} "
-            f"(check {cmake_build} for details)"
+            f"(check {mod_root / 'build'} for details)"
         )
     return outputs
 

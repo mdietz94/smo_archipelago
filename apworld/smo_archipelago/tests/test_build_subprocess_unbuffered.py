@@ -187,10 +187,10 @@ def test_run_extract_maps_xci_dispatch_is_case_insensitive(tmp_path) -> None:
 
 def test_run_extract_maps_preserves_existing_env(monkeypatch, tmp_path) -> None:
     """Setting PYTHONUNBUFFERED must NOT wipe the rest of os.environ —
-    the child process needs PATH, DEVKITPRO (set by the prereq detector
-    for the build step), TEMP, etc. Test that we merge into os.environ
-    rather than overwriting it."""
-    monkeypatch.setenv("DEVKITPRO", "C:/devkitPro")
+    the child process needs PATH, SMOAP_LLVM_BIN / SMOAP_MINGW_BIN (set
+    by the prereq detector for the build step), TEMP, etc. Test that
+    we merge into os.environ rather than overwriting it."""
+    monkeypatch.setenv("SMOAP_LLVM_BIN", "C:/portable/llvm/bin")
     monkeypatch.setenv("MY_TEST_MARKER", "carry-me-through")
     captured: dict = {}
 
@@ -216,7 +216,7 @@ def test_run_extract_maps_preserves_existing_env(monkeypatch, tmp_path) -> None:
     assert env.get("MY_TEST_MARKER") == "carry-me-through", (
         "existing env vars must be preserved alongside PYTHONUNBUFFERED"
     )
-    assert env.get("DEVKITPRO") == "C:/devkitPro"
+    assert env.get("SMOAP_LLVM_BIN") == "C:/portable/llvm/bin"
 
 
 # ---- _python_invoker ----------------------------------------------------

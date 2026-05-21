@@ -20,12 +20,21 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SWITCH_MOD = os.path.join(REPO_ROOT, "switch-mod")
 BUILD_DIR = os.path.join(SWITCH_MOD, "build")
 
-# Windows-native binaries (the spike confirmed these versions; LLVM 19 is
-# required by LibHakkun for the libc++ ABI).
-CMAKE_BIN = r"C:\Program Files\CMake\bin"
-LLVM_BIN = r"C:\Program Files\LLVM\bin"
-NINJA_BIN = r"C:\Users\maxwe\AppData\Local\Microsoft\WinGet\Packages\Ninja-build.Ninja_Microsoft.Winget.Source_8wekyb3d8bbwe"
-MINGW_BIN = r"C:\msys64\mingw64\bin"
+# Windows-native binary directories. Each can be overridden via the matching
+# SMOAP_* env var; the defaults match a dev machine that installed everything
+# via winget + msys2 by hand. The wizard sets these env vars to point at the
+# portable installs under %LOCALAPPDATA%\SMOArchipelago\{llvm,winlibs}\.
+# LLVM 19 is ABI-pinned by LibHakkun's libc++ headers.
+CMAKE_BIN = os.environ.get("SMOAP_CMAKE_BIN", r"C:\Program Files\CMake\bin")
+LLVM_BIN = os.environ.get("SMOAP_LLVM_BIN", r"C:\Program Files\LLVM\bin")
+NINJA_BIN = os.environ.get(
+    "SMOAP_NINJA_BIN",
+    r"C:\Users\maxwe\AppData\Local\Microsoft\WinGet\Packages\Ninja-build.Ninja_Microsoft.Winget.Source_8wekyb3d8bbwe",
+)
+# Host C++ compiler (gcc/g++) for sail. The wizard points this at the
+# WinLibs portable install; the default keeps a hand-installed msys2
+# working for repo devs.
+MINGW_BIN = os.environ.get("SMOAP_MINGW_BIN", r"C:\msys64\mingw64\bin")
 
 
 def ensure_hakkun_patched() -> None:

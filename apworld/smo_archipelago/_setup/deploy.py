@@ -12,18 +12,21 @@ Two targets exist:
 
   - **Ryujinx (emulator)**: files land at
     `%APPDATA%/Ryujinx/mods/contents/0100000000010000/smo-archipelago/exefs/`
-    (for `subsdk9` + `main.npdm`)
-    and
-    `%APPDATA%/Ryujinx/sdcard/atmosphere/contents/0100000000010000/romfs/`
-    (for `ap_config.json`).
-    Identical paths to the existing `-DRYU_PATH=...` post-build hook
-    in `switch-mod/CMakeLists.txt`, so this is the well-known dev
-    target.
+    (for `subsdk9` + `main.npdm`). Identical paths to the existing
+    `-DRYU_PATH=...` post-build hook in `switch-mod/CMakeLists.txt`, so
+    this is the well-known dev target.
 
 Both deploy paths take the same `build_dir` argument (the
-`%APPDATA%/SMOArchipelago/build/cmake/` produced by `build.py`) so
+`<bundled>/switch_mod/build/exefs/` produced by `build.py`) so
 switching between targets after a build doesn't require a rebuild —
 the bytes are identical, only the destination differs.
+
+NOTE: `ap_config.json` used to ship alongside the binaries (legacy
+exefs-runtime SD-read path) but the Hakkun cutover retired that read
+path — bridge IP is baked into `subsdk9` at compile time via the
+wizard's BRIDGE_HOST cmake arg, and runtime UDP discovery handles the
+IP-changes case. So the deploy layouts only ship the two real
+artifacts: subsdk9 + main.npdm.
 """
 
 from __future__ import annotations
@@ -93,23 +96,20 @@ def detect_ryujinx_path() -> Path | None:
 
 
 def _sd_layout(sd_root: Path) -> dict[str, Path]:
-    """Destination paths for the three artifacts on a Switch SD card."""
+    """Destination paths for the two artifacts on a Switch SD card."""
     base = sd_root / "atmosphere" / "contents" / SMO_TITLE_ID
     return {
         "subsdk9": base / "exefs" / "subsdk9",
         "main.npdm": base / "exefs" / "main.npdm",
-        "ap_config.json": base / "romfs" / "ap_config.json",
     }
 
 
 def _ryujinx_layout(ryujinx_root: Path) -> dict[str, Path]:
     """Destination paths under a Ryujinx install root."""
     mods = ryujinx_root / "mods" / "contents" / SMO_TITLE_ID / RYU_MOD_NAME
-    sd = ryujinx_root / "sdcard" / "atmosphere" / "contents" / SMO_TITLE_ID
     return {
         "subsdk9": mods / "exefs" / "subsdk9",
         "main.npdm": mods / "exefs" / "main.npdm",
-        "ap_config.json": sd / "romfs" / "ap_config.json",
     }
 
 
@@ -245,9 +245,9 @@ def deploy_to_custom_folder(
     Useful when the user wants to manage SD-card sync themselves —
     e.g. UMS later, or copy via DBI / Goldleaf, or stage on a Dropbox
     folder before a manual transfer. We write the same `atmosphere/
-    contents/0100000000010000/{exefs,romfs}/` subtree the SD-card
-    deploy produces, just under the user's chosen folder root, so they
-    can drop the entire subtree onto a Switch SD card and have it work
+    contents/0100000000010000/exefs/` subtree the SD-card deploy
+    produces, just under the user's chosen folder root, so they can
+    drop the entire subtree onto a Switch SD card and have it work
     without any path-rewriting.
     """
     try:

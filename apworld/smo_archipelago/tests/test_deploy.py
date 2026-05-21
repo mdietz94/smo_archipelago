@@ -23,17 +23,17 @@ from _setup.deploy import (
 
 
 def _make_fake_build(tmp_path: Path) -> dict[str, Path]:
-    """Build a fake build-output dir with the three artifacts so deploy
-    has something to copy."""
+    """Build a fake build-output dir with the two artifacts so deploy
+    has something to copy. Post-Hakkun the runtime SD-read path is dead;
+    bridge_host is baked into subsdk9 at compile time, so ap_config.json
+    no longer ships."""
     build = tmp_path / "build" / "cmake"
     build.mkdir(parents=True)
     (build / "subsdk9").write_bytes(b"\x7fELF...subsdk9 placeholder")
     (build / "main.npdm").write_bytes(b"META...npdm placeholder")
-    (build / "ap_config.json").write_text('{"bridge_host":"192.168.1.10"}')
     return {
         "subsdk9": build / "subsdk9",
         "main.npdm": build / "main.npdm",
-        "ap_config.json": build / "ap_config.json",
     }
 
 
@@ -44,7 +44,9 @@ def test_sd_layout_matches_atmosphere_convention(tmp_path: Path) -> None:
     base = tmp_path / "atmosphere" / "contents" / SMO_TITLE_ID
     assert dests["subsdk9"] == base / "exefs" / "subsdk9"
     assert dests["main.npdm"] == base / "exefs" / "main.npdm"
-    assert dests["ap_config.json"] == base / "romfs" / "ap_config.json"
+    # ap_config.json was retired by the Hakkun cutover — pin its
+    # absence so a future re-introduction surfaces here.
+    assert "ap_config.json" not in dests
 
 
 def test_ryujinx_layout_matches_cmake_post_build_hook(tmp_path: Path) -> None:
@@ -55,11 +57,7 @@ def test_ryujinx_layout_matches_cmake_post_build_hook(tmp_path: Path) -> None:
     mods_base = tmp_path / "mods" / "contents" / SMO_TITLE_ID / RYU_MOD_NAME
     assert dests["subsdk9"] == mods_base / "exefs" / "subsdk9"
     assert dests["main.npdm"] == mods_base / "exefs" / "main.npdm"
-    # ap_config.json goes to the sdcard subdir, not mods/.
-    assert dests["ap_config.json"] == (
-        tmp_path / "sdcard" / "atmosphere" / "contents" / SMO_TITLE_ID
-        / "romfs" / "ap_config.json"
-    )
+    assert "ap_config.json" not in dests
 
 
 def test_deploy_to_sd_copies_and_creates_parents(tmp_path: Path) -> None:
@@ -69,8 +67,7 @@ def test_deploy_to_sd_copies_and_creates_parents(tmp_path: Path) -> None:
     # Note: NOT creating atmosphere/ first — deploy must mkdir parents.
     result = deploy_to_sd(sd_root, sources)
     assert result.ok, result.error
-    assert len(result.files) == 3
-    # All three files should exist at their dest paths.
+    assert len(result.files) == 2
     expected = _sd_layout(sd_root)
     for key, dest in expected.items():
         assert dest.exists(), f"{key} not at {dest}"
@@ -83,7 +80,7 @@ def test_deploy_to_ryujinx_copies_and_creates_parents(tmp_path: Path) -> None:
     ryu_root.mkdir()
     result = deploy_to_ryujinx(ryu_root, sources)
     assert result.ok, result.error
-    assert len(result.files) == 3
+    assert len(result.files) == 2
     expected = _ryujinx_layout(ryu_root)
     for key, dest in expected.items():
         assert dest.exists(), f"{key} not at {dest}"
@@ -145,7 +142,6 @@ def test_deploy_to_custom_folder_uses_sd_card_layout(tmp_path: Path) -> None:
     base = custom_root / "atmosphere" / "contents" / SMO_TITLE_ID
     assert (base / "exefs" / "subsdk9").is_file()
     assert (base / "exefs" / "main.npdm").is_file()
-    assert (base / "romfs" / "ap_config.json").is_file()
     # Bytes match — confirms it's a real copy, not just a touch.
     assert (base / "exefs" / "subsdk9").read_bytes() == sources["subsdk9"].read_bytes()
 

@@ -53,8 +53,7 @@ from .build import (
     bundled_switch_mod,
     collect_build_outputs,
     maps_ready,
-    run_cmake_build,
-    run_cmake_configure,
+    run_build_switchmod,
     run_extract_maps,
     run_sync_capture_table,
     verify_map_hashes,
@@ -330,10 +329,11 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
             "https://nh-server.github.io/switch-guide/ if you're starting "
             "from scratch.\n\n"
             "This wizard will:\n"
-            "  - Check that you have LLVM 19, msys2 mingw64 g++, CMake, "
-            "Ninja, hactool, Python 3.12, and your Switch prod.keys. "
-            "(Most install quickest via winget — see the troubleshooting "
-            "section in docs/first-time-setup.md.)\n"
+            "  - Check that you have LLVM 19, mingw64 g++ (WinLibs or msys2), "
+            "Python sail deps (pyelftools mmh3 lz4), CMake, Ninja, hactool, "
+            "Python 3.12, and your Switch prod.keys. The big toolchains "
+            "install to %LOCALAPPDATA%\\SMOArchipelago\\ — they won't touch "
+            "any existing LLVM/msys2 you have installed elsewhere.\n"
             "  - Extract moon + capture name tables from your own SMO 1.0.0 "
             "NSP or XCI dump (we cannot ship these — they are Nintendo "
             "content).\n"
@@ -525,6 +525,92 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
 
             threading.Thread(target=worker, daemon=True).start()
 
+        # Per-tool download + unpacked sizes for the missing-prereq
+        # summary. Pulled from `_setup.installers` constants so a version
+        # bump in one place updates the wizard's numbers automatically.
+        _PORTABLE_SIZES = {
+            # key → (download_bytes, unpacked_bytes)
+            "llvm19":            None,   # filled lazily below
+            "winlibs":           None,
+            "sail_python_deps":  None,
+        }
+
+        def _load_portable_sizes() -> None:
+            if _PORTABLE_SIZES["llvm19"] is not None:
+                return
+            from .installers import (
+                LLVM_DOWNLOAD_BYTES, LLVM_UNPACKED_BYTES,
+                SAIL_DEPS_DOWNLOAD_BYTES, SAIL_DEPS_UNPACKED_BYTES,
+                WINLIBS_DOWNLOAD_BYTES, WINLIBS_UNPACKED_BYTES,
+            )
+            _PORTABLE_SIZES["llvm19"] = (LLVM_DOWNLOAD_BYTES, LLVM_UNPACKED_BYTES)
+            _PORTABLE_SIZES["winlibs"] = (WINLIBS_DOWNLOAD_BYTES, WINLIBS_UNPACKED_BYTES)
+            _PORTABLE_SIZES["sail_python_deps"] = (
+                SAIL_DEPS_DOWNLOAD_BYTES, SAIL_DEPS_UNPACKED_BYTES,
+            )
+
+        def _refresh_disk_summary(results: list[PrereqResult]) -> None:
+            """Update the disk_summary label after each prereq render.
+
+            Shows download + unpacked totals across the missing
+            auto-installable rows, plus free space on the LOCALAPPDATA
+            drive. Surfaces an immediate "not enough disk space" warning
+            in red so the user can resolve before clicking Install.
+            """
+            _load_portable_sizes()
+            from .prereqs import localappdata_tools_root
+            import shutil as _shutil
+            failing = [r for r in results if not r.ok and r.key in _PORTABLE_SIZES]
+            dl = sum(_PORTABLE_SIZES[r.key][0] for r in failing)
+            up = sum(_PORTABLE_SIZES[r.key][1] for r in failing)
+
+            if dl == 0:
+                disk_summary.text = ""
+                disk_summary.color = (0.85, 0.85, 0.85, 1)
+                return
+
+            # Free-space probe against the LOCALAPPDATA volume (or
+            # nearest existing ancestor, since the target dir won't
+            # exist on first run).
+            target = localappdata_tools_root()
+            probe = target
+            for _ in range(20):
+                if probe.exists():
+                    break
+                parent = probe.parent
+                if parent == probe:
+                    break
+                probe = parent
+            try:
+                free = _shutil.disk_usage(str(probe)).free
+            except OSError:
+                free = -1
+
+            def _fmt_gib(n: int) -> str:
+                if n >= 1024 ** 3:
+                    return f"{n / (1024**3):.2f} GiB"
+                if n >= 1024 ** 2:
+                    return f"{n / (1024**2):.0f} MiB"
+                return f"{n / 1024:.0f} KiB"
+
+            need = int((dl + up) * 1.10)
+            if free < 0:
+                fit_marker = "?"
+                disk_summary.color = (0.85, 0.85, 0.85, 1)
+            elif free >= need:
+                fit_marker = "OK"
+                disk_summary.color = (0.85, 0.85, 0.85, 1)
+            else:
+                fit_marker = "INSUFFICIENT"
+                disk_summary.color = (0.9, 0.3, 0.3, 1)
+            free_part = (
+                f"; free on {str(probe)[:3]}: {_fmt_gib(free)} [{fit_marker}]"
+                if free >= 0 else "; free space unknown"
+            )
+            disk_summary.text = (
+                f"Download: {_fmt_gib(dl)} | On-disk: {_fmt_gib(up)}{free_part}"
+            )
+
         def render(results: list[PrereqResult]) -> None:
             render_state["last_results"] = results
             rows_box.clear_widgets()
@@ -586,6 +672,9 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
             ok = all_ok(results)
             if "next_btn" in next_btn_holder:
                 next_btn_holder["next_btn"].disabled = not ok
+            # Refresh disk-space summary after each render so newly
+            # failing/passing rows update the totals.
+            _refresh_disk_summary(results)
 
         recheck = Button(text="Re-check", size_hint_y=None, height=40)
         check_in_progress: dict[str, bool] = {"running": False}
@@ -641,8 +730,55 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
             wizard_log(f"Install all missing: {ordered}")
             run_installer_popup(ordered, preflight=True)
 
+        # Disk-space summary line, refreshed each render. Shows total
+        # download + total unpacked for the missing auto-installable
+        # rows, plus the free space on the LOCALAPPDATA drive — so the
+        # user can see "is there enough room" BEFORE clicking Install.
+        disk_summary = _label(
+            "",
+            size_hint_y=None, height=40,
+            color=(0.85, 0.85, 0.85, 1),
+        )
+        root.add_widget(disk_summary)
+
+        # Keep/Remove toggle for the portable LLVM + WinLibs installs.
+        # Default Keep (faster re-setup is the more common case). User
+        # pre-commits so they're not surprised when ~4 GB disappears
+        # post-build. Persisted to setup_state.json so the build-page
+        # cleanup hook can read it after the wizard advances.
+        keep_state: dict[str, bool] = {
+            "keep": saved_state.get("keep_portable_deps", True),
+        }
+        keep_row = BoxLayout(orientation="horizontal", size_hint_y=None,
+                             height=40, spacing=8)
+        keep_cb = CheckBox(group="keep_deps", active=keep_state["keep"],
+                           size_hint_x=None, width=30)
+        keep_row.add_widget(keep_cb)
+        keep_row.add_widget(_label(
+            "Keep portable toolchain after build (faster re-setup; default)",
+            size_hint_x=None, width=480,
+        ))
+        remove_cb = CheckBox(group="keep_deps", active=not keep_state["keep"],
+                             size_hint_x=None, width=30)
+        keep_row.add_widget(remove_cb)
+        keep_row.add_widget(_label(
+            "Remove after build (frees ~4 GB)",
+        ))
+        root.add_widget(keep_row)
+
+        def on_keep_change(_inst, _val) -> None:
+            new_keep = bool(keep_cb.active)
+            if new_keep == keep_state["keep"]:
+                return
+            keep_state["keep"] = new_keep
+            state = load_setup_state()
+            state["keep_portable_deps"] = new_keep
+            save_setup_state(state)
+        keep_cb.bind(active=on_keep_change)
+        remove_cb.bind(active=on_keep_change)
+
         install_all_btn = Button(
-            text="Install all missing (requires UAC consent for devkitPro; ~700 MB total)",
+            text="Install all missing (downloads ~1 GB; ~4 GB on disk)",
             size_hint_y=None, height=40,
             disabled=(persisted_mode != "auto"),
         )
@@ -1141,23 +1277,22 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
             _Clock.schedule_once(lambda dt: status.setter("text")(status, text))
 
         def run_in_worker() -> None:
+            # Two-step build under Hakkun:
+            #   1. sync_capture_table — regenerates capture_table.h from items.json.
+            #   2. build_switchmod — single subprocess that does patch_hakkun
+            #      → setup_sail → cmake configure → ninja build. Toolchain
+            #      paths come from env vars the wrapper reads (SMOAP_LLVM_BIN,
+            #      SMOAP_MINGW_BIN, …), which build.run_build_switchmod
+            #      populates from the prereq check's resolved bin dirs.
             steps: list[tuple[str, callable]] = [
                 ("Syncing capture table...",
                  lambda: run_sync_capture_table(on_line=on_line)),
-                # `check_devkitpro` mutates os.environ["DEVKITPRO"] on a
-                # default-path fallback, so cmake inherits it naturally —
-                # but pass explicitly too as belt-and-braces in case the
-                # detector hasn't run in this wizard session (Re-check
-                # always runs it; first-render also runs it; this is just
-                # defensive).
-                (f"Configuring CMake (bridge={wizard_state['bridge_ip']})...",
-                 lambda: run_cmake_configure(
+                (f"Compiling Switch module (bridge={wizard_state['bridge_ip']}, "
+                 "~1-5 minutes)...",
+                 lambda: run_build_switchmod(
                      wizard_state["bridge_ip"],
-                     devkitpro=os.environ.get("DEVKITPRO"),
                      on_line=on_line,
                  )),
-                ("Compiling Switch module (this can take ~1 minute)...",
-                 lambda: run_cmake_build(on_line=on_line)),
             ]
             for label, fn in steps:
                 update_status(label)
@@ -1182,6 +1317,21 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
                 _Clock.schedule_once(lambda dt: setattr(retry_btn, "disabled", False))
                 return
             wizard_state["build_done"] = True
+            # Post-build cleanup of portable toolchain dirs if user chose Remove
+            # on the prereq screen. Runs AFTER the build succeeds so the tools
+            # are available during compilation; runs BEFORE the wizard advances
+            # so the Done page reflects the final disk state.
+            state = load_setup_state()
+            if state.get("keep_portable_deps") is False:
+                update_status("Build complete. Removing portable toolchain "
+                              "(you chose Remove on the prereq screen)...")
+                try:
+                    from .installers import cleanup_portable_deps
+                    cleanup = cleanup_portable_deps(on_line=on_line)
+                    if not cleanup.ok:
+                        on_line(f"[wizard] cleanup warning: {cleanup.detail}")
+                except Exception as e:  # pragma: no cover — surface but don't fail the build
+                    on_line(f"[wizard] cleanup crashed: {type(e).__name__}: {e}")
             update_status("Build complete.")
             from kivy.clock import Clock as _Clock
             _Clock.schedule_once(lambda dt: setattr(next_btn, "disabled", False))
