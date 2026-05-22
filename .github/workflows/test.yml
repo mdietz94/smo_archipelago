@@ -196,19 +196,38 @@ jobs:
   # want a Windows build sanity-check without tagging.
 
   hakkun-bare-shellouts:
-    # Guard against the next LibHakkun upstream pull adding a new bare-name
-    # `execute_process(COMMAND python3 ...)` (or python/curl/wget/bash/sh)
-    # that we haven't defended in scripts/build_switchmod.py. On Windows
-    # bare `python3` resolves to the Microsoft Store stub by default
-    # (silent no-op), `python` resolves to whatever 3.x is first on PATH
-    # (lz4 misses), `curl` is fine in System32 but the same pattern.
-    # cmake captures the result var but never checks it, so these failures
-    # surface much later as cryptic link errors.
+    # Guard against a LibHakkun upstream pull adding a new bare-name
+    # `python3`/`python`/`curl`/`wget`/`bash`/`sh` COMMAND that we haven't
+    # defended in scripts/build_switchmod.py. On Windows: bare `python3`
+    # resolves to the Microsoft Store stub by default (silent no-op);
+    # bare `python` resolves to whatever 3.x is first on PATH (likely
+    # missing lz4); bare `curl` is fine in System32 but follows the same
+    # pattern. Two qualitatively different failure modes depending on
+    # the cmake invocation shape:
     #
-    # Each known occurrence MUST be pre-defended by an ensure_*() in
-    # scripts/build_switchmod.py BEFORE the count below is bumped. See
-    # PR #164 for the pattern (toolchain.cmake's libstd download +
-    # sail.cmake's setup_sail).
+    #   - `execute_process(COMMAND python3 ...)` at CONFIGURE time:
+    #     cmake silently swallows non-zero return codes when neither
+    #     RESULT_VARIABLE nor COMMAND_ERROR_IS_FATAL is set. The bad
+    #     outcome surfaces much later as a cryptic link error.
+    #     Defense: scripts/build_switchmod.py:ensure_*() materializes
+    #     the output file pre-cmake so the bare-name call's outcome
+    #     doesn't matter (the configure-time call no-ops via the
+    #     enclosing `if(NOT EXISTS ...)` guard).
+    #
+    #   - `add_custom_command(... COMMAND python ...)` at BUILD time:
+    #     run by ninja, which aborts the build on non-zero — failures
+    #     are loud. Defense: scripts/build_switchmod.py:configure_env()
+    #     prepends SMOAP_PYTHON_BIN to the ninja child's PATH so bare
+    #     `python` resolves to the wizard-pinned 3.12 interpreter.
+    #     Only effective when the build runs THROUGH build_switchmod.py;
+    #     a developer running `cd build && ninja` directly bypasses
+    #     this defense and will hit one of the failure modes above.
+    #
+    # The guard tracks BOTH shapes so a future upstream pull adding a
+    # third bare-name call (in either shape) trips this check until
+    # the new occurrence is audited and added to the right defense
+    # path. Bumping EXPECTED requires verifying the new call is
+    # defended; comment which path it falls under.
     name: Hakkun bare-name shell-out guard
     runs-on: ubuntu-latest
     timeout-minutes: 3
@@ -220,32 +239,32 @@ jobs:
       - name: Initialize LibHakkun submodule (shallow)
         run: git submodule update --init --depth 1 switch-mod/sys
 
-      - name: Count bare-name execute_process invocations
+      - name: Count bare-name COMMAND invocations
         run: |
-          # Upstream LibHakkun used to ship two such calls (sail.cmake and
-          # toolchain.cmake), each pre-defended in build_switchmod.py by
-          # ensure_sail_built() / ensure_libstd_downloaded() materializing
-          # the host binary / stdlib before cmake even runs. The 2026-05-22
-          # submodule pin bump (PR #203, e92ac56...) replaced both with
-          # variable-driven `COMMAND ${SAIL_CMD}` style invocations that
-          # this guard's regex doesn't match, so the bare-name count
-          # dropped to 0. The ensure_*() defenses still run — they just
-          # backstop a path the upstream now takes via a different shape.
-          # Bump EXPECTED if a future upstream pull re-introduces bare-name
-          # COMMAND words; each new hit MUST be pre-defended in
-          # build_switchmod.py before the bump lands. See PR #164 for the
-          # pattern.
-          EXPECTED=0
-          ACTUAL=$(grep -rnE 'execute_process[[:space:]]*\(COMMAND[[:space:]]+(python3|python|curl|wget|bash|sh)\b' switch-mod/sys/cmake/ | wc -l)
+          # Defended occurrences in the current pin (e92ac56...):
+          #   deploy.cmake:4        -> add_custom_command, defended by
+          #                            configure_env() PATH-prepend
+          #   generate_exefs.cmake  -> add_custom_command, defended by
+          #                            configure_env() PATH-prepend
+          # The 2026-05-22 pin bump retired the prior configure-time
+          # execute_process pair (defended by ensure_sail_built() /
+          # ensure_libstd_downloaded()); both ensure_*() helpers stay
+          # in build_switchmod.py as backstops in case upstream
+          # restructures back.
+          EXPECTED=2
+          ACTUAL=$(grep -rnE '\bCOMMAND[[:space:]]+(python3|python|curl|wget|bash|sh)\b' switch-mod/sys/cmake/ | wc -l)
           if [ "$ACTUAL" -ne "$EXPECTED" ]; then
-            echo "::error::Bare-name cmake execute_process count changed: expected $EXPECTED, found $ACTUAL"
+            echo "::error::Bare-name cmake COMMAND count changed: expected $EXPECTED, found $ACTUAL"
             echo "Hits:"
-            grep -rnE 'execute_process[[:space:]]*\(COMMAND[[:space:]]+(python3|python|curl|wget|bash|sh)\b' switch-mod/sys/cmake/ || true
+            grep -rnE '\bCOMMAND[[:space:]]+(python3|python|curl|wget|bash|sh)\b' switch-mod/sys/cmake/ || true
             echo ""
-            echo "Each occurrence MUST be pre-defended by ensure_*() in"
-            echo "scripts/build_switchmod.py BEFORE bumping EXPECTED in this"
-            echo "workflow. On Windows these resolve to the wrong interpreter"
-            echo "(python3 -> Store stub; python -> wrong 3.x). See PR #164."
+            echo "Each occurrence MUST be defended in scripts/build_switchmod.py"
+            echo "before bumping EXPECTED. execute_process(COMMAND ...) needs an"
+            echo "ensure_*() helper; add_custom_command(... COMMAND ...) is"
+            echo "defended by configure_env()'s PATH-prepend (only valid when"
+            echo "the build runs through build_switchmod.py, not raw ninja)."
+            echo "See PR #164 for the original pattern and PR #205 for the"
+            echo "build-time pattern."
             exit 1
           fi
-          echo "OK: $ACTUAL bare-name execute_process invocations, all defended."
+          echo "OK: $ACTUAL bare-name COMMAND invocations, all defended."
