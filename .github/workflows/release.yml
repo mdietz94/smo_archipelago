@@ -114,13 +114,17 @@ jobs:
     name: Clean Windows install + audit
     needs: build-apworld
     runs-on: windows-2022
-    # Cold-cache LLVM download+extract alone takes ~30 min on windows-2022;
-    # warm-cache the whole job runs in under 10. 60-min budget gives margin
-    # for the one cold-cache run per cache key, then every subsequent tag is
-    # fast. (The original 30-min cap canceled v0.1.33-alpha mid-LLVM download
-    # and prevented the cache from ever being saved — chicken-and-egg.)
+    # DISABLED 2026-05-22: even with a 60-min budget the LLVM tar.xz download
+    # from github.com to windows-2022 runners crawls (~54 min observed on
+    # v0.1.34-alpha), and the cache never gets saved because the post-step
+    # only runs on success — so we're stuck cold-caching every run. The audit
+    # is still useful but needs to run somewhere with predictable network +
+    # the ability to cache state across runs. Until we rework it (likely as a
+    # local pre-tag `release_audit.py` invocation), this job is gated off so
+    # tag pushes can publish. Flip the `if:` back to the tag-ref guard once
+    # the redesign lands.
     timeout-minutes: 60
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: false  # see comment above
     env:
       # Pin the vendored toolchain dirs the same way the wizard does
       # (the build.py wrapper reads these and prepends them to the
@@ -306,7 +310,9 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
-    needs: [build-apworld, clean-windows-audit]
+    # clean-windows-audit removed from `needs` 2026-05-22; see the gating
+    # comment on that job. Restore once the audit is workable on CI.
+    needs: [build-apworld]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # workflow_dispatch runs don't create a release — they only produce
