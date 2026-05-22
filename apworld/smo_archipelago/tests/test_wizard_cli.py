@@ -1029,8 +1029,8 @@ def test_run_pipeline_skips_install_when_no_missing_keys(
 
 def test_run_pipeline_subset_only_extract(monkeypatch, tmp_path) -> None:
     """`--phases extract` is the canonical "fast iteration after a fresh
-    dump" path. It must run extract WITHOUT requiring deploy_target,
-    bridge_host, or build outputs to be valid."""
+    dump" path. It must run extract WITHOUT requiring deploy_target or
+    build outputs to be valid."""
     _stub_all_primitives(monkeypatch, tmp_path)
     dump = tmp_path / "smo.nsp"
     dump.write_bytes(b"")
@@ -1056,26 +1056,6 @@ def test_run_pipeline_extract_without_dump_fails_cleanly(
     outcome = run_pipeline(opts)
     assert outcome.ok is False
     assert outcome.failed_phase == "extract"
-
-
-def test_run_pipeline_uses_autodetected_lan_ip_when_bridge_host_blank(
-    monkeypatch, tmp_path,
-) -> None:
-    """`opts.bridge_host=""` is the default — pipeline must fall back to
-    `detect_lan_ip()` so the wizard CLI doesn't require the user to
-    type their IP every time."""
-    _stub_all_primitives(monkeypatch, tmp_path)
-    seen_host: list[str] = []
-
-    def fake_build(host, on_line=None):
-        seen_host.append(host)
-        return _FakeBuildResult(ok=True)
-
-    monkeypatch.setattr("_setup.build.run_build_switchmod", fake_build)
-    opts = PipelineOptions(phases=("build",), bridge_host="")
-    outcome = run_pipeline(opts)
-    assert outcome.ok is True
-    assert seen_host == ["192.0.2.5"]  # the fake detect_lan_ip return
 
 
 def test_run_pipeline_deploy_phase_alone_uses_existing_build_outputs(

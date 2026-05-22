@@ -203,6 +203,11 @@ ALLOWED_GLOBS: dict[str, tuple[str, ...]] = {
         "build/*",
         "bundled/**",
         "bundled/.source-zip-mtime",
+        # Wizard-managed tool installs land top-level (sibling to
+        # bundled/) so a bundled-tree refresh doesn't wipe them. Pre-fix
+        # this lived inside `bundled/`; the legacy location is still
+        # covered by the `bundled/**` glob above for users mid-migration.
+        "hactool.exe",
         "setup_state.json",
         "wizard.log",
     ),
@@ -332,13 +337,31 @@ def audit_switch_mod(switch_mod: Path) -> tuple[list[str], list[str]]:
     allowed: list[str] = []
     unexpected: list[str] = []
     tracked = _list_git_tracked(switch_mod)
+    submodule_paths = _discover_submodule_paths(switch_mod)
     for p in switch_mod.rglob("*"):
         if not p.is_file():
             continue
         rel = p.relative_to(switch_mod).as_posix()
-        # Skip git metadata — submodules drop .git files inside the
-        # parent's tree that aren't tracked from the parent's POV.
-        if rel.startswith(".git/") or "/.git/" in rel or rel == ".git":
+        # Skip git metadata. Three shapes show up:
+        #   - "<sub>/.git"      (submodule gitlink file)
+        #   - "<sub>/.gitignore" / "<sub>/.git/<...>"
+        #   - "<...>/.git/<...>" anywhere in the tree
+        # Strip them all so submodule init noise doesn't trip the audit.
+        if (
+            rel == ".git"
+            or rel.startswith(".git/")
+            or "/.git/" in rel
+            or rel.endswith("/.git")
+        ):
+            continue
+        # __pycache__ is Python bytecode that lands wherever .py scripts
+        # are invoked from. In a dev checkout that's inside switch-mod/
+        # (next to sys/tools/elf2nso.py etc.); in the wizard's frozen
+        # runtime those scripts live under %APPDATA%/bundled/scripts/
+        # and __pycache__ falls under the allowed "bundled/**" glob.
+        # Skip these regardless — they're a runtime artifact, not a
+        # build-scope concern.
+        if "/__pycache__/" in rel or rel.startswith("__pycache__/"):
             continue
         if any(_is_under(rel, r) for r in SWITCH_MOD_OUTPUT_ROOTS):
             allowed.append(rel)
@@ -349,11 +372,15 @@ def audit_switch_mod(switch_mod: Path) -> tuple[list[str], list[str]]:
         if tracked is not None and rel in tracked:
             allowed.append(rel)
             continue
-        # The submodule-managed subdirs (sys/, lib/OdysseyHeaders/) have
-        # their OWN git index, so `git ls-files` at switch_mod's root
-        # doesn't see their files. Probe each submodule's own ls-files
-        # to avoid flagging every musl libc header as a leak.
-        if tracked is not None and _is_submodule_tracked(switch_mod, rel):
+        # The submodule-managed subdirs have their OWN git index, so
+        # `git ls-files` at switch_mod's root doesn't see their files.
+        # Probe each submodule's own ls-files to avoid flagging every
+        # musl libc header / OdysseyHeaders type definition / Senobi
+        # tool. Submodule list is discovered from `.gitmodules` so a
+        # newly-added (or nested) submodule doesn't need an audit edit.
+        if tracked is not None and _is_submodule_tracked(
+            switch_mod, rel, submodule_paths
+        ):
             allowed.append(rel)
             continue
         unexpected.append(rel)
@@ -364,15 +391,41 @@ def audit_switch_mod(switch_mod: Path) -> tuple[list[str], list[str]]:
 _submodule_tracked_cache: dict[Path, set[str] | None] = {}
 
 
-def _is_submodule_tracked(switch_mod: Path, rel_posix: str) -> bool:
-    """True if `rel_posix` (relative to switch_mod) is git-tracked by
-    one of switch_mod's submodules (sys/, lib/OdysseyHeaders/). Each
-    submodule has its own git index, so the top-level `git ls-files`
-    from switch_mod misses them — without this lookup the audit would
-    flag every musl libc header / OdysseyHeaders type definition.
+def _discover_submodule_paths(switch_mod: Path) -> tuple[str, ...]:
+    """Return POSIX-form submodule paths (relative to `switch_mod`) for
+    every submodule found underneath it.
+
+    Detection is by walking the tree and looking for `.git` entries --
+    a submodule materializes a `.git` file (gitlink) or directory at
+    its root regardless of whether `.gitmodules` lives in the parent
+    repo. This avoids assuming `switch_mod/.gitmodules` exists (in this
+    repo the submodules are registered in the outer .gitmodules at
+    repo root) and also catches nested submodules (e.g. sys/tools/senobi).
+
+    Sorted longest-first so the matching loop in `_is_submodule_tracked`
+    hits the most specific submodule before walking up to its parent.
+    """
+    paths: list[str] = []
+    for git_marker in switch_mod.rglob(".git"):
+        # `rglob` matches both files (gitlink) and dirs. Either flavor
+        # marks a submodule root.
+        sub_dir = git_marker.parent
+        if sub_dir == switch_mod:
+            continue  # would be switch_mod itself's .git, not a submodule
+        rel = sub_dir.relative_to(switch_mod).as_posix()
+        paths.append(rel)
+    return tuple(sorted(set(paths), key=len, reverse=True))
+
+
+def _is_submodule_tracked(
+    switch_mod: Path, rel_posix: str, submodule_paths: tuple[str, ...]
+) -> bool:
+    """True if `rel_posix` (relative to switch_mod) is git-tracked by one
+    of `switch_mod`'s submodules. Each submodule has its own git index,
+    so the top-level `git ls-files` from switch_mod misses them.
     """
     import subprocess
-    for sub in ("sys", "lib/OdysseyHeaders"):
+    for sub in submodule_paths:
         if not _is_under(rel_posix, sub):
             continue
         sub_path = switch_mod / sub

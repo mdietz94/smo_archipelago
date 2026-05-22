@@ -1,6 +1,16 @@
 {
   "versions": [
     {
+      "package_version": "0.1.35-alpha",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.35-alpha/smo-poptracker-v0.1.35-alpha.zip",
+      "sha256": "51462568e68ead9bb2692a041a47a0731238417eb0e8b0f5852c2da422021fe8",
+      "changelog": [
+        "fix(client): resolve cross-game item names in Channel A cutscene labels",
+        "ci: disable clean-windows-audit until we redesign it for predictable runs",
+        "fix(talkatoo): drop '#' from BK Moon probe strings (font has no #)"
+      ]
+    },
+    {
       "package_version": "0.1.29-alpha",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.29-alpha/smo-poptracker-v0.1.29-alpha.zip",
       "sha256": "205f540911dd5d030225419fd54618d042609f5f30306c19e5f8a4c81457dea8",

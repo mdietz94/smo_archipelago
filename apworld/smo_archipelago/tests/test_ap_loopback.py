@@ -7,13 +7,13 @@ the pytest version of the M5.5 manual smoke test — it pins the AP-side
 wiring against regression.
 
 Skipped by default. Enable with `SMOAP_LIVE_AP=1` to opt in:
-  SMOAP_LIVE_AP=1 bridge/.venv/Scripts/python -m pytest -v \\
+  SMOAP_LIVE_AP=1 .venv/Scripts/python -m pytest -v \\
       apworld/smo_archipelago/tests/test_ap_loopback.py
 
 Requires: Archipelago checkout at vendor/Archipelago (with deps installed),
 the forked apworld zip in vendor/Archipelago/custom_worlds/ (run
-scripts/install_apworld.py), and bridge venv with PyYAML + setuptools<81 +
-websockets==13.1.
+scripts/install_apworld.py), and the repo-root `.venv` with PyYAML +
+setuptools<81 + websockets==13.1.
 """
 
 from __future__ import annotations

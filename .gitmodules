@@ -7,3 +7,10 @@
 [submodule "switch-mod/lib/OdysseyHeaders"]
 	path = switch-mod/lib/OdysseyHeaders
 	url = https://github.com/MonsterDruide1/OdysseyHeaders.git
+# switch-mod/lib/imgui — pinned at v1.92.8 (2026-05). Used by the on-Switch
+# debug overlay (switch-mod/src/ui/ApDebugConsole.cpp) via LibHakkun's
+# addons/ImGui NVN backend. The CMakeLists.txt gates the overlay on the
+# presence of both lib/imgui/ and sys/addons/ImGui/ via SMOAP_HAS_DEBUG_RENDERER.
+[submodule "switch-mod/lib/imgui"]
+	path = switch-mod/lib/imgui
+	url = https://github.com/ocornut/imgui.git

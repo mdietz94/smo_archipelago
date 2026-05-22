@@ -475,11 +475,11 @@ def run_build(
 ) -> BuildOutcome:
     """Sync the generated capture table, then run the Switch-mod build.
 
-    `bridge_host` is baked into `subsdk9` at compile time (the only
-    runtime configurable that can't be patched after the fact on a
-    retail Switch); the runtime UDP discovery handles "user's LAN IP
-    changed" cases. The wizard normally fills this from
-    `client.net_util.detect_lan_ip()` — the CLI does the same when
+    `bridge_host` is baked into subsdk9 at compile time and used by
+    ApDiscovery as the SEED for the unicast /24 sweep — the actual
+    SMOClient might be on a neighbouring octet after DHCP renumber, the
+    sweep covers that. The wizard normally fills this from
+    `client.net_util.detect_lan_ip()`; the CLI does the same when
     `--bridge-host` is omitted.
 
     Pre-warms the prereq detectors that populate the resolved-bin

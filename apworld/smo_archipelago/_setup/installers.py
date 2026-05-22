@@ -570,20 +570,42 @@ def _download(
 
 def install_hactool(on_line: ProgressFn | None = None) -> InstallResult:
     """Download SciresM/hactool 1.4.0 win zip and unpack hactool.exe to
-    `%APPDATA%/SMOArchipelago/bundled/hactool.exe`.
+    `%APPDATA%/SMOArchipelago/hactool.exe`.
 
     Pinned version (not "latest") so the wizard install is reproducible
     and the optional SHA-256 check is meaningful. The destination matches
     `prereqs.bundled_hactool_path()` and the extractor's fallback
     constant, so check_hactool flips green on the next Re-check without
     any additional state update.
+
+    Migration: hactool.exe used to live under `bundled/hactool.exe`, which
+    `_extract_bundled_tree` silently wiped every time the bundled scripts
+    cache refreshed. If a legacy install exists, promote it to the new
+    location instead of re-downloading.
     """
+    from .prereqs import legacy_bundled_hactool_path
     dest = bundled_hactool_path()
     if dest.is_file():
         if on_line:
             on_line(f"[hactool] already installed at {dest}; skipping download")
         return InstallResult(ok=True, returncode=0,
                              log=str(dest), detail=str(dest))
+
+    legacy = legacy_bundled_hactool_path()
+    if legacy.is_file():
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(legacy, dest)
+            if on_line:
+                on_line(f"[hactool] migrated existing install from {legacy} to {dest}")
+            return InstallResult(ok=True, returncode=0,
+                                 log=str(dest), detail=str(dest))
+        except OSError as e:
+            # Migration failed -- fall through to a fresh download so
+            # the user isn't blocked. The legacy file is left in place
+            # for `check_hactool`'s back-compat probe to find.
+            if on_line:
+                on_line(f"[hactool] migrate from {legacy} failed ({e}); re-downloading")
 
     with tempfile.TemporaryDirectory(prefix="smoap-hactool-") as td:
         td_path = Path(td)

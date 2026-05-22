@@ -38,6 +38,7 @@
 #include "../game/CaptureGate.hpp"
 #include "../game/KingdomUnlock.hpp"
 #include "../game/MoonApply.hpp"
+#include "../ui/ApDebugConsole.hpp"
 #include "../ui/CappyMessenger.hpp"
 #include "../util/Log.hpp"
 
@@ -416,37 +417,18 @@ void ApClient::threadMain() {
         if (socket_fd_ < 0) {
             connected_at_ms = 0;
             ApState::instance().conn.store(ConnState::Connecting);
-            // Runtime bridge discovery via UDP. On success, target_ is
-            // overwritten with the discovered host:port for this connect
-            // cycle. On failure (no UDP reply on any of loopback /
-            // broadcast / fallback-unicast), we walk a TCP-fallback chain:
-            //   (a) 127.0.0.1:<port> — covers Ryujinx-on-same-host, where
-            //       SMOClient binds 0.0.0.0:17777 on the PC and the guest
-            //       reaches it via loopback.
-            //   (b) BRIDGE_HOST_STRING:<port> — the wizard-baked LAN IP.
-            // First TCP success wins; connectOnceTo writes the winning
-            // host:port back into target_ so logs + subsequent recv stay
-            // coherent.
-            bool udp_ok = false;
+            // Runtime bridge discovery via UDP subnet sweep + loopback.
+            // On success, target_ is overwritten with the discovered
+            // host:port for this connect cycle and we TCP-connect to it.
+            // On failure (no UDP reply on either path) we just sleep and
+            // retry — there is no compile-time-baked fallback IP.
+            bool connected = false;
             {
                 BridgeTarget discovered{};
-                if (resolveBridge(discovered, target_)) {
+                if (resolveBridge(discovered)) {
                     target_.host = discovered.host;
                     target_.port = discovered.port;
-                    udp_ok = true;
-                }
-            }
-            bool connected = false;
-            if (udp_ok) {
-                connected = connectOnce();
-            } else {
-                SMOAP_LOG_INFO("[conn] UDP discovery missed; trying TCP "
-                               "fallback chain (127.0.0.1 -> %s)",
-                               BRIDGE_HOST_STRING);
-                if (connectOnceTo("127.0.0.1", target_.port)) {
-                    connected = true;
-                } else if (connectOnceTo(BRIDGE_HOST_STRING, target_.port)) {
-                    connected = true;
+                    connected = connectOnce();
                 }
             }
             if (!connected) {
@@ -537,10 +519,9 @@ void ApClient::threadMain() {
 }
 
 bool ApClient::connectOnce() {
-    return connectOnceTo(target_.host.c_str(), target_.port);
-}
+    const char* host = target_.host.c_str();
+    const std::uint16_t port = target_.port;
 
-bool ApClient::connectOnceTo(const char* host, std::uint16_t port) {
     SMOAP_LOG_INFO("[conn] socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)");
     auto r = sockSocketTcp();
     SMOAP_LOG_INFO("[conn] socket returned fd=%d errno=%d", r.ret, r.err);
@@ -570,16 +551,9 @@ bool ApClient::connectOnceTo(const char* host, std::uint16_t port) {
     }
 
     sockSetKeepalive(socket_fd_);
-
-    // Persist whichever host:port actually landed so subsequent reads/writes
-    // + diagnostic logs stay consistent. Important for the TCP-fallback chain
-    // path where the caller probed multiple targets — without this, a fallback
-    // connect leaves target_ pointing at the failed candidate.
-    target_.host = host;
-    target_.port = port;
-
     SMOAP_LOG_INFO("[conn] CONNECTED to %s:%u (fd=%d)",
                    host, port, socket_fd_);
+    smoap::ui::notifyConnectChange(true);
     return true;
 }
 
@@ -592,6 +566,7 @@ void ApClient::disconnect() {
     auto& st = ApState::instance();
     st.conn.store(ConnState::Disconnected);
     st.bridge_connected.store(false, std::memory_order_relaxed);
+    smoap::ui::notifyConnectChange(false);
     const bool suppress = ApState::nowMs() <
         suppress_state_bubble_until_ms_.load(std::memory_order_relaxed);
     if (std::strcmp(s_last_ap_state, "ready") == 0) {

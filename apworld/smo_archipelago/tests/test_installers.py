@@ -143,9 +143,12 @@ def test_install_python312_prepends_winget_path(monkeypatch, tmp_path) -> None:
 def test_install_hactool_downloads_and_unzips_to_bundled_path(
     monkeypatch, tmp_path,
 ) -> None:
-    cache = tmp_path / "bundled" / "hactool.exe"
-    monkeypatch.setattr(prereqs, "bundled_hactool_path", lambda: cache)
-    monkeypatch.setattr(installers, "bundled_hactool_path", lambda: cache)
+    # Use SMOAP_APPDATA_ROOT to isolate both `bundled_hactool_path()`
+    # and its legacy-location fallback inside tmp_path -- otherwise the
+    # legacy probe would find a real install on the dev machine and skip
+    # the download path this test exercises.
+    monkeypatch.setenv("SMOAP_APPDATA_ROOT", str(tmp_path / "appdata"))
+    cache = prereqs.bundled_hactool_path()
 
     zip_bytes = io.BytesIO()
     with zipfile.ZipFile(zip_bytes, "w") as zf:
@@ -179,11 +182,10 @@ def test_install_hactool_downloads_and_unzips_to_bundled_path(
 
 
 def test_install_hactool_skips_when_already_installed(monkeypatch, tmp_path) -> None:
-    cache = tmp_path / "bundled" / "hactool.exe"
-    cache.parent.mkdir(parents=True)
+    monkeypatch.setenv("SMOAP_APPDATA_ROOT", str(tmp_path / "appdata"))
+    cache = prereqs.bundled_hactool_path()
+    cache.parent.mkdir(parents=True, exist_ok=True)
     cache.write_text("existing")
-    monkeypatch.setattr(prereqs, "bundled_hactool_path", lambda: cache)
-    monkeypatch.setattr(installers, "bundled_hactool_path", lambda: cache)
 
     def _explode(*a, **kw):
         raise AssertionError("download should not happen on already-installed")
@@ -196,9 +198,8 @@ def test_install_hactool_skips_when_already_installed(monkeypatch, tmp_path) -> 
 
 
 def test_install_hactool_rejects_sha256_mismatch(monkeypatch, tmp_path) -> None:
-    cache = tmp_path / "bundled" / "hactool.exe"
-    monkeypatch.setattr(prereqs, "bundled_hactool_path", lambda: cache)
-    monkeypatch.setattr(installers, "bundled_hactool_path", lambda: cache)
+    monkeypatch.setenv("SMOAP_APPDATA_ROOT", str(tmp_path / "appdata"))
+    cache = prereqs.bundled_hactool_path()
     monkeypatch.setattr(installers, "_HACTOOL_SHA256", "00" * 32)
 
     zip_bytes = io.BytesIO()
@@ -227,6 +228,135 @@ def test_install_hactool_rejects_sha256_mismatch(monkeypatch, tmp_path) -> None:
     assert not r.ok
     assert "sha256" in r.log.lower()
     assert not cache.exists()
+
+
+def test_install_hactool_survives_bundled_tree_refresh(
+    monkeypatch, tmp_path,
+) -> None:
+    """Regression: hactool.exe must NOT live inside `bundled/`.
+
+    `_setup.build._extract_bundled_tree` `shutil.rmtree`s the whole
+    `bundled/` dir whenever the cached extraction is stale; the previous
+    install location (`bundled/hactool.exe`) made every apworld upgrade
+    silently wipe the user's hactool install. The wizard's "Install
+    hactool" button then reported success but the next prereq re-check
+    failed -- the exact bug the user reported manually.
+
+    This test stages the wizard's two writers into a tmp APPDATA, runs
+    install_hactool, then triggers a bundled-tree refresh, and asserts
+    that check_hactool still flips green.
+    """
+    import os
+    from _setup import build
+
+    # Point all three reads of APPDATA at a tmp dir.
+    monkeypatch.setenv("SMOAP_APPDATA_ROOT", str(tmp_path / "appdata"))
+
+    # 1. Install hactool. Mock the download to a tiny zip in memory --
+    #    the install path under test is the post-download write, not
+    #    the URL fetch.
+    zip_bytes = io.BytesIO()
+    with zipfile.ZipFile(zip_bytes, "w") as zf:
+        zf.writestr("hactool.exe", b"FAKE_HACTOOL_AFTER_INSTALL")
+
+    class _FakeResp:
+        def __init__(self, data: bytes):
+            self._buf = io.BytesIO(data)
+            self.headers = {"Content-Length": str(len(data))}
+            self.status = 200
+
+        def read(self, n=-1):
+            return self._buf.read(n)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            self._buf.close()
+
+    monkeypatch.setattr(installers.urllib.request, "urlopen",
+                        lambda *a, **kw: _FakeResp(zip_bytes.getvalue()))
+    monkeypatch.setattr(installers, "_HACTOOL_SHA256", None)  # skip hash check
+
+    r = installers.install_hactool()
+    assert r.ok, f"install_hactool failed: {r.detail!r}"
+    installed_path = prereqs.bundled_hactool_path()
+    assert installed_path.is_file()
+    assert installed_path.read_bytes() == b"FAKE_HACTOOL_AFTER_INSTALL"
+
+    # 2. Trigger _extract_bundled_tree. The function expects a real
+    #    apworld zip parent of `_SETUP_ROOT`; we build a minimal one and
+    #    monkeypatch the path-resolution helpers so the extractor reads
+    #    it. Note that the rmtree happens against `appdata_root()/bundled/`
+    #    -- if hactool.exe is sibling rather than inside, it survives.
+    apworld_zip = tmp_path / "meatballs.apworld"
+    with zipfile.ZipFile(apworld_zip, "w") as zf:
+        # The extractor scans for `meatballs/_setup/scripts/`, `_setup/switch_mod/`,
+        # and `data/` prefixes. One file per subdir is enough to pass
+        # the post-extract `_staging_has_files` sanity check.
+        zf.writestr("meatballs/_setup/scripts/sync_capture_table.py", b"# stub\n")
+        zf.writestr("meatballs/_setup/switch_mod/CMakeLists.txt", b"# stub\n")
+        zf.writestr("meatballs/data/items.json", b"[]")
+
+    monkeypatch.setattr(build, "_find_apworld_zip", lambda setup_root: apworld_zip)
+    # The module-level cache short-circuits the extraction if it ran in
+    # a prior test; reset it so this test's monkeypatched zip is used.
+    monkeypatch.setattr(build, "_extracted_bundled_root", None)
+    # Pre-populate the bundled dir to force the rmtree path (otherwise
+    # the function just creates the dir fresh; rmtree only triggers when
+    # there's an existing tree to wipe).
+    bundled_dir = tmp_path / "appdata" / "bundled"
+    bundled_dir.mkdir(parents=True, exist_ok=True)
+    (bundled_dir / "stale-marker").write_text("old", encoding="utf-8")
+    (bundled_dir / "scripts").mkdir(exist_ok=True)
+    (bundled_dir / "scripts" / "stale.py").write_text("old", encoding="utf-8")
+
+    extracted_root = build._extract_bundled_tree()
+    assert (extracted_root / "scripts" / "sync_capture_table.py").is_file()
+    # The stale file is gone -- proves the rmtree ran.
+    assert not (bundled_dir / "stale-marker").exists()
+
+    # 3. hactool.exe should STILL exist -- the whole point of this fix.
+    assert installed_path.is_file(), (
+        f"bundled-tree refresh wiped hactool.exe at {installed_path}! "
+        "It must live outside `bundled/` so rmtree doesn't catch it."
+    )
+    assert installed_path.read_bytes() == b"FAKE_HACTOOL_AFTER_INSTALL"
+
+    # 4. check_hactool should also flip green.
+    result = prereqs.check_hactool()
+    assert result.ok, f"check_hactool failed: {result.detail!r}"
+
+
+def test_install_hactool_migrates_legacy_bundled_location(
+    monkeypatch, tmp_path,
+) -> None:
+    """Users who installed before the location move have hactool.exe at
+    `bundled/hactool.exe`. install_hactool should migrate (copy) it to
+    the new top-level location rather than re-download, AND check_hactool
+    should accept the legacy location as a fallback so users don't see
+    a regression between pulling the fix and running the migration."""
+    monkeypatch.setenv("SMOAP_APPDATA_ROOT", str(tmp_path / "appdata"))
+
+    legacy = prereqs.legacy_bundled_hactool_path()
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    legacy.write_bytes(b"LEGACY_INSTALL")
+
+    # check_hactool finds the legacy file with no migration.
+    result = prereqs.check_hactool()
+    assert result.ok
+    assert "legacy" in result.detail.lower()
+
+    # install_hactool migrates without touching the network.
+    def _explode(*a, **kw):
+        raise AssertionError("install_hactool should not download when legacy file exists")
+    monkeypatch.setattr(installers.urllib.request, "urlopen", _explode)
+
+    r = installers.install_hactool()
+    assert r.ok
+    new = prereqs.bundled_hactool_path()
+    assert new.is_file()
+    assert new.read_bytes() == b"LEGACY_INSTALL"
 
 
 # ---------- disk-space precheck ----------

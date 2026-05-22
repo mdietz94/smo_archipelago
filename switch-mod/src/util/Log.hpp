@@ -21,6 +21,7 @@
 #pragma once
 
 #include <cstdarg>
+#include <cstddef>
 
 namespace smoap::util {
 
@@ -57,4 +58,10 @@ void markFsReady();
 // on every call except the single drain. Must run on the frame thread
 // when active — the worker thread isn't safe for nn::fs.
 void drainPendingToFile();
+
+// Copy the in-memory log ring into `out` (up to `cap` bytes). Writes the
+// actual number of bytes copied to `*out_len` if non-null. Safe to call
+// from any thread (frame thread reads it for the on-Switch debug overlay).
+// Returns the head pointer for convenience.
+char* snapshotRecentLogs(char* out, std::size_t cap, std::size_t* out_len);
 }  // namespace smoap::util

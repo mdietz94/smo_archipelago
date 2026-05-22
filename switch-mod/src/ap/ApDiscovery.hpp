@@ -1,33 +1,27 @@
 // Runtime bridge discovery via UDP.
 //
-// The Switch mod historically baked the bridge IP at compile time via
-// `-DBRIDGE_HOST`. That broke whenever the user's LAN/DHCP changed.
+// Every (re)connect cycle, ApClient calls `resolveBridge()` before TCP
+// connect. New (2026-05-22) probe order:
 //
-// On every (re)connect cycle, ApClient now calls `resolveBridge()` before
-// `connectOnce()` to learn the bridge's current TCP host:port via a UDP
-// probe chain:
+//   1. UDP unicast sweep over the Switch's own /24 subnet — every
+//      .1..254 host on (self_ip & 0xFFFFFF00) gets one probe, fired
+//      as a tight burst on a single socket. First reply wins. Replaces
+//      the old 255.255.255.255 broadcast that travel routers, mesh
+//      Wi-Fi extenders, and some VLAN'd setups silently drop.
+//   2. UDP probe -> 127.0.0.1:<port> — covers Ryujinx running on the
+//      same host as SMOClient.
 //
-//   1. UDP probe -> 127.0.0.1:<discovery_port> (250ms) — covers Ryujinx
-//      running on the same host as SMOClient.
-//   2. UDP broadcast -> 255.255.255.255:<discovery_port> (1s, x3) —
-//      covers a normal home LAN where broadcast traverses.
-//   3. UDP probe -> fallback.host:<discovery_port> (250ms) — covers
-//      networks that drop broadcast but pass unicast (some consumer
-//      routers, VLAN'd setups). Uses the IP captured silently by the
-//      setup wizard.
+// On success, fills `out` with the bridge's advertised TCP host:port.
+// On total failure, returns false; the caller retries the whole loop
+// with its existing exponential backoff. There is no fallback IP — the
+// build no longer bakes one in.
 //
-// Any success returns the bridge's advertised TCP host:port (the bridge
-// always replies with its own LAN IP via detect_lan_ip() so the answer is
-// routable regardless of which probe path won).
+// Discovery's last sweep + last result are also stashed in the static
+// resolveBridge() report so the on-Switch debug overlay can show what
+// the radio actually tried.
 //
-// On total failure (no UDP discovery worked AND we don't fall through to
-// the TCP fallback): caller retries the whole loop with its existing
-// exponential backoff. Or sets `*out = fallback` and TCP-connects to that
-// directly (step 4 — last resort, handled by the caller).
-//
-// M6.1-safe: fixed `char[]` buffers throughout; no std::string growth,
-// no std::vector, no std::mutex. UDP socket lifetime is one
-// resolveBridge() call.
+// M6.1-safe layout: fixed `char[]` buffers, no std::string growth or
+// std::vector. Socket lifetime is one resolveBridge() call.
 
 #pragma once
 
@@ -38,31 +32,37 @@
 
 namespace smoap::ap {
 
-// Default UDP port for the discovery probe/reply protocol. Distinct
-// from BRIDGE_PORT (TCP, default 17777). Overridable at build time via
-// `-DDISCOVERY_PORT` (see CMakeLists.txt); the CMake value lands here
-// via the `DISCOVERY_PORT_VALUE` compile-definition.
 #ifdef DISCOVERY_PORT_VALUE
 inline constexpr std::uint16_t kDefaultDiscoveryPort = DISCOVERY_PORT_VALUE;
 #else
 inline constexpr std::uint16_t kDefaultDiscoveryPort = 17776;
 #endif
 
-// Attempt to discover the bridge's TCP host:port via the UDP probe chain
-// described in the header comment.
-//
-// `fallback` is the build-time-baked bridge target (host = -DBRIDGE_HOST,
-// port = -DBRIDGE_PORT). Used as the probe destination in step 3.
-//
-// `out` receives the discovered target on success; left untouched on
-// failure. The caller should keep its own `target_` and only overwrite
-// it from `out` when this function returns true.
-//
-// Returns true when a `{"t":"bridge", host, port}` reply was received
-// within the timeouts; false otherwise.
+// Snapshot of the most recent resolveBridge() call. Read by the on-Switch
+// debug overlay (ui::ApDebugConsole) — purely diagnostic, no logic gates
+// on it. Updated by resolveBridge() atomically by spinlock.
+struct DiscoveryReport {
+    std::uint32_t self_ip       = 0;  // host byte order (a.b.c.d -> (a<<24)|b<<16|c<<8|d)
+    std::uint32_t subnet_mask   = 0;  // /24 default unless future GetCurrentIpConfigInfo lands
+    std::uint16_t probed_count  = 0;  // number of unicast hosts swept on last call
+    std::uint16_t replies       = 0;  // number of valid {"t":"bridge",...} replies seen
+    char          last_bridge_host[40] = {0};  // last successful reply's host:port
+    std::uint16_t last_bridge_port     = 0;
+    std::int64_t  last_attempt_ms      = 0;
+    std::int64_t  last_success_ms      = 0;
+    bool          loopback_used        = false;
+};
+
+// Pull a copy of the most recent discovery report. Safe to call from
+// any thread.
+void snapshotDiscoveryReport(DiscoveryReport& out);
+
+// Attempt to discover the bridge's TCP host:port. See header comment for
+// the probe order. Returns true when a `{"t":"bridge", host, port}` reply
+// was received within the timeouts; false otherwise. `out` is filled on
+// success and left untouched on failure.
 bool resolveBridge(
     BridgeTarget& out,
-    const BridgeTarget& fallback,
     std::uint16_t discovery_port = kDefaultDiscoveryPort);
 
 }  // namespace smoap::ap

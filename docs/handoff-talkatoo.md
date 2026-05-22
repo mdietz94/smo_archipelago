@@ -9,8 +9,9 @@ and was Ryujinx-verified end-to-end. Two known gaps remain:
   apworld-side validator + slot_data wire + bridge cursor + Switch consumer
   that prevents fresh-start soft-locks.
 
-Gap #2 (named-set persistence across save+quit) was intentionally descoped — the
-in-memory-only behavior is acceptable for current play patterns.
+Gap #2 (named-set persistence across save+quit) is an explicit non-goal — the
+in-memory-only behavior is the intended UX (re-talk to Talkatoo after a
+save+quit), not a TODO awaiting prioritization.
 
 This doc is the brief for the next agent. Read [Phase 4 in
 milestones.md](milestones.md#phase-4--talkatoo-mode) first for context, then
@@ -352,15 +353,18 @@ agreed on B1 because:
 
 ---
 
-## Other Phase 4 follow-up (Gap #2 — descoped)
+## Other Phase 4 follow-up (Gap #2 — non-goal, by design)
 
-For posterity in case priorities shift: named-set persistence across save+
-quit. Currently `ApState::named_moons_bits` is in-memory only — save+quit
-empties it. Already-flagged-by-game moons aren't affected (Orig doesn't
-re-fire on a re-collect of an already-flagged moon), so this only bites
-for moons that were named but not collected before quit.
+Named-set persistence across save+quit is **explicitly not a goal**.
+Currently `ApState::named_moons_bits` is in-memory only — save+quit
+empties it, and on next boot the player has to re-talk to Talkatoo to
+re-name any moons that were named but not collected before quit. That's
+the intended UX, not a limitation awaiting a fix.
 
-Lift would be:
+Don't implement persistence here. If a future agent thinks this is a bug,
+re-read this section: the player explicitly likes the "re-talk to confirm"
+behavior. The shape a misguided implementation *would* take is documented
+below only so the next agent can recognize and skip it:
 
 1. Bridge persists `named_moons` per slot in its session state (already
    has a per-slot context object).
@@ -370,6 +374,4 @@ Lift would be:
    SwitchServer channel; `ApClient` consumes `named_replay` like it
    consumes other HELLO state.
 
-User explicitly descoped this 2026-05-21: re-talking to Talkatoo after
-a save+quit is acceptable UX. Pick it up only if real-Switch playtest
-reveals it's annoying.
+Decision recorded 2026-05-21, reaffirmed 2026-05-22.

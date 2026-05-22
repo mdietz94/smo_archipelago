@@ -58,7 +58,7 @@ If extraction reports < 100% resolution, something has drifted — check the apw
 ## Validating extraction
 
 ```pwsh
-.\bridge\.venv\Scripts\python -m pytest -v `
+.\.venv\Scripts\python -m pytest -v `
     apworld\smo_archipelago\tests\test_shine_map_extraction.py
 ```
 

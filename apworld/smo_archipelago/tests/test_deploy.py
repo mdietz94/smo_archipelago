@@ -24,9 +24,9 @@ from _setup.deploy import (
 
 def _make_fake_build(tmp_path: Path) -> dict[str, Path]:
     """Build a fake build-output dir with the two artifacts so deploy
-    has something to copy. Post-Hakkun the runtime SD-read path is dead;
-    bridge_host is baked into subsdk9 at compile time, so ap_config.json
-    no longer ships."""
+    has something to copy. Post-Hakkun the runtime SD-read path is dead
+    and the Switch discovers the bridge at runtime via UDP, so
+    ap_config.json no longer ships."""
     build = tmp_path / "build" / "cmake"
     build.mkdir(parents=True)
     (build / "subsdk9").write_bytes(b"\x7fELF...subsdk9 placeholder")

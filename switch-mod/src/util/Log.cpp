@@ -7,12 +7,14 @@
 //      despite older docs claiming otherwise — see Log.hpp).
 //   2. Forwards messages at or above SMOAP_LOG_FORWARD_MIN_LEVEL to the
 //      PC client via the bridge's outbound_logs ring.
-//   3. If SMOAP_DEBUG_SD_LOG is defined at compile time: also accumulates
-//      to an 8 KiB in-memory ring buffer, drained one-shot to
-//      sd:/smo_ap.txt at ~5 seconds into drawMain. Useful for on-device
-//      boot debugging when Ryujinx isn't available and lm is opaque.
-//      Off by default; enable via -DSMOAP_DEBUG_SD_LOG=ON at cmake
-//      configure.
+//   3. Always accumulates to a 16 KiB in-memory ring buffer (last ~200
+//      log lines). Read by ui::ApDebugConsole when networking breaks so
+//      the player can see the failure tail on screen without a PC. The
+//      SD-card drain below observes the same ring under the same lock.
+//   4. If SMOAP_DEBUG_SD_LOG is defined at compile time: drains the ring
+//      one-shot to sd:/smo_ap.txt at ~5 seconds into drawMain. Useful
+//      for on-device boot debugging when Ryujinx isn't available and lm
+//      is opaque. Off by default; enable via -DSMOAP_DEBUG_SD_LOG=ON.
 //
 //      Symbol resolution: the nn::fs::* entry points are looked up at
 //      *runtime* via hk::ro::lookupSymbol on first drain, NOT via sail's
@@ -32,6 +34,7 @@
 
 #include "Log.hpp"
 
+#include <atomic>
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
@@ -41,7 +44,6 @@
 #include "../ap/ApFrameBridge.hpp"
 
 #ifdef SMOAP_DEBUG_SD_LOG
-#  include <atomic>
 #  include <hk/ro/RoUtil.h>
 #  include <hk/types.h>
 #endif
@@ -84,6 +86,45 @@ const char* wireLevelName(LogLevel lvl) {
         case LogLevel::Error: return "error";
     }
     return "info";
+}
+
+// ---- always-on ring buffer ----------------------------------------------
+//
+// Holds the last ~200 log lines (~16 KiB worth) in memory so the on-Switch
+// debug overlay (ui::ApDebugConsole) can dump them when networking breaks
+// and the PC-tab log forwarder isn't useful. Same spinlock + atomic
+// pattern the SD-card sink used; the ring is now unconditional and the
+// SD-card drain just observes it through the same lock.
+constexpr std::size_t kRingCap = 16 * 1024;
+char g_ring[kRingCap];
+std::atomic<std::uint32_t> g_ring_used{0};
+std::atomic_flag g_ring_lock = ATOMIC_FLAG_INIT;
+
+class SpinGuard {
+public:
+    SpinGuard() {
+        while (g_ring_lock.test_and_set(std::memory_order_acquire)) {
+            // Spin briefly; ring writes complete in microseconds.
+        }
+    }
+    ~SpinGuard() { g_ring_lock.clear(std::memory_order_release); }
+};
+
+void ringAppend(const char* buf, std::size_t len) {
+    if (len == 0 || len > kRingCap) return;
+    SpinGuard g;
+    std::uint32_t used = g_ring_used.load(std::memory_order_relaxed);
+    if (used + len > kRingCap) {
+        // Drop oldest by shifting. Keeps the newest lines visible even
+        // when the buffer fills.
+        std::uint32_t drop = used + static_cast<std::uint32_t>(len) - kRingCap;
+        if (drop > used) drop = used;
+        std::memmove(g_ring, g_ring + drop, used - drop);
+        used -= drop;
+    }
+    std::memcpy(g_ring + used, buf, len);
+    g_ring_used.store(used + static_cast<std::uint32_t>(len),
+                      std::memory_order_relaxed);
 }
 
 #ifdef SMOAP_DEBUG_SD_LOG
@@ -181,14 +222,6 @@ bool resolveSymbols() {
 
 }  // namespace nnfs
 
-// Ring buffer for SD logging. Holds enough text to cover the init burst
-// + the worker thread's first ~5s of activity (the window we capture).
-constexpr std::size_t kRingCap = 8192;
-char g_ring[kRingCap];
-std::atomic<std::uint32_t> g_ring_used{0};
-// Single spinlock guarding {g_ring, g_ring_used}.
-std::atomic_flag g_ring_lock = ATOMIC_FLAG_INIT;
-
 // One-shot drain strategy. Sustained file I/O from the frame thread aborts
 // in nn::fs (Result 0xCA8 from internal FlushFile, hit during development).
 // Drain ONCE at kDrainAtFrame (~5s of drawMain), set g_drain_done, never
@@ -204,34 +237,6 @@ std::atomic<bool> g_drain_done{false};
 // dir-level lock conflict made WriteFile abort with TargetLocked
 // (Result 0xCA8). Root SD path avoids the conflict.
 const char* kLogFilePath = "sd:/smo_ap.txt";
-
-class SpinGuard {
-public:
-    SpinGuard() {
-        while (g_ring_lock.test_and_set(std::memory_order_acquire)) {
-            // Spin. Drainer holds for ~ms during file I/O; writers (60Hz
-            // frame, 1Hz heartbeat, sporadic hooks) wait briefly.
-        }
-    }
-    ~SpinGuard() { g_ring_lock.clear(std::memory_order_release); }
-};
-
-void ringAppend(const char* buf, std::size_t len) {
-    if (len == 0) return;
-    SpinGuard g;
-    std::uint32_t used = g_ring_used.load(std::memory_order_relaxed);
-    if (used + len > kRingCap) {
-        // Drop oldest by shifting. Keeps newest log lines visible even when
-        // the buffer fills before our one-shot drain fires.
-        std::uint32_t drop = used + static_cast<std::uint32_t>(len) - kRingCap;
-        if (drop > used) drop = used;
-        std::memmove(g_ring, g_ring + drop, used - drop);
-        used -= drop;
-    }
-    std::memcpy(g_ring + used, buf, len);
-    g_ring_used.store(used + static_cast<std::uint32_t>(len),
-                      std::memory_order_relaxed);
-}
 
 #endif  // SMOAP_DEBUG_SD_LOG
 
@@ -277,11 +282,23 @@ void log(LogLevel lvl, const char* fmt, ...) {
         hk::svc::OutputDebugString(buf, total);
     }
 
-#ifdef SMOAP_DEBUG_SD_LOG
-    // Capture every level (incl. DEBUG) into the ring — the SD diagnostic
-    // exists precisely to see what the kernel-debug sink filtered out.
+    // Capture every level (incl. DEBUG) into the always-on ring. The
+    // on-Switch debug overlay reads this when networking breaks; the
+    // optional SD-card drain (below) observes the same ring.
     ringAppend(buf, total);
-#endif
+}
+
+char* snapshotRecentLogs(char* out, std::size_t cap, std::size_t* out_len) {
+    if (!out || cap == 0) {
+        if (out_len) *out_len = 0;
+        return out;
+    }
+    SpinGuard g;
+    const std::uint32_t used = g_ring_used.load(std::memory_order_relaxed);
+    const std::size_t take = (used < cap) ? used : cap;
+    std::memcpy(out, g_ring, take);
+    if (out_len) *out_len = take;
+    return out;
 }
 
 void drainPendingToFile() {

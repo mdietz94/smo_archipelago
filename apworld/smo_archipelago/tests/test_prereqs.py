@@ -644,7 +644,19 @@ def test_ninja_caches_resolved_bin_dir_path_fallback(
 
 # ---------- check_hactool ----------
 
-def test_hactool_present(monkeypatch, tmp_path) -> None:
+@pytest.fixture(autouse=False)
+def _isolated_hactool_appdata(monkeypatch, tmp_path: Path) -> Path:
+    """Route both `bundled_hactool_path()` (new top-level location) and
+    `legacy_bundled_hactool_path()` (pre-fix location under bundled/)
+    into tmp_path so the tests don't see the dev's real hactool install
+    on disk. Required after the location-move fix -- `check_hactool`
+    now probes both paths, and the legacy probe was previously hitting
+    real APPDATA."""
+    monkeypatch.setenv("SMOAP_APPDATA_ROOT", str(tmp_path / "appdata"))
+    return tmp_path / "appdata"
+
+
+def test_hactool_present(_isolated_hactool_appdata, monkeypatch, tmp_path) -> None:
     hac = tmp_path / "hactool.exe"
     hac.write_text("")
     monkeypatch.setattr("shutil.which", lambda name: str(hac) if name in (
@@ -654,7 +666,7 @@ def test_hactool_present(monkeypatch, tmp_path) -> None:
     assert str(hac) in r.detail
 
 
-def test_hactool_missing_surfaces_picker(monkeypatch) -> None:
+def test_hactool_missing_surfaces_picker(_isolated_hactool_appdata, monkeypatch) -> None:
     monkeypatch.setattr("shutil.which", lambda name: None)
     r = check_hactool()
     assert not r.ok
@@ -662,7 +674,7 @@ def test_hactool_missing_surfaces_picker(monkeypatch) -> None:
     assert r.picker_filter
 
 
-def test_hactool_user_picked_path_used(monkeypatch, tmp_path) -> None:
+def test_hactool_user_picked_path_used(_isolated_hactool_appdata, monkeypatch, tmp_path) -> None:
     user_picked = tmp_path / "MyTools" / "hactool.exe"
     user_picked.parent.mkdir(parents=True)
     user_picked.write_text("")
@@ -674,7 +686,7 @@ def test_hactool_user_picked_path_used(monkeypatch, tmp_path) -> None:
 
 
 def test_hactool_stale_user_picked_path_falls_back_to_path(
-    monkeypatch, tmp_path,
+    _isolated_hactool_appdata, monkeypatch, tmp_path,
 ) -> None:
     stale = tmp_path / "deleted" / "hactool.exe"
     hac = tmp_path / "hactool.exe"
@@ -689,7 +701,7 @@ def test_hactool_stale_user_picked_path_falls_back_to_path(
 
 
 def test_hactool_stale_picked_path_and_no_path_fails_clearly(
-    monkeypatch, tmp_path,
+    _isolated_hactool_appdata, monkeypatch, tmp_path,
 ) -> None:
     stale = tmp_path / "deleted" / "hactool.exe"
     monkeypatch.setattr("shutil.which", lambda name: None)

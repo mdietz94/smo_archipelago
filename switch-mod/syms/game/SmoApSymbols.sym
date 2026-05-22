@@ -66,16 +66,48 @@ _ZN16GameDataFunction19tryFindShineMessageEPKN2al9LiveActorEPKNS0_17IUseMessageS
 // names project-wide.
 _ZTV7Poetter
 
+// --- ImGui debug overlay deps (ui::ApDebugConsole) ----------------------
+// Application::sInstance is the SEAD_SINGLETON_DISPOSER static that
+// Application::instance() reads. al::getStationedHeap is the stationed
+// heap source the overlay carves a 2 MiB ExpHeap out of. sead::ExpHeap::create
+// + sead::SafeStringBase<char>::operator= are needed by the ExpHeap
+// constructor (it stores the heap name as a SafeString). All taken from
+// Kgamer77/SMOO-Plus-Hakkun's working syms.
+_ZN11Application9sInstanceE
+_ZN2al16getStationedHeapEv
+_ZN4sead7ExpHeap6createEmRKNS_14SafeStringBaseIcEEPNS_4HeapEiNS5_13HeapDirectionEb
+_ZN4sead14SafeStringBaseIcEaSERKS1_
+
+// Talkatoo% pause-menu mark fix — TalkatooMenuMarkHook.cpp.
+//
+// Hook 1: GameDataFile::isOpenShineName(s32 world_id, s32 index) const.
+// Pause-menu Power Moon list queries this to draw the "name revealed"
+// indicator. In Talkatoo% mode we OR-in our AP-pool named set so the
+// moons we substituted in the speech bubble are marked as named in the
+// menu (vanilla path keeps marking collected / achievement-revealed
+// moons; we add our AP picks on top).
+//
+// Hook 2: GameDataFile::tryUnlockShineName(s32 world_id, s32 index).
+// Talkatoo's vanilla picker writes the per-(world, idx) "name revealed"
+// state via this setter. In Talkatoo% mode we suppress the write so the
+// menu doesn't mark moons the player never actually heard Talkatoo speak.
+//
+// Helper: GameDataFile::findShine(s32 world_id, s32 index) const →
+// HintInfo*. Used by Hook 1 to translate (world_id, idx) into the
+// stageName/objId pair shineUidByStageObj resolves to a shine_uid.
+_ZNK12GameDataFile15isOpenShineNameEii
+_ZN12GameDataFile18tryUnlockShineNameEii
+_ZNK12GameDataFile9findShineEii
+
 // GrowSeedInstantHook: rs::getGrowFlowerTime(const al::LiveActor*,
 // const al::PlacementId*). The public rs:: wrapper around
 // GameDataFile::getGrowFlowerTime — the direct GameDataFile method is
 // inlined in 1.0.0 main.nso and not in dynsym, but this wrapper IS
 // (cross-checked against MrKatzenGaming/BTT-Studio syms/game/System/
-// GameDataUtil.sym which pins it at 0x004dd230). Trampolined to return 0
-// unconditionally — the seed/flower actor polls this each tick and
-// compares (now - returned_time) against a bloom threshold; a returned
-// 0 makes the elapsed delta huge regardless of timebase, so the pot
-// advances to bloomed on the next frame. Same return-zero pattern that
-// BTT-Studio's "flower pot refresh" toggle ships. See
-// hooks/GrowSeedInstantHook.cpp.
+// GameDataUtil.sym which pins it at 0x004dd230). Trampolined to return
+// 1 for planted pots (orig==0 passes through), making (now - returned)
+// enormous in any timebase so the pot blooms on next stage re-entry.
+// NOT the same as BTT-Studio's "Refresh Seeds" toggle, which returns
+// 0 from this wrapper as a deliberate RESET (clears the planted state +
+// the seed item). See hooks/GrowSeedInstantHook.cpp.
 _ZN2rs17getGrowFlowerTimeEPKN2al9LiveActorEPKNS0_11PlacementIdE

@@ -92,7 +92,9 @@ always advance the kingdom's scenario regardless of Talkatoo.
   Switch mod's "Talkatoo has named these" set resets (it's in-memory
   only). The moon goes back to needing Talkatoo to re-name it. **Talk
   to Talkatoo again before trying to collect** — he'll name it on his
-  next visit. (This is a known limitation, tracked as Gap #2.)
+  next visit. (This is *intended* behavior, not a limitation — see
+  Gap #2 in handoff-talkatoo.md. Persisting the named set is an
+  explicit non-goal.)
 - **SMOClient restart**: reconnect to AP, the seed's slot_data
   re-populates the order, you keep playing. No state lost on the AP
   side.
@@ -518,9 +520,11 @@ Test coverage map:
 
 ### Known limitations
 
-- **Gap #2 (in-memory named_set).** Save+quit empties
-  `ApState::named_moons_bits`. Moons Talkatoo had named but the player
-  hadn't collected before quit need re-naming. Acceptable UX.
+- **Gap #2 (in-memory named_set) — intentional, not a limitation.**
+  Save+quit empties `ApState::named_moons_bits`; moons Talkatoo had
+  named but the player hadn't collected before quit need re-naming.
+  This is the *intended* UX (re-talk to confirm), explicitly not a
+  TODO. See handoff-talkatoo.md Gap #2 before implementing persistence.
 
 - **HELLO-before-Connected window.** When SMO boots before the
   SMOClient ↔ AP connection completes, the Switch's `talkatoo_mode_on`

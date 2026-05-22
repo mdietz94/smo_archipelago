@@ -38,53 +38,105 @@ from pathlib import Path
 APWORLD_ROOT = Path(__file__).resolve().parents[1]
 
 
-# Audited 2026-05-21 against mariowiki.com/Multi_Moon + per-kingdom
-# story walkthroughs. Source-of-truth for the per-kingdom rationale:
-#   - Cascade: 2-scenario kingdom. "Our First Power Moon" gates story 1->2;
-#              "Multi Moon Atop the Falls" (Madame Broode) caps story 2.
-#   - Sand: 2 Multi Moons — Hariet ("Showdown on the Inverted Pyramid"),
-#           Knucklotec ("The Hole in the Desert").
-#   - Lake: "Broodals Over the Lake" (Rango MM).
-#   - Wooded: 2 Multi Moons — Spewart ("Flower Thieves of Sky Garden",
-#             story 1->2), Torkdrift ("Defend the Secret Flower Field!",
-#             story 2->3).
-#   - Metro: 2 Multi Moons — Mechawiggler ("New Donk City's Pest Problem"),
-#            Pauline ("A Traditional Festival!").
-#   - Snow: "The Bound Bowl Grand Prix".
-#   - Seaside: 4 seal prereqs + Mollusque MM. Seals spawn Mollusque;
-#              Mollusque drops the Multi Moon ("The Glass Is Half Full!").
-#   - Luncheon: 2 Multi Moons — Cookatiel-meat ("Big Pot on the Volcano:
-#               Dive In!"), Cookatiel-fight ("Cookatiel Showdown!").
-#   - Ruined: "Battle with the Lord of Lightning!" (Ruined Dragon MM).
-#   - Bowser's: 4-step story chain — Infiltrate -> Smart Bombing ->
-#               Big Broodal Battle -> Showdown (RoboBrood MM). All four
-#               required for the chain to complete; only the last is a
-#               Multi Moon, the others are single-moon story missions
-#               that advance scenario_no.
+# Audited 2026-05-21, re-audited 2026-05-22 against OdysseyDecomp's quest
+# model + per-kingdom story walkthroughs. The criterion is mechanical:
+# SMO's QuestInfoHolder calls setMainScenarioNo(quest->getQuestNo() + 1)
+# when the last active quest for a given QuestNo is invalidated. The
+# flagged set is the enumeration of those shines for the kingdoms SMO
+# ships with main quests. (Source:
+# github.com/MonsterDruide1/OdysseyDecomp QuestInfoHolder.cpp,
+# specifically QuestInfoHolder::invalidateQuest at line 140.)
+#
+# This list is maintained by hand against Mario Wiki's per-kingdom
+# Power Moon lists. A previous iteration extracted Shine* placements
+# with positive QuestNo directly from StageData/*Map.szs and
+# cross-checked against this set; that walker confirmed 17 of the
+# entries but missed every Multi Moon (those route through QuestObj's
+# SrcUnitLayerList layer-link indirection, which the walker couldn't
+# resolve cleanly). The extraction approach was reverted as added
+# complexity for partial coverage; the hand audit is the source of
+# truth. The Mario Wiki references in the per-kingdom rationale below
+# are the authoritative cross-check.
+#
+# Per-kingdom rationale (each entry = a separate IsMainQuest shine):
+#   - Cascade (2): "Our First Power Moon" (story 0->1),
+#                  "Multi Moon Atop the Falls" (Madame Broode MM, 1->2).
+#   - Sand (4): "Atop the Highest Tower" (story 0->1),
+#               "Moon Shards in the Sand" (1->2),
+#               "Showdown on the Inverted Pyramid" (Hariet MM, 2->3),
+#               "The Hole in the Desert" (Knucklotec MM, 3->4).
+#   - Lake (1): "Broodals Over the Lake" (Rango MM). Lake is one-MM.
+#   - Wooded (4): "Road to Sky Garden" (story 0->1),
+#                 "Flower Thieves of Sky Garden" (Spewart MM, 1->2),
+#                 "Path to the Secret Flower Field" (2->3),
+#                 "Defend the Secret Flower Field!" (Torkdrift MM, 3->4).
+#   - Metro (7): "New Donk City's Pest Problem" (Mechawiggler MM, 0->1),
+#                "Drummer on Board!", "Guitarist on Board!",
+#                "Bassist on Board!", "Trumpeter on Board!" (the four
+#                band members; each advances scenario_no by one),
+#                "Powering Up the Station" (post-band, pre-festival),
+#                "A Traditional Festival!" (Pauline MM, terminal).
+#   - Snow (5): "The Ice Wall Barrier", "The Gusty Barrier",
+#               "The Icicle Barrier", "The Snowy Mountain Barrier"
+#               (the four barriers gating Bound Bowl), then
+#               "The Bound Bowl Grand Prix" (terminal MM).
+#   - Seaside (5): 4 seal prereqs + Mollusque MM. Seals spawn Mollusque;
+#                  Mollusque drops "The Glass Is Half Full!" MM.
+#   - Luncheon (5): "The Broodals Are After Some Cookin'" (0->1),
+#                   "Under the Cheese Rocks" (1->2),
+#                   "Cookatiel Showdown!" (Cookatiel-fight MM, 2->3),
+#                   "Big Pot on the Volcano: Dive In!" (Cookatiel-meat MM,
+#                   2->3 sibling).
+#                   "Climb Up the Cascading Magma" (3->4 scenario advance).
+#                   The AP-side LuncheonPeace requirement on Climb is a
+#                   reach gate (you can't reach the cascading-magma path
+#                   without Cookatiel-fight clearing the volcano top), not
+#                   a "this isn't a story moon" marker — SMO still bumps
+#                   scenario_no on collection, so Talkatoo% must allow it.
+#   - Ruined (1): "Battle with the Lord of Lightning!" (Ruined Dragon MM).
+#   - Bowser's (4): "Infiltrate Bowser's Castle!" -> "Smart Bombing" ->
+#                   "Big Broodal Battle" -> "Showdown at Bowser's Castle"
+#                   (RoboBrood MM, terminal). Each advances scenario_no.
 # Intentionally NOT included (per audit):
 #   - Cap, Lost, Cloud, Mushroom, Moon, Dark Side, Darker Side. Cap has no
-#     in-kingdom progression gate; Lost has no Multi Moon at all per
+#     in-kingdom progression gate; Lost has no IsMainQuest shines per
 #     Mario Wiki; Cloud / Mushroom / Moon are one-moon transitional /
 #     post-game kingdoms; Dark / Darker Side are post-credits and AP-pool
 #     exclusion is handled separately.
 EXPECTED_PROGRESSION = frozenset({
     "Cascade: Our First Power Moon",
     "Cascade: Multi Moon Atop the Falls",
+    "Sand: Atop the Highest Tower",
+    "Sand: Moon Shards in the Sand",
     "Sand: Showdown on the Inverted Pyramid",
     "Sand: The Hole in the Desert",
     "Lake: Broodals Over the Lake",
+    "Wooded: Road to Sky Garden",
     "Wooded: Flower Thieves of Sky Garden",
+    "Wooded: Path to the Secret Flower Field",
     "Wooded: Defend the Secret Flower Field!",
     "Metro: New Donk City's Pest Problem",
+    "Metro: Drummer on Board!",
+    "Metro: Guitarist on Board!",
+    "Metro: Bassist on Board!",
+    "Metro: Trumpeter on Board!",
+    "Metro: Powering Up the Station",
     "Metro: A Traditional Festival!",
+    "Snow: The Ice Wall Barrier",
+    "Snow: The Gusty Barrier",
+    "Snow: The Icicle Barrier",
+    "Snow: The Snowy Mountain Barrier",
     "Snow: The Bound Bowl Grand Prix",
     "Seaside: The Stone Pillar Seal",
     "Seaside: The Lighthouse Seal",
     "Seaside: The Hot Spring Seal",
     "Seaside: The Seal Above the Canyon",
     "Seaside: The Glass Is Half Full!",
-    "Luncheon: Big Pot on the Volcano: Dive In!",
+    "Luncheon: The Broodals Are After Some Cookin'",
+    "Luncheon: Under the Cheese Rocks",
     "Luncheon: Cookatiel Showdown!",
+    "Luncheon: Big Pot on the Volcano: Dive In!",
+    "Luncheon: Climb Up the Cascading Magma",
     "Ruined: Battle with the Lord of Lightning!",
     "Bowser's: Infiltrate Bowser's Castle!",
     "Bowser's: Smart Bombing",

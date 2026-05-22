@@ -1,0 +1,10 @@
+// NVN — Nintendo's graphics API entry point. Resolved from nnSdk via
+// the @sdk module tag (defined in config/VersionList.sym). The previous
+// attempt put this under @smo:100 which mis-resolved to a stub in
+// RedStar.nss instead of nnSdk's actual nvnBootstrapLoader, silently
+// breaking the Nvn addon's bootstrap trampoline. See Kgamer77/
+// SMOO-Plus-Hakkun for the proven-working module layout.
+
+@sdk
+
+nvnBootstrapLoader

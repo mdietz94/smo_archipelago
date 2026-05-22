@@ -49,14 +49,23 @@ def appdata_root() -> Path:
     """Per-user output root: `%APPDATA%/SMOArchipelago/` on Windows,
     `~/.local/share/SMOArchipelago/` elsewhere.
 
+    Honors `SMOAP_APPDATA_ROOT` as an override — used by
+    `scripts/local_release_audit.ps1` to redirect the audit sandbox into
+    a tempdir so the user's real %APPDATA% is never touched. Set ONLY in
+    test/CI/harness contexts; the wizard itself must never set this.
+
     Created on first access. Subdirs (`data/`, `build/`) are created by the
     individual modules that write into them.
     """
-    base = os.environ.get("APPDATA")
-    if base:
-        root = Path(base) / "SMOArchipelago"
+    override = os.environ.get("SMOAP_APPDATA_ROOT")
+    if override:
+        root = Path(override)
     else:
-        root = Path.home() / ".local" / "share" / "SMOArchipelago"
+        base = os.environ.get("APPDATA")
+        if base:
+            root = Path(base) / "SMOArchipelago"
+        else:
+            root = Path.home() / ".local" / "share" / "SMOArchipelago"
     root.mkdir(parents=True, exist_ok=True)
     return root
 

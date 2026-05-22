@@ -1,6 +1,17 @@
 // nn::nifm — Network Interface Manager. ApClient calls these on the frame
 // thread inside GameSystemInit (post-Orig) to bring up the data interface
 // before the worker spawns. Sail resolves them against main.nso's dynsym.
+//
+// LESSON LEARNED 2026-05-22: Tried adding GetCurrentPrimaryIpAddress
+// (mangled `_ZN2nn4nifm26GetCurrentPrimaryIpAddressEPj`) for the subnet
+// sweep. The mod silently failed to init in Ryujinx — `hkMain` never
+// ran, zero log output. Either the symbol isn't exported under our
+// @smo:100 module pin, or sail's load-time apply aborted the subsdk.
+// Either way, the failure mode is "no logs, no boot" — exactly the
+// kind of HW/Ryujinx parity hazard we go out of our way to avoid.
+// Reverted to the original 3 entries. ApDiscovery's sweep step now
+// soft-fails (loopback-only fallback) until we have a verified way
+// to query the local IP. See the @-todo at top of ApDiscovery.cpp.
 
 @smo:100
 

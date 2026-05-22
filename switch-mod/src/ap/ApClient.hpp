@@ -65,12 +65,6 @@ private:
     ApClient() = default;
 
     bool connectOnce();
-    // Same as connectOnce but targets an explicit host:port without first
-    // mutating target_. Used by the post-UDP-failure TCP fallback chain
-    // (worker loop tries 127.0.0.1 then BRIDGE_HOST_STRING via this).
-    // On success, target_.host/port are updated to whichever attempt
-    // landed so subsequent reads/writes stay consistent.
-    bool connectOnceTo(const char* host, std::uint16_t port);
     void disconnect();
     void sendHello();
     // M4.5 reconciliation: walks GameDataHolder via game::enumerateOwnedShines

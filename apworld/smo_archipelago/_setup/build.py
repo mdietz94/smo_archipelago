@@ -772,11 +772,11 @@ def run_build_switchmod(
     from two build-step screens (configure + build) down to one. This
     matches what `smo-build` runs from the dev machine.
 
-    `bridge_host` is baked into `subsdk9` at compile time via cmake's
-    `-DBRIDGE_HOST=` arg — it's the only configurable that makes one
-    user's `subsdk9` different from another's, since the runtime UDP
-    discovery handles the IP-changes-later case but still needs an
-    initial fallback.
+    `bridge_host` is baked into subsdk9 at compile time via
+    `-DBRIDGE_HOST=`. ApDiscovery uses that IP's /24 as the unicast sweep
+    range. The actual SMOClient may be on a neighbouring octet, so the
+    sweep covers a moving target within the same LAN — but the baked
+    seed has to be correct or the sweep range is wrong.
 
     PATH wiring: the wrapper reads `SMOAP_LLVM_BIN` / `SMOAP_MINGW_BIN`
     / `SMOAP_CMAKE_BIN` / `SMOAP_NINJA_BIN` env vars (defaulting to
@@ -866,10 +866,10 @@ def collect_build_outputs() -> dict[str, Path]:
     the deploy step copies the whole `sd/atmosphere/...` subtree.
 
     ap_config.json used to ship alongside (legacy exefs-runtime SD-read
-    path) but the Hakkun cutover retired that read path — bridge IP is
-    baked into subsdk9 at compile time via the wizard's BRIDGE_HOST
-    cmake arg, and runtime UDP discovery handles the IP-changes case.
-    Matches the two-key shape of deploy.py's _sd_layout / _ryujinx_layout."""
+    path) but the Hakkun cutover retired that read path. The Switch
+    discovers the PC's IP at runtime via UDP subnet sweep, so the same
+    subsdk9 binary works on every LAN. Matches the two-key shape of
+    deploy.py's _sd_layout / _ryujinx_layout."""
     mod_root = bundled_switch_mod()
     sd = mod_root / "build" / "sd" / "atmosphere" / "contents" / "0100000000010000"
     outputs = {

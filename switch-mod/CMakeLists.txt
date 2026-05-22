@@ -7,20 +7,23 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(config/config.cmake)
 
 # ---------------------------------------------------------------------------
-# Version + bridge defines. The strings land verbatim in HELLO + log lines
-# so the bridge can correlate sessions.
+# Version + bridge defines. The version strings land verbatim in HELLO + log
+# lines so the bridge can correlate sessions.
 #
-# BRIDGE_HOST has NO default on purpose — it must be the LAN IP of the PC
-# running SMOClient, and a stale default IP silently produces a binary that
-# fails to TCP-fallback when UDP discovery misses. The wizard auto-detects
-# the user's LAN IP and passes it via -DBRIDGE_HOST=...; manual / CI builds
-# must pass it explicitly. See `.claude/skills/smo-build/SKILL.md` for the
-# autodetect one-liner. Pass it like:
-#   python scripts/build_switchmod.py -DBRIDGE_HOST=192.168.x.x
+# BRIDGE_HOST is the LAN IP of the PC running SMOClient. ApDiscovery uses it
+# as the SEED for the subnet sweep — we compute `(BRIDGE_HOST & 0xFFFFFF00)`
+# and unicast-probe every host in that /24. The PC's actual IP may be off by
+# a few octets vs the configured value (DHCP shuffle, LAN re-numbering), so
+# the sweep covers that. NOT just "TCP-fall-back-to-this-IP" — the value is
+# load-bearing for the discovery range.
+#
+# No default; fatal on missing so a stale baked IP never silently produces a
+# binary that can't reach the bridge. The wizard auto-detects via PowerShell
+# and passes it via -DBRIDGE_HOST=...; manual / CI builds must pass it.
 # ---------------------------------------------------------------------------
 set(SMO_VERSION            "1.0.0"         CACHE STRING "Target SMO version")
 set(SMO_AP_MOD_VERSION     "0.1.0"         CACHE STRING "Module version baked into HELLO")
-set(BRIDGE_HOST            ""              CACHE STRING "PC LAN IP for the bridge (REQUIRED; pass -DBRIDGE_HOST=<ip>)")
+set(BRIDGE_HOST            ""              CACHE STRING "PC LAN IP — used as subnet sweep seed (REQUIRED; pass -DBRIDGE_HOST=<ip>)")
 set(BRIDGE_PORT            17777           CACHE STRING "Bridge TCP port")
 set(BRIDGE_RETRY_MS        3000            CACHE STRING "Reconnect backoff seed (ms)")
 set(BRIDGE_RECV_TIMEOUT_MS 200             CACHE STRING "Per-iteration recv timeout (ms)")
@@ -35,7 +38,8 @@ if(NOT BRIDGE_HOST)
         "        $_.IPAddress -notlike '169.254.*' -and $_.IPAddress -ne '127.0.0.1' -and\n"
         "        ($_.PrefixOrigin -eq 'Dhcp' -or $_.PrefixOrigin -eq 'Manual')\n"
         "    }).IPAddress\n"
-        "The wizard auto-detects it; only manual / CI builds need to pass it.")
+        "ApDiscovery uses BRIDGE_HOST's /24 as the unicast sweep range; the\n"
+        "actual SMOClient may be on a neighbouring octet after a DHCP renumber.")
 endif()
 
 add_compile_definitions(
@@ -70,6 +74,24 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 # vapours, etc.). Linking the INTERFACE target propagates the include paths.
 add_subdirectory(lib/OdysseyHeaders)
 target_link_libraries(${PROJECT_NAME} PRIVATE OdysseyHeaders)
+
+# Debug overlay: ImGui / Nvn / DebugRenderer addons. Registered via
+# HAKKUN_ADDONS in config/config.cmake; LibHakkun's enable_addons()
+# (invoked from sys/cmake/module.cmake) handles add_subdirectory + link
+# automatically. Here we just expose include paths for ApDebugConsole.cpp
+# (imgui.h, hk/gfx/ImGuiBackendNvn.h, hk/gfx/DebugRenderer.h) and gate the
+# overlay code with SMOAP_HAS_DEBUG_RENDERER so the build still works if
+# the addons aren't present (e.g. lib/imgui submodule not yet checked out).
+if(EXISTS ${CMAKE_SOURCE_DIR}/lib/imgui/imgui.h AND
+   EXISTS ${CMAKE_SOURCE_DIR}/sys/addons/ImGui/CMakeLists.txt)
+    target_include_directories(${PROJECT_NAME} PRIVATE
+        lib/imgui
+        sys/addons/ImGui/include
+        sys/addons/Nvn/include
+        sys/addons/DebugRenderer/include
+    )
+    add_compile_definitions(SMOAP_HAS_DEBUG_RENDERER=1)
+endif()
 
 include(sys/cmake/module.cmake)
 include(sys/cmake/deploy.cmake)

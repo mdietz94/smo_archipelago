@@ -31,8 +31,14 @@ set(TRAMPOLINE_POOL_SIZE 0x40)
 set(BAKE_SYMBOLS FALSE)
 
 # HeapSourceDynamic is essential — routes operator new / malloc / free to
-# SMO's own allocator (which is thread-safe; see spike Gate 4). Without this
-# addon, std::vector::push_back / std::string growth would call musl malloc
-# directly and NULL-deref on hk::os::Thread instances. No Nvn/DebugRenderer
-# in production — those are spike-only.
-set(HAKKUN_ADDONS HeapSourceDynamic)
+# SMO's own allocator. Without this addon, std::vector::push_back /
+# std::string growth would call musl malloc directly and NULL-deref on
+# hk::os::Thread instances.
+#
+# Nvn + ImGui + DebugRenderer enable the on-Switch debug overlay
+# (ui::ApDebugConsole). Kgamer77/SMOO-Plus-Hakkun ships the same set on
+# the same LibHakkun lineage with no init-time issues — the key is the
+# @sdk module entry in config/VersionList.sym (without it, sail mis-
+# resolves nvnBootstrapLoader to a RedStar.nss stub). lib/imgui (Dear
+# ImGui submodule) must be checked out for the ImGui addon to compile.
+set(HAKKUN_ADDONS HeapSourceDynamic Nvn ImGui DebugRenderer)

@@ -1,0 +1,42 @@
+#!/usr/bin/env sh
+# Fires on `git push` (any kind). For tag pushes matching refs/tags/v*,
+# runs scripts/local_release_audit.ps1 to reproduce what the disabled
+# clean-windows-audit CI job used to catch. Block the push if the audit
+# fails; let everything else through unmodified.
+#
+# Enabled via `scripts/install_hooks.ps1`, which sets
+# `git config core.hooksPath .githooks`. Standard escape hatch: pass
+# --no-verify to `git push` to skip.
+
+# git feeds refspecs on stdin, one per line:
+#   <local_ref> <local_sha> <remote_ref> <remote_sha>
+saw_tag_push=0
+while read local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/tags/v*)
+      saw_tag_push=1
+      ;;
+  esac
+done
+
+if [ "$saw_tag_push" -eq 0 ]; then
+  exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel)"
+echo "[pre-push] tag push detected — running local release audit..."
+echo "[pre-push]   (skip with: git push --no-verify)"
+
+# Use powershell (5.1) rather than pwsh because every Windows install has
+# it; pwsh is opt-in. Script itself is 5.1-compatible.
+powershell -NoProfile -ExecutionPolicy Bypass -File "$repo_root/scripts/local_release_audit.ps1"
+rc=$?
+
+if [ "$rc" -ne 0 ]; then
+  echo "[pre-push] audit FAILED (rc=$rc) — refusing tag push."
+  echo "[pre-push] bypass with: git push --no-verify"
+  exit "$rc"
+fi
+
+echo "[pre-push] audit passed; allowing tag push."
+exit 0

@@ -9,13 +9,13 @@ Validates the whole Switch↔Client↔AP stack without booting SMO. The fake-Swi
 
 ## Prerequisites
 
-- `bridge/.venv/Scripts/python` exists (pre-merge dev venv — Archipelago's deps are a superset of what SMOClient needs; reuse it).
+- `.venv/Scripts/python` exists at the repo root (Archipelago's deps are a superset of what SMOClient needs; reuse it).
 - `vendor/Archipelago/` submodule initialized (`git submodule update --init --recursive`).
 - `apworld/smo_archipelago/client/data/{shine_map,capture_map}.json` present (gitignored; copy from main checkout if working in a worktree, or generate via the `smo-extract-data` skill).
 
 ### Bootstrapping a fresh dev venv
 
-If `bridge/.venv/` is missing (fresh clone, new contributor), set one up.
+If `.venv/` is missing (fresh clone, new contributor), set one up.
 Tested against Archipelago 0.6.7 on Windows 11 + Python 3.13:
 
 ```pwsh
@@ -26,39 +26,37 @@ python -m venv .venv
     "websockets==13.1"
 ```
 
-Substitute `.\.venv\Scripts\python` for `.\bridge\.venv\Scripts\python` in the
-commands below. Archipelago's `setup.py` blocks `pip install`; this list is the
-minimum subset needed to run `ap_generate.py`, `ap_server.py`, and the SMOClient
-Launcher entry.
+Archipelago's `setup.py` blocks `pip install`; this list is the minimum subset
+needed to run `ap_generate.py`, `ap_server.py`, and the SMOClient Launcher entry.
 
 ## Step-by-step (3 panes)
 
 ```pwsh
 # Build apworld zip (re-run after any apworld/client/__init__.py change)
-.\bridge\.venv\Scripts\python scripts\install_apworld.py
+.\.venv\Scripts\python scripts\install_apworld.py
 ```
 
 If working in a `.claude/worktrees/<name>/` worktree AND the user launches SMOClient from the main checkout's Launcher, also `Copy-Item` the freshly-built zip to the main checkout's `vendor/Archipelago/custom_worlds/meatballs.apworld`. Symptom of skipping: `unknown message type from Switch: <type>` in bridge log. See the `smo-build` skill for the full Copy-Item form.
 
 ```pwsh
 # Generate test seed (one-time per apworld change)
-.\bridge\.venv\Scripts\python scripts\ap_generate.py `
+.\.venv\Scripts\python scripts\ap_generate.py `
     --player_files_path apworld\smo_archipelago\tests\seeds `
     --outputpath apworld\smo_archipelago\tests\seeds\out
 
 # Unzip the .archipelago server file out of the player zip
-.\bridge\.venv\Scripts\python -c "import zipfile, glob; [zipfile.ZipFile(z).extractall('apworld/smo_archipelago/tests/seeds/out') for z in glob.glob('apworld/smo_archipelago/tests/seeds/out/AP_*.zip')]"
+.\.venv\Scripts\python -c "import zipfile, glob; [zipfile.ZipFile(z).extractall('apworld/smo_archipelago/tests/seeds/out') for z in glob.glob('apworld/smo_archipelago/tests/seeds/out/AP_*.zip')]"
 ```
 
 ```pwsh
 # Pane A: host server
-.\bridge\.venv\Scripts\python scripts\ap_server.py --port 38281 `
+.\.venv\Scripts\python scripts\ap_server.py --port 38281 `
     apworld\smo_archipelago\tests\seeds\out\AP_*.archipelago
 ```
 
 ```pwsh
 # Pane B: launch SMO Client — connects to localhost
-.\bridge\.venv\Scripts\python vendor\Archipelago\Launcher.py "SMO Client" `
+.\.venv\Scripts\python vendor\Archipelago\Launcher.py "SMO Client" `
     --connect localhost:38281 --name Mario
 ```
 
@@ -72,7 +70,7 @@ python scripts\switch_smoke_test.py
 
 ```pwsh
 $env:SMOAP_LIVE_AP="1"
-.\bridge\.venv\Scripts\python -m pytest -v `
+.\.venv\Scripts\python -m pytest -v `
     apworld\smo_archipelago\tests\test_ap_loopback.py
 ```
 

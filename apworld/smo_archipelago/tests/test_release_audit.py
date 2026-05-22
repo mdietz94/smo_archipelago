@@ -284,3 +284,89 @@ def test_run_audit_fails_on_unexpected_switch_mod_file(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "_setup", stub)
 
     assert release_audit.run_audit() == 1
+
+
+def test_run_audit_passes_with_pycache_dir(tmp_path, monkeypatch):
+    """__pycache__ is a Python runtime artifact -- in a dev checkout it
+    lands inside switch-mod/sys/tools/ next to the .py scripts cmake
+    invokes. The audit must ignore it; otherwise every release run
+    would fail on whatever bytecode Python decided to cache."""
+    appdata = tmp_path / "appdata"
+    switch_mod = tmp_path / "switch_mod"
+    _build_clean_sandbox(appdata, switch_mod)
+    pycache = switch_mod / "sys" / "tools" / "__pycache__"
+    pycache.mkdir(parents=True)
+    (pycache / "nso.cpython-313.pyc").write_bytes(b"stub")
+
+    monkeypatch.setattr(release_audit, "find_switch_mod_root", lambda: switch_mod)
+    import types
+    stub = types.ModuleType("_setup")
+    stub.appdata_root = lambda: appdata  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "_setup", stub)
+
+    assert release_audit.run_audit() == 0
+
+
+def test_run_audit_passes_with_submodule_gitlink(tmp_path, monkeypatch):
+    """A submodule's `.git` file (and any `.git` directory at a subdir
+    level) marks a submodule root, not a build leak. Both shapes should
+    be ignored. Same goes for the previously-flagged `.gitignore` /
+    `LICENSE` / `README.md` that live inside an init'd submodule and
+    aren't in the parent repo's `git ls-files`."""
+    import subprocess
+    appdata = tmp_path / "appdata"
+    switch_mod = tmp_path / "switch_mod"
+    _build_clean_sandbox(appdata, switch_mod)
+
+    # Simulate an initialized submodule at `lib/sub/`. Its own git index
+    # tracks `LICENSE` -- audit_switch_mod should recognize the gitlink
+    # and call `_is_submodule_tracked` to validate.
+    sub = switch_mod / "lib" / "sub"
+    sub.mkdir(parents=True)
+    (sub / "LICENSE").write_text("MIT", encoding="utf-8")
+    env = {
+        "GIT_INIT_DEFAULT_BRANCH": "main",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_SYSTEM": "/dev/null",
+        "HOME": str(sub),
+    }
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=sub, env={**env}, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t",
+         "add", "LICENSE"],
+        cwd=sub, env={**env}, check=True,
+    )
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t",
+         "commit", "-q", "-m", "init"],
+        cwd=sub, env={**env}, check=True,
+    )
+
+    monkeypatch.setattr(release_audit, "find_switch_mod_root", lambda: switch_mod)
+    import types
+    stub = types.ModuleType("_setup")
+    stub.appdata_root = lambda: appdata  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "_setup", stub)
+    # Clear the per-test submodule-tracked memo so this test doesn't
+    # inherit results from a prior fixture run.
+    release_audit._submodule_tracked_cache.clear()
+
+    assert release_audit.run_audit() == 0
+
+
+def test_discover_submodule_paths_finds_nested(tmp_path):
+    """`_discover_submodule_paths` must walk recursively so a nested
+    submodule (e.g. sys/tools/senobi) is recognized -- otherwise the
+    audit flags every senobi file as a build leak."""
+    switch_mod = tmp_path / "switch_mod"
+    (switch_mod / "sys").mkdir(parents=True)
+    (switch_mod / "sys" / ".git").write_text("gitdir: ../.git/modules/sys", encoding="utf-8")
+    (switch_mod / "sys" / "tools" / "senobi").mkdir(parents=True)
+    (switch_mod / "sys" / "tools" / "senobi" / ".git").write_text(
+        "gitdir: ../../../.git/modules/sys/modules/tools/senobi", encoding="utf-8"
+    )
+
+    found = release_audit._discover_submodule_paths(switch_mod)
+
+    # Nested submodule (longer prefix) sorted first.
+    assert found == ("sys/tools/senobi", "sys")

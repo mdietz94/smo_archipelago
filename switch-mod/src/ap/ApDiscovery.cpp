@@ -1,21 +1,40 @@
 // See ApDiscovery.hpp for the design rationale.
 //
+// Probe sequence (2026-05-22):
+//   1. Loopback 127.0.0.1:17776 — covers Ryujinx-on-same-host. Fast (250ms)
+//      and the most common dev path, so we try it first.
+//   2. Unicast sweep across the BRIDGE_HOST_STRING `/24` subnet — covers
+//      real Switch and the case where the user's PC has moved within the
+//      same LAN. All 253 hosts get one probe in a tight burst (~5ms send),
+//      then we poll for up to 1s for any reply. First valid {"t":"bridge"}
+//      wins. The previous broadcast (255.255.255.255) approach was silently
+//      dropped on a lot of real-world LANs (travel routers, mesh repeaters,
+//      managed switches with IGMP snooping); see memory note
+//      project_udp_broadcast_dead_on_user_network.
+//
+// We deliberately do NOT call nn::nifm::GetCurrentPrimaryIpAddress to learn
+// the Switch's own IP — that symbol caused a silent module-init failure
+// when added to sail (memory: project_sail_missing_symbol_crashes_init).
+// Using BRIDGE_HOST_STRING (already a verified config input) as the sweep
+// seed sidesteps the whole nifm dependency.
+//
 // Talks to bsd:u via nn::socket::* directly (same session ApClient uses).
-// Migrated from hk::socket → nn::socket alongside ApClient when the parallel
-// hk::sm/hk::socket client started failing on retail with OutOfSessions.
-// See main.cpp's GameSystem::init pre-orig hook + Kgamer init pattern.
 
 #include "ApDiscovery.hpp"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 #include "hk/types.h"
 
 #include "../util/Json.hpp"
 #include "../util/Log.hpp"
-#include "ApProtocol.hpp"  // SMO_AP_MOD_VERSION_STRING is plumbed in via this TU
+#include "ApConfig.hpp"      // BRIDGE_HOST_STRING
+#include "ApProtocol.hpp"    // SMO_AP_MOD_VERSION_STRING
+#include "ApState.hpp"       // ApState::nowMs
 
 // Match the layout / declarations ApClient.cpp uses — sail resolves
 // `_ZN2nn6socket…E…8sockaddr…` against main.nso, so the struct MUST be
@@ -34,7 +53,6 @@ namespace nn::socket {
     s32 Socket(s32, s32, s32);
     s32 SendTo(s32, const void*, unsigned long, s32, const ::sockaddr*, u32);
     s32 RecvFrom(s32, void*, unsigned long, s32, ::sockaddr*, u32*);
-    s32 SetSockOpt(s32, s32, s32, const void*, u32);
     u32 Close(s32);
     s32 Poll(::pollfd*, unsigned long, s32);
     u16 InetHtons(u16);
@@ -46,30 +64,41 @@ namespace smoap::ap {
 
 namespace {
 
-// Socket constants. nn::socket doesn't re-export BSD constants; values
-// match Nintendo's bsd:u service (FreeBSD-derived). Mirrors the matching
-// block in ApClient.cpp.
-constexpr s32 kSolSocket   = 0xffff;
-constexpr s32 kSoBroadcast = 0x0020;
+// Socket constants. nn::socket doesn't re-export BSD constants; values match
+// Nintendo's bsd:u service (FreeBSD-derived). Mirrors ApClient.cpp.
 constexpr s32 kAfInet      = 2;
 constexpr s32 kSockDgram   = 2;
 constexpr s32 kIpprotoUdp  = 17;
 constexpr s32 kPollIn      = 0x0001;
-constexpr s32 kPollErr     = 0x0008;
-constexpr s32 kPollHup     = 0x0010;
 
-// Probe timeouts (ms).
+// Probe timeouts.
+constexpr std::uint32_t kSweepCollectMs   = 1000;  // wait window after the burst
 constexpr std::uint32_t kLoopbackProbeMs  = 250;
-constexpr std::uint32_t kBroadcastProbeMs = 1000;
-constexpr int           kBroadcastTries   = 3;
-constexpr std::uint32_t kFallbackProbeMs  = 250;
 
 // Reply buffer cap. Replies are tiny (~80 bytes); 512 is generous.
 constexpr std::size_t kReplyBufBytes = 512;
 
-// Build the probe payload once per resolveBridge call. The mod_ver field
-// is informational; the bridge logs it on receipt but doesn't gate on
-// match (HelloAck handles real version policing).
+// Default mask: /24 covers virtually every home network. The sweep iterates
+// .1..254 of the seed's network address.
+constexpr std::uint32_t kSubnetMask = 0xFFFFFF00u;
+constexpr int           kMaxSweepHosts = 254;
+
+// Diagnostic report, spinlock-guarded. Writer: whatever worker thread last
+// called resolveBridge(). Reader: any thread (debug overlay, log dump).
+DiscoveryReport         g_report;
+std::atomic_flag        g_report_lock = ATOMIC_FLAG_INIT;
+
+struct ReportGuard {
+    ReportGuard()  { while (g_report_lock.test_and_set(std::memory_order_acquire)) {} }
+    ~ReportGuard() { g_report_lock.clear(std::memory_order_release); }
+};
+
+void publishReport(const DiscoveryReport& src) {
+    ReportGuard g;
+    g_report = src;
+}
+
+// Build the probe payload once per resolveBridge call.
 std::size_t buildProbe(char* dst, std::size_t cap) {
     smoap::util::json::LineBuffer line;
     smoap::util::json::Encoder e{line};
@@ -83,21 +112,14 @@ std::size_t buildProbe(char* dst, std::size_t cap) {
     return take;
 }
 
-// Open a UDP socket, optionally enabling SO_BROADCAST. Returns -1 on
-// failure. Caller closes via nn::socket::Close.
-s32 openUdpSocket(bool enable_broadcast) {
-    const s32 fd = nn::socket::Socket(kAfInet, kSockDgram, kIpprotoUdp);
-    if (fd < 0) return -1;
-    if (enable_broadcast) {
-        const s32 on = 1;
-        (void)nn::socket::SetSockOpt(
-            fd, kSolSocket, kSoBroadcast, &on, sizeof(on));
-    }
-    return fd;
+s32 openUdpSocket() {
+    return nn::socket::Socket(kAfInet, kSockDgram, kIpprotoUdp);
 }
 
-// Wait up to `timeout_ms` for incoming data on `fd`. Returns true when
-// data is readable, false on timeout / poll error.
+void closeSocket(s32 fd) {
+    (void)nn::socket::Close(fd);
+}
+
 bool waitReadable(s32 fd, std::uint32_t timeout_ms) {
     ::pollfd pfd{ .fd = fd, .events = kPollIn, .revents = 0 };
     const s32 n = nn::socket::Poll(&pfd, 1, static_cast<s32>(timeout_ms));
@@ -105,11 +127,7 @@ bool waitReadable(s32 fd, std::uint32_t timeout_ms) {
     return (pfd.revents & kPollIn) != 0;
 }
 
-// Parse a `{"t":"bridge","host":"<ip>","port":<int>,...}` reply into out.
-// Returns false on malformed input or missing required fields.
 bool parseReply(const char* data, std::size_t len, BridgeTarget& out) {
-    // Reader mutates the buffer to decode escape sequences in strings;
-    // copy into a writable temp so the caller's buffer isn't mangled.
     char scratch[kReplyBufBytes];
     if (len > sizeof(scratch)) len = sizeof(scratch);
     std::memcpy(scratch, data, len);
@@ -139,10 +157,6 @@ bool parseReply(const char* data, std::size_t len, BridgeTarget& out) {
             if (!r.nextInt(p)) return false;
             port = static_cast<int>(p);
         } else {
-            // Unknown field; skip its value. The Reader API requires us to
-            // consume one token before the next nextField() call. nextString
-            // / nextInt / nextBool / isNull all advance; pick whichever
-            // doesn't fail (best-effort skip).
             std::string_view _sv;
             std::int64_t _i;
             bool _b;
@@ -157,12 +171,17 @@ bool parseReply(const char* data, std::size_t len, BridgeTarget& out) {
     return true;
 }
 
-// One probe: send `probe_data` to (host, port), wait up to timeout_ms for a
-// reply. On a successful parse, fill `out` and return true. On any failure
-// (sendto / poll-timeout / parse-fail) return false.
-bool oneProbe(s32 fd, const char* probe_data, std::size_t probe_len,
-              const char* host, std::uint16_t port,
-              std::uint32_t timeout_ms, BridgeTarget& out) {
+void makeSockAddrFromU32(u32 host_nbo, std::uint16_t port, ::sockaddr& out) {
+    out = ::sockaddr{};
+    out.sa_len    = sizeof(out);
+    out.sa_family = static_cast<u8>(kAfInet);
+    out.sa_port   = nn::socket::InetHtons(port);
+    out.sa_addr.s_addr = host_nbo;
+}
+
+bool oneProbeLiteral(s32 fd, const char* probe_data, std::size_t probe_len,
+                     const char* host, std::uint16_t port,
+                     std::uint32_t timeout_ms, BridgeTarget& out) {
     ::in_addr ia{};
     if (nn::socket::InetAton(host, &ia) == 0) {
         SMOAP_LOG_WARN("[discover] InetAton failed for %s", host);
@@ -170,7 +189,7 @@ bool oneProbe(s32 fd, const char* probe_data, std::size_t probe_len,
     }
     ::sockaddr addr{};
     addr.sa_len = sizeof(addr);
-    addr.sa_family = kAfInet;
+    addr.sa_family = static_cast<u8>(kAfInet);
     addr.sa_port = nn::socket::InetHtons(port);
     addr.sa_addr = ia;
 
@@ -191,82 +210,148 @@ bool oneProbe(s32 fd, const char* probe_data, std::size_t probe_len,
     return parseReply(buf, static_cast<std::size_t>(got), out);
 }
 
-void closeSocket(s32 fd) {
-    (void)nn::socket::Close(fd);
+// Burst-send probes to every host on the seed's /24 subnet, then drain
+// any inbound replies for up to kSweepCollectMs.
+bool sweepSubnet(s32 fd, const char* probe_data, std::size_t probe_len,
+                 u32 seed_ip_nbo, std::uint16_t port,
+                 DiscoveryReport& report_out, BridgeTarget& out) {
+    auto byteswap32 = [](u32 v) -> u32 {
+        return ((v & 0x000000FFu) << 24) | ((v & 0x0000FF00u) << 8) |
+               ((v & 0x00FF0000u) >> 8)  | ((v & 0xFF000000u) >> 24);
+    };
+
+    const u32 seed_ho = byteswap32(seed_ip_nbo);
+    const u32 mask_ho = kSubnetMask;
+    const u32 net_ho  = seed_ho & mask_ho;
+    const u32 bcast_ho = net_ho | ~mask_ho;
+
+    // Send burst — covers seed's /24, .1..254. We DO probe the seed itself
+    // (which is the user's PC's IP); the sweep is a superset.
+    int sent_count = 0;
+    for (u32 ip_ho = net_ho + 1;
+         ip_ho < bcast_ho && sent_count < kMaxSweepHosts; ++ip_ho) {
+        ::sockaddr addr{};
+        makeSockAddrFromU32(byteswap32(ip_ho), port, addr);
+        const s32 n = nn::socket::SendTo(
+            fd, probe_data, probe_len, 0, &addr, sizeof(addr));
+        if (n >= 0) ++sent_count;
+        // Per-host failures (errno=ENETUNREACH) aren't surprising on
+        // sparse LANs; aggregate stats land in the report.
+    }
+    report_out.probed_count = static_cast<std::uint16_t>(sent_count);
+    SMOAP_LOG_INFO("[discover] sweep sent %d probes (subnet %u.%u.%u.0/24)",
+                   sent_count,
+                   (net_ho >> 24) & 0xFF, (net_ho >> 16) & 0xFF,
+                   (net_ho >> 8)  & 0xFF);
+
+    // Collect replies. First valid wins.
+    const std::int64_t deadline_ms = ApState::nowMs() + kSweepCollectMs;
+    while (ApState::nowMs() < deadline_ms) {
+        const std::int64_t remain = deadline_ms - ApState::nowMs();
+        const std::uint32_t wait_ms =
+            (remain > 0) ? static_cast<std::uint32_t>(remain) : 1u;
+        if (!waitReadable(fd, wait_ms)) break;
+        char buf[kReplyBufBytes];
+        ::sockaddr from{};
+        u32 from_len = sizeof(from);
+        const s32 got = nn::socket::RecvFrom(
+            fd, buf, sizeof(buf), 0, &from, &from_len);
+        if (got <= 0) continue;
+        ++report_out.replies;
+        BridgeTarget t;
+        if (parseReply(buf, static_cast<std::size_t>(got), t)) {
+            out = t;
+            return true;
+        }
+    }
+    return false;
 }
 
 }  // namespace
 
-bool resolveBridge(BridgeTarget& out, const BridgeTarget& fallback,
-                   std::uint16_t discovery_port) {
+void snapshotDiscoveryReport(DiscoveryReport& out) {
+    ReportGuard g;
+    out = g_report;
+}
+
+bool resolveBridge(BridgeTarget& out, std::uint16_t discovery_port) {
     char probe[kReplyBufBytes];
     const std::size_t probe_len = buildProbe(probe, sizeof(probe));
     if (probe_len == 0) return false;
 
+    DiscoveryReport report{};
+    report.last_attempt_ms = ApState::nowMs();
+
     // ---- Step 1: loopback (Ryujinx-on-same-host) ----
-    s32 fd = openUdpSocket(/*enable_broadcast=*/false);
-    if (fd >= 0) {
-        BridgeTarget t;
-        const bool ok = oneProbe(
-            fd, probe, probe_len,
-            "127.0.0.1", discovery_port,
-            kLoopbackProbeMs, t);
-        closeSocket(fd);
-        if (ok) {
-            SMOAP_LOG_INFO("[discover] resolved via loopback -> %s:%u",
-                           t.host.c_str(), t.port);
-            out = t;
-            return true;
-        }
-    } else {
-        SMOAP_LOG_WARN("[discover] UDP socket() failed (loopback step)");
-    }
-
-    // ---- Step 2: LAN broadcast ----
-    fd = openUdpSocket(/*enable_broadcast=*/true);
-    if (fd >= 0) {
-        bool resolved = false;
-        BridgeTarget t;
-        for (int i = 0; i < kBroadcastTries && !resolved; ++i) {
-            resolved = oneProbe(
-                fd, probe, probe_len,
-                "255.255.255.255", discovery_port,
-                kBroadcastProbeMs, t);
-        }
-        closeSocket(fd);
-        if (resolved) {
-            SMOAP_LOG_INFO("[discover] resolved via broadcast -> %s:%u",
-                           t.host.c_str(), t.port);
-            out = t;
-            return true;
-        }
-    } else {
-        SMOAP_LOG_WARN("[discover] UDP socket() failed (broadcast step)");
-    }
-
-    // ---- Step 3: unicast probe to fallback IP ----
-    if (!fallback.host.empty()) {
-        fd = openUdpSocket(/*enable_broadcast=*/false);
+    {
+        const s32 fd = openUdpSocket();
         if (fd >= 0) {
             BridgeTarget t;
-            const bool ok = oneProbe(
+            const bool ok = oneProbeLiteral(
                 fd, probe, probe_len,
-                fallback.host.c_str(), discovery_port,
-                kFallbackProbeMs, t);
+                "127.0.0.1", discovery_port,
+                kLoopbackProbeMs, t);
             closeSocket(fd);
             if (ok) {
-                SMOAP_LOG_INFO("[discover] resolved via fallback-unicast -> %s:%u",
+                report.loopback_used = true;
+                std::snprintf(report.last_bridge_host,
+                              sizeof(report.last_bridge_host),
+                              "%s", t.host.c_str());
+                report.last_bridge_port = t.port;
+                report.last_success_ms = ApState::nowMs();
+                publishReport(report);
+                SMOAP_LOG_INFO("[discover] resolved via loopback -> %s:%u",
                                t.host.c_str(), t.port);
                 out = t;
                 return true;
             }
         } else {
-            SMOAP_LOG_WARN("[discover] UDP socket() failed (fallback step)");
+            SMOAP_LOG_WARN("[discover] UDP socket() failed (loopback step)");
         }
     }
 
-    SMOAP_LOG_INFO("[discover] no UDP reply; caller will TCP-fallback to %s:%u",
-                   fallback.host.c_str(), fallback.port);
+    // ---- Step 2: subnet sweep using BRIDGE_HOST_STRING as the seed ----
+    ::in_addr seed_ia{};
+    if (nn::socket::InetAton(BRIDGE_HOST_STRING, &seed_ia) == 0) {
+        SMOAP_LOG_WARN("[discover] BRIDGE_HOST_STRING ('%s') is not a valid "
+                       "IPv4 literal; sweep disabled",
+                       BRIDGE_HOST_STRING);
+    } else {
+        // Convert seed IP to host order for report header.
+        const u32 seed_nbo = seed_ia.s_addr;
+        const u32 seed_ho = ((seed_nbo & 0xFFu) << 24) |
+                            ((seed_nbo & 0xFF00u) << 8) |
+                            ((seed_nbo & 0xFF0000u) >> 8) |
+                            ((seed_nbo & 0xFF000000u) >> 24);
+        report.self_ip = seed_ho;  // NOTE: "self_ip" here is actually the seed IP, not Switch's IP — we no longer query nifm
+        report.subnet_mask = kSubnetMask;
+
+        const s32 fd = openUdpSocket();
+        if (fd >= 0) {
+            BridgeTarget t;
+            const bool ok = sweepSubnet(
+                fd, probe, probe_len, seed_nbo,
+                discovery_port, report, t);
+            closeSocket(fd);
+            if (ok) {
+                std::snprintf(report.last_bridge_host,
+                              sizeof(report.last_bridge_host),
+                              "%s", t.host.c_str());
+                report.last_bridge_port = t.port;
+                report.last_success_ms = ApState::nowMs();
+                publishReport(report);
+                SMOAP_LOG_INFO("[discover] resolved via subnet sweep -> %s:%u",
+                               t.host.c_str(), t.port);
+                out = t;
+                return true;
+            }
+        } else {
+            SMOAP_LOG_WARN("[discover] UDP socket() failed (sweep step)");
+        }
+    }
+
+    publishReport(report);
+    SMOAP_LOG_INFO("[discover] no UDP reply (loopback + sweep); caller will retry with backoff");
     return false;
 }
 

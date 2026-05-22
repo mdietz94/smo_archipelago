@@ -477,29 +477,61 @@ inline constexpr const char* kGameDataFunctionTryFindShineMessage =
     "_ZN16GameDataFunction19tryFindShineMessageEPKN2al9LiveActorEPKNS0_17IUseMessageSystemEii";
 
 // =============================================================================
+// Talkatoo% mode — pause-menu mark fix.
+// =============================================================================
+//
+// Phase 4 substitutes Talkatoo's speech bubble with AP-pool moon names but
+// leaves SMO's per-(world, idx) "this moon's name is revealed" state pointing
+// at the vanilla picker's choice. The pause-menu Power Moon list then marks
+// the wrong row. TalkatooMenuMarkHook.cpp fixes that with two trampolines:
+//
+//   1. GameDataFile::isOpenShineName(s32 world_id, s32 index) const — the
+//      getter the menu queries. We OR-in our AP-pool named set so the row
+//      corresponding to the moon Talkatoo actually said is the one marked.
+//
+//   2. GameDataFile::tryUnlockShineName(s32 world_id, s32 index) — the
+//      vanilla setter Talkatoo calls. We suppress writes in Talkatoo% mode
+//      so the vanilla picker's pick doesn't pollute the menu.
+//
+// Translating (world_id, index) → shine_uid uses GameDataFile::findShine,
+// resolved at install time as a function pointer (called with `this` as the
+// implicit first arg per the Itanium ABI; same pattern as addHackDictionary).
+// All three symbols verified present in SMO 1.0.0 main.nso 2026-05-22.
+
+// GameDataFile::isOpenShineName(s32 world_id, s32 index) const
+inline constexpr const char* kGameDataFileIsOpenShineName =
+    "_ZNK12GameDataFile15isOpenShineNameEii";
+
+// GameDataFile::tryUnlockShineName(s32 world_id, s32 index)  (non-const)
+inline constexpr const char* kGameDataFileTryUnlockShineName =
+    "_ZN12GameDataFile18tryUnlockShineNameEii";
+
+// GameDataFile::findShine(s32 world_id, s32 index) const → const HintInfo*
+inline constexpr const char* kGameDataFileFindShine =
+    "_ZNK12GameDataFile9findShineEii";
+
+// =============================================================================
 // Instant seed growth — bypass the wait on seed-flower moons.
 // =============================================================================
 //
-// SMO's seed-pot moons (Sand Tostarena, Wooded Steam Gardens, etc.) check
-// elapsed real time between plant and bloom. The seed/flower actor polls
-// rs::getGrowFlowerTime(actor, pot) each tick and compares (now - it)
-// against an internal threshold. Returning 0 from this getter makes every
-// poll see "elapsed = now" — huge regardless of timebase — and the actor
-// transitions to bloomed on its next update.
-//
-// Empty pots are unaffected: SMO stores 0 as "not planted" anyway, so our
-// 0 is indistinguishable from "fresh empty pot" for those — the actor's
-// upstream guard on isUsedGrowFlowerSeed/grow level keeps them dormant.
+// SMO's seed-pot moons (Sand Tostarena, Wooded Steam Gardens, etc.) compare
+// (now - planted_time) against a bloom threshold. GrowSeedInstantHook.cpp
+// trampolines this getter to return 1 for planted pots (orig==0 passes
+// through), making the elapsed delta enormous regardless of timebase
+// (Unix-epoch seconds, nn::time ticks, etc.). Verified in Ryujinx + Sand
+// Kingdom Tostarena: the planted-then-reload cycle blooms the moon on
+// stage re-entry (the actor caches its visible level at spawn, so it's
+// not mid-frame instant).
 //
 // Why the rs:: wrapper and not GameDataFile::getGrowFlowerTime directly:
 // the GameDataFile method is inlined in 1.0.0 main.nso (no dynsym entry).
 // The rs:: namespace wrapper IS in dynsym — cross-checked against
 // MrKatzenGaming/BTT-Studio syms/game/System/GameDataUtil.sym which pins
-// it at 0x004dd230 and uses the same return-zero hook for their
-// "flower pot refresh" feature. Per RicBent/OdysseyHeaders/include/rs.h
-// the wrapper takes (const al::LiveActor*, const al::PlacementId*) and
-// returns u64. The actor pointer is only used to fetch the
-// GameDataHolder, so returning 0 without dereferencing is safe.
+// it at 0x004dd230. BTT-Studio's "Refresh Seeds" toggle returns 0 from the
+// same wrapper as a deliberate RESET (clears the pot's planted state +
+// the seed item on save). We want the opposite — keep the planted bit
+// set while lying about *when* it was planted — so we substitute 1 for
+// real timestamps and pass orig==0 through untouched.
 inline constexpr const char* kRsGetGrowFlowerTime =
     "_ZN2rs17getGrowFlowerTimeEPKN2al9LiveActorEPKNS0_11PlacementIdE";
 
