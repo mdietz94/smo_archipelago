@@ -1,6 +1,17 @@
 {
   "versions": [
     {
+      "package_version": "0.1.37-alpha",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.37-alpha/smo-poptracker-v0.1.37-alpha.zip",
+      "sha256": "16b9a6051e3bcaac4f8e219d7932a3ce8a1dad6a14e1bbabe674206672df4b4f",
+      "changelog": [
+        "feat(switch-mod): sanitize player-controlled text for MessageFont38 glyph coverage",
+        "fix(switch-mod): tryUnlockShineName trampoline must return bool",
+        "fix(poptracker): correct festival% goal detection + add talkatoo% gate",
+        "PopTracker auto-update: add v0.1.36-alpha to versions.json"
+      ]
+    },
+    {
       "package_version": "0.1.36-alpha",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.36-alpha/smo-poptracker-v0.1.36-alpha.zip",
       "sha256": "6097d681fb6eccfb82e80afb5d454647531d5dc4d6e8da9bc6434001b398d683",
