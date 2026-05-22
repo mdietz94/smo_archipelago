@@ -262,6 +262,14 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
     PyInstaller builds (multiprocessing.Process child can't read its
     bundled `kivy/data/style.kv` out of library.zip).
     """
+    # Subprocess audit trace. Installed before anything else so the kvui
+    # import below — and every installer / build / extract subprocess the
+    # wizard spawns — is captured. Always logs to %APPDATA%/SMOArchipelago/
+    # exec-trace.log; in CI (SMOAP_AUDIT=strict) it also enforces the
+    # vendored-prefix allowlist and aborts the run on any out-of-tree spawn.
+    from .audit import install_audit_hook
+    install_audit_hook()
+
     # IMPORTANT: kvui MUST be imported before any kivy.* module. kvui asserts
     # `"kivy" not in sys.modules` at its top and, as a side effect, sets
     # KIVY_DATA_DIR to point at AP's frozen-installer-extracted data dir.
