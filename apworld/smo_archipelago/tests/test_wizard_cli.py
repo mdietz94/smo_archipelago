@@ -3,7 +3,8 @@ drives the same probe -> install -> extract -> build -> deploy
 sequence as the Kivy wizard, but with a JSON-event stream and no UI.
 
 Heavy primitives (`run_extract_maps`, `run_sync_capture_table`,
-`run_build_switchmod`, `INSTALLERS`, `deploy_to_*`, `check_all`) are
+`run_sync_shine_table`, `run_build_switchmod`, `INSTALLERS`,
+`deploy_to_*`, `check_all`) are
 monkeypatched per-test so the orchestration's sequencing + event
 emission can be exercised in CI without a Switch dump, prod.keys,
 LLVM toolchain, SD card, or Ryujinx install. Tests assert on:
@@ -534,13 +535,18 @@ def test_run_extract_short_circuit_disabled_when_verify_hash_false(
 def test_run_build_runs_sync_then_compile_then_collect_in_order(
     monkeypatch, tmp_path,
 ) -> None:
-    """sync_capture_table generates the header build_switchmod compiles
-    against. Run them out of order and the compile fails with a less
-    actionable error (or worse, succeeds against a stale header)."""
+    """sync_capture_table + sync_shine_table generate the headers
+    build_switchmod compiles against. Run them out of order and the
+    compile fails with a less actionable error (or worse, succeeds
+    against a stale header). Both sync steps must precede the compile."""
     order: list[str] = []
 
     def fake_sync(on_line=None):
-        order.append("sync")
+        order.append("sync_capture")
+        return _FakeBuildResult(ok=True)
+
+    def fake_sync_shine(on_line=None):
+        order.append("sync_shine")
         return _FakeBuildResult(ok=True)
 
     def fake_build(host, on_line=None):
@@ -556,6 +562,9 @@ def test_run_build_runs_sync_then_compile_then_collect_in_order(
         "_setup.build.run_sync_capture_table", fake_sync
     )
     monkeypatch.setattr(
+        "_setup.build.run_sync_shine_table", fake_sync_shine
+    )
+    monkeypatch.setattr(
         "_setup.build.run_build_switchmod", fake_build
     )
     monkeypatch.setattr(
@@ -563,7 +572,7 @@ def test_run_build_runs_sync_then_compile_then_collect_in_order(
     )
     outcome = run_build("10.0.0.5")
     assert outcome.ok is True
-    assert order == ["sync", "build", "collect"]
+    assert order == ["sync_capture", "sync_shine", "build", "collect"]
     assert set(outcome.outputs) == {"subsdk9", "main.npdm"}
 
 
@@ -575,8 +584,15 @@ def test_run_build_stops_when_sync_fails(monkeypatch) -> None:
     monkeypatch.setattr(
         "_setup.build.run_sync_capture_table",
         lambda on_line=None: (
-            ran.append("sync")
+            ran.append("sync_capture")
             or _FakeBuildResult(ok=False, returncode=2)
+        ),
+    )
+    monkeypatch.setattr(
+        "_setup.build.run_sync_shine_table",
+        lambda on_line=None: (
+            ran.append("sync_shine")
+            or _FakeBuildResult(ok=True)
         ),
     )
     monkeypatch.setattr(
@@ -592,6 +608,43 @@ def test_run_build_stops_when_sync_fails(monkeypatch) -> None:
     outcome = run_build("10.0.0.5")
     assert outcome.ok is False
     assert "build" not in ran
+    # sync_capture failing must short-circuit BEFORE sync_shine — wasted
+    # work otherwise, and lets a later sync failure mask the real one.
+    assert "sync_shine" not in ran
+
+
+def test_run_build_stops_when_sync_shine_fails(monkeypatch) -> None:
+    """Same guarantee for sync_shine_table as sync_capture_table —
+    a stale/missing shine_table.h fails the compile too (SaveLoadHook,
+    MoonGetHook, shine_lookup all #include it)."""
+    ran: list[str] = []
+    monkeypatch.setattr(
+        "_setup.build.run_sync_capture_table",
+        lambda on_line=None: (
+            ran.append("sync_capture")
+            or _FakeBuildResult(ok=True)
+        ),
+    )
+    monkeypatch.setattr(
+        "_setup.build.run_sync_shine_table",
+        lambda on_line=None: (
+            ran.append("sync_shine")
+            or _FakeBuildResult(ok=False, returncode=3)
+        ),
+    )
+    monkeypatch.setattr(
+        "_setup.build.run_build_switchmod",
+        lambda host, on_line=None: (
+            ran.append("build")
+            or _FakeBuildResult(ok=True)
+        ),
+    )
+    monkeypatch.setattr(
+        "_setup.build.collect_build_outputs", lambda: {}
+    )
+    outcome = run_build("10.0.0.5")
+    assert outcome.ok is False
+    assert ran == ["sync_capture", "sync_shine"]
 
 
 def _stub_all_resolver_caches(monkeypatch, *, populated: bool) -> None:
@@ -655,6 +708,10 @@ def test_run_build_prewarms_check_all_when_any_resolver_unset(
         lambda on_line=None: _FakeBuildResult(ok=True),
     )
     monkeypatch.setattr(
+        "_setup.build.run_sync_shine_table",
+        lambda on_line=None: _FakeBuildResult(ok=True),
+    )
+    monkeypatch.setattr(
         "_setup.build.run_build_switchmod",
         lambda host, on_line=None: _FakeBuildResult(ok=True),
     )
@@ -688,6 +745,10 @@ def test_run_build_skips_prewarm_when_all_resolver_caches_populated(
     )
     monkeypatch.setattr(
         "_setup.build.run_sync_capture_table",
+        lambda on_line=None: _FakeBuildResult(ok=True),
+    )
+    monkeypatch.setattr(
+        "_setup.build.run_sync_shine_table",
         lambda on_line=None: _FakeBuildResult(ok=True),
     )
     monkeypatch.setattr(
@@ -730,6 +791,10 @@ def test_run_build_prewarms_when_any_single_cache_is_empty(
         lambda on_line=None: _FakeBuildResult(ok=True),
     )
     monkeypatch.setattr(
+        "_setup.build.run_sync_shine_table",
+        lambda on_line=None: _FakeBuildResult(ok=True),
+    )
+    monkeypatch.setattr(
         "_setup.build.run_build_switchmod",
         lambda host, on_line=None: _FakeBuildResult(ok=True),
     )
@@ -768,6 +833,10 @@ def test_run_build_prewarms_when_cmake_is_bare_name_sentinel(
         lambda on_line=None: _FakeBuildResult(ok=True),
     )
     monkeypatch.setattr(
+        "_setup.build.run_sync_shine_table",
+        lambda on_line=None: _FakeBuildResult(ok=True),
+    )
+    monkeypatch.setattr(
         "_setup.build.run_build_switchmod",
         lambda host, on_line=None: _FakeBuildResult(ok=True),
     )
@@ -788,6 +857,10 @@ def test_run_build_fails_when_outputs_missing_after_zero_exit(
     braces pattern as extract."""
     monkeypatch.setattr(
         "_setup.build.run_sync_capture_table",
+        lambda on_line=None: _FakeBuildResult(ok=True),
+    )
+    monkeypatch.setattr(
+        "_setup.build.run_sync_shine_table",
         lambda on_line=None: _FakeBuildResult(ok=True),
     )
     monkeypatch.setattr(
@@ -911,6 +984,10 @@ def _stub_all_primitives(monkeypatch, tmp_path: Path, *, prereqs_ok=True,
     )
     monkeypatch.setattr(
         "_setup.build.run_sync_capture_table",
+        lambda on_line=None: _FakeBuildResult(ok=build_ok),
+    )
+    monkeypatch.setattr(
+        "_setup.build.run_sync_shine_table",
         lambda on_line=None: _FakeBuildResult(ok=build_ok),
     )
     monkeypatch.setattr(

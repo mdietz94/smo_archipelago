@@ -24,6 +24,12 @@ switch-mod/sd-overlay/atmosphere/contents/*/exefs/subsdk9
 switch-mod/sd-overlay/atmosphere/contents/*/exefs/main.npdm
 switch-mod/sd-overlay/atmosphere/contents/*/romfs/ap_config.json
 switch-mod/src/ap/capture_table.h
+# shine_table.h joins committed locations.json with the gitignored
+# shine_map.json (extracted Nintendo IP). Each column is individually
+# allowed by CLAUDE.md, but the joined (stage, obj_id) → English-name
+# mapping IS the load-bearing content of shine_map.json — keep it out
+# of git for the same reason capture_table.h is out.
+switch-mod/src/ap/shine_table.h
 
 # Symbol dumps - never commit, contain copyrighted material
 docs/main-*.nso

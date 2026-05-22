@@ -36,13 +36,19 @@ jobs:
         with:
           python-version: '3.12'
 
-      # capture_table.h must exist before install_apworld --bundle-mod
-      # tries to bundle the switch-mod source tree (CaptureGate.cpp
-      # includes it; without it the user's wizard-driven build will fail).
-      # The header is gitignored so we regenerate per-release from
-      # items.json.
+      # capture_table.h and shine_table.h must exist before install_apworld
+      # --bundle-mod tries to bundle the switch-mod source tree (CaptureGate.cpp,
+      # SaveLoadHook.cpp, MoonGetHook.cpp, and shine_lookup.hpp all include
+      # one or the other; without them the user's wizard-driven build will
+      # fail). Both headers are gitignored so we regenerate per-release. The
+      # shine table emits an empty stub here because CI has no NSP to extract
+      # from; the wizard re-runs sync_shine_table.py post-extraction on the
+      # user's machine to populate it.
       - name: Sync capture table
         run: python scripts/sync_capture_table.py
+
+      - name: Sync shine table (empty stub — no NSP in CI)
+        run: python scripts/sync_shine_table.py
 
       - name: Build apworld zip with bundled mod + scripts
         run: python scripts/install_apworld.py --bundle-mod --bundle-scripts
@@ -275,16 +281,21 @@ jobs:
           Write-Host "[strip] post-strip python resolution:"
           Get-Command python -All -ErrorAction SilentlyContinue | Select-Object -First 5 | Format-Table Source
 
-      # sync_capture_table is what release_audit.py would run anyway as
-      # the first sub-step of --build. Running it explicitly here keeps
-      # the build apworld → build switch-mod ordering visible in the
-      # job log (sync_capture_table.py needs apworld/data/items.json,
-      # which the loose checkout has). The audit's --build re-runs it
-      # idempotently against the resolved bundled paths.
-      - name: Sync capture table (gitignored header the build needs)
+      # sync_capture_table / sync_shine_table is what release_audit.py
+      # would run anyway as the first two sub-steps of --build. Running
+      # them explicitly here keeps the build apworld → build switch-mod
+      # ordering visible in the job log (both scripts need
+      # apworld/data/{items,locations}.json, which the loose checkout
+      # has). The audit's --build re-runs them idempotently against the
+      # resolved bundled paths. shine_table.h is a stub here because the
+      # clean-Windows audit job has no NSP available; the wizard re-runs
+      # sync_shine_table.py with a populated shine_map.json on the
+      # user's machine.
+      - name: Sync capture + shine tables (gitignored headers the build needs)
         shell: pwsh
         run: |
           & "${{ env.SMOAP_PYTHON_BIN }}\python.exe" scripts\sync_capture_table.py
+          & "${{ env.SMOAP_PYTHON_BIN }}\python.exe" scripts\sync_shine_table.py
 
       - name: Run release audit (--skip-extract --build --audit)
         shell: pwsh

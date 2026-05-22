@@ -197,6 +197,7 @@ def test_bundle_scripts_includes_extractor(install_script_present) -> None:
     for required in (
         "meatballs/_setup/scripts/extract_shine_map.py",
         "meatballs/_setup/scripts/sync_capture_table.py",
+        "meatballs/_setup/scripts/sync_shine_table.py",
         "meatballs/_setup/scripts/build_switchmod.py",
         "meatballs/_setup/scripts/patch_hakkun.py",
         "meatballs/_setup/scripts/setup_sail_winpath.py",

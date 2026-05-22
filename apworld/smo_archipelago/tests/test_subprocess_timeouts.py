@@ -166,9 +166,11 @@ def test_every_run_step_has_both_timeouts_configured(monkeypatch) -> None:
     wizard would silently get a child that can hang forever.
 
     Post-Hakkun the build is driven by a single `run_build_switchmod`
-    wrapper (replaces the old cmake_configure + cmake_build pair), so
-    the runner count is 3 not 4. If a future change re-splits the build
-    step or adds a new runner, this list needs to grow."""
+    wrapper (replaces the old cmake_configure + cmake_build pair). With
+    sync_shine_table joining the lineup (gitignored shine_table.h had
+    to match the capture_table.h precedent — see CLAUDE.md's Nintendo-IP
+    rules), the runner count is now 4. If a future change re-splits the
+    build step or adds a new runner, this list needs to grow."""
     from _setup import build
 
     captured: list[dict] = []
@@ -196,10 +198,11 @@ def test_every_run_step_has_both_timeouts_configured(monkeypatch) -> None:
 
     # Drive each runner. Each must emit one entry with both timeouts.
     build.run_sync_capture_table()
+    build.run_sync_shine_table()
     build.run_build_switchmod("10.0.0.1")
     build.run_extract_maps(Path("fake.nsp"))
 
-    assert len(captured) == 3
+    assert len(captured) == 4
     for entry in captured:
         cmd_str = " ".join(str(c) for c in entry["cmd"])
         assert entry["wall"] is not None, (

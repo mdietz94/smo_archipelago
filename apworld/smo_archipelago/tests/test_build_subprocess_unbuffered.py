@@ -344,3 +344,41 @@ def test_run_sync_capture_table_threads_explicit_paths(tmp_path) -> None:
         f"--out {cmd[out_idx]!r} should land inside switch_mod/ so cmake "
         f"finds the generated capture_table.h"
     )
+
+
+def test_run_sync_shine_table_threads_explicit_paths(tmp_path) -> None:
+    """Same explicit-paths guarantee as run_sync_capture_table but for
+    sync_shine_table.py. Bundled layout puts locations.json under
+    <bundled>/data/, not the dev-checkout
+    <bundled>/apworld/smo_archipelago/data/, so the script's
+    REPO_ROOT-relative defaults would miss the file. shine_map.json
+    lives in %APPDATA%/SMOArchipelago/data/ — same data_dir() the
+    capture script reads capture_map.json from."""
+    captured: dict = {}
+
+    def fake_stream(cmd, *, cwd=None, env=None, on_line=None, **_kwargs):
+        captured["cmd"] = cmd
+        return build.BuildResult(ok=True, returncode=0, log="")
+
+    (tmp_path / "sync_shine_table.py").write_text("")
+    (tmp_path / "locations.json").write_text("[]")
+    fake_mod = tmp_path / "switch_mod"
+    fake_mod.mkdir()
+    with patch.object(build, "_stream_subprocess", fake_stream), \
+         patch.object(build, "bundled_script",
+                      lambda name: tmp_path / name), \
+         patch.object(build, "bundled_data_file",
+                      lambda name: tmp_path / name), \
+         patch.object(build, "bundled_switch_mod", lambda: fake_mod), \
+         patch.object(build, "data_dir", lambda: tmp_path):
+        build.run_sync_shine_table()
+
+    cmd = captured["cmd"]
+    assert "--locations" in cmd, f"--locations missing from sync cmd: {cmd}"
+    assert "--out" in cmd, f"--out missing from sync cmd: {cmd}"
+    assert "--shine-map" in cmd, f"--shine-map missing from sync cmd: {cmd}"
+    out_idx = cmd.index("--out") + 1
+    assert "switch_mod" in cmd[out_idx], (
+        f"--out {cmd[out_idx]!r} should land inside switch_mod/ so cmake "
+        f"finds the generated shine_table.h"
+    )

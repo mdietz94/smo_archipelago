@@ -120,25 +120,32 @@ def write_stub_maps(data_dir: Path, *, force: bool = False) -> list[Path]:
 # ---------------------------------------------------------------------------
 
 def run_build(bridge_host: str) -> int:
-    """Call run_sync_capture_table → run_build_switchmod through the
-    apworld's _setup.build module. Returns the subprocess return code of
-    the failing step, or 0 on success."""
+    """Call run_sync_capture_table → run_sync_shine_table → run_build_switchmod
+    through the apworld's _setup.build module. Returns the subprocess return
+    code of the failing step, or 0 on success."""
     from _setup.build import (  # type: ignore[import-not-found]
         run_build_switchmod,
         run_sync_capture_table,
+        run_sync_shine_table,
     )
 
     def on_line(line: str) -> None:
         sys.stdout.write(line + "\n")
         sys.stdout.flush()
 
-    print("[audit] step 1/2: sync_capture_table")
+    print("[audit] step 1/3: sync_capture_table")
     sync = run_sync_capture_table(on_line=on_line)
     if not sync.ok:
         print(f"[audit] sync_capture_table failed (rc={sync.returncode})")
         return sync.returncode or 1
 
-    print(f"[audit] step 2/2: build_switchmod (bridge_host={bridge_host})")
+    print("[audit] step 2/3: sync_shine_table")
+    sync_shine = run_sync_shine_table(on_line=on_line)
+    if not sync_shine.ok:
+        print(f"[audit] sync_shine_table failed (rc={sync_shine.returncode})")
+        return sync_shine.returncode or 1
+
+    print(f"[audit] step 3/3: build_switchmod (bridge_host={bridge_host})")
     build = run_build_switchmod(bridge_host, on_line=on_line)
     if not build.ok:
         print(f"[audit] build_switchmod failed (rc={build.returncode})")
@@ -161,6 +168,7 @@ REQUIRED_ARTIFACTS: tuple[str, ...] = (
     "build/sd/atmosphere/contents/0100000000010000/exefs/subsdk9",
     "build/sd/atmosphere/contents/0100000000010000/exefs/main.npdm",
     "src/ap/capture_table.h",
+    "src/ap/shine_table.h",
 )
 
 # The build legitimately writes into a small, fixed set of subdirectories
@@ -174,10 +182,14 @@ SWITCH_MOD_OUTPUT_ROOTS: tuple[str, ...] = (
     "lib/std",       # aarch64 stdlib drop from setup_libcxx_prepackaged.py
 )
 
-# The single source-tree file the build is allowed to (re)write. It is
-# gitignored and regenerated each build by sync_capture_table.py.
+# The source-tree files the build is allowed to (re)write. Both are
+# gitignored and regenerated each build by sync_capture_table.py /
+# sync_shine_table.py (the latter also doubles as Nintendo-IP containment —
+# the populated shine_table.h is a join of locations.json with the
+# gitignored extracted shine_map.json, so it must never be checked in).
 SWITCH_MOD_ALLOWED_SOURCE_WRITES: frozenset[str] = frozenset({
     "src/ap/capture_table.h",
+    "src/ap/shine_table.h",
 })
 
 # Glob patterns (POSIX-style; fnmatch.fnmatch is applied per-path-segment

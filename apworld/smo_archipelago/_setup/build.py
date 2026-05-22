@@ -460,6 +460,10 @@ _TIMEOUTS = {
     # Tiny script, no network, no cross-compile — should finish in
     # under a second on a warm cache, a few seconds cold.
     "sync_capture":      {"wall": 120.0,  "stall": 60.0},
+    # Same shape as sync_capture: pure-Python JSON join, no I/O beyond
+    # reading two files and writing one header. Slightly larger inputs
+    # (~435 moon rows) but still trivially fast.
+    "sync_shine":        {"wall": 120.0,  "stall": 60.0},
     # build_switchmod.py wraps the full Hakkun compile: patch_hakkun
     # (idempotent, fast), sail build (~30-90s first run, instant after),
     # cmake configure (~10s), ninja build (~30s warm, ~3 min cold). A
@@ -687,6 +691,43 @@ def run_sync_capture_table(on_line: ProgressFn | None = None) -> BuildResult:
             "--items", str(items),
             "--out", str(out_header),
             "--capture-map", str(capture_map),
+        ],
+        on_line=on_line,
+        wall_timeout_s=t["wall"],
+        stall_timeout_s=t["stall"],
+    )
+
+
+def run_sync_shine_table(on_line: ProgressFn | None = None) -> BuildResult:
+    """Regenerate `switch_mod/src/ap/shine_table.h` from locations.json + shine_map.json.
+
+    Runs the bundled `sync_shine_table.py`. Output is the C++ header the
+    Switch mod build needs at compile time (SaveLoadHook.cpp, MoonGetHook.cpp,
+    and shine_lookup.hpp all #include it). Idempotent — safe to run before
+    every build. The build will fail with a compiler error if this is skipped
+    (the header is gitignored).
+
+    When the user's shine_map.json hasn't been extracted yet, the script
+    degrades to an empty-but-valid header so the build still links. Phase 2
+    pre-marking and Talkatoo% block silently no-op in that state; the wizard
+    re-runs this step after `run_extract_maps` populates the map, which
+    rebuilds the populated table.
+
+    All three paths are passed explicitly because the script's
+    `Path(__file__).parent.parent`-relative defaults assume a dev source
+    checkout layout — see `run_sync_capture_table` for the same reasoning.
+    """
+    script = bundled_script("sync_shine_table.py")
+    locations = bundled_data_file("locations.json")
+    out_header = bundled_switch_mod() / "src" / "ap" / "shine_table.h"
+    shine_map = data_dir() / "shine_map.json"
+    t = _TIMEOUTS["sync_shine"]
+    return _stream_subprocess(
+        [
+            *_python_invoker(), str(script),
+            "--locations", str(locations),
+            "--out", str(out_header),
+            "--shine-map", str(shine_map),
         ],
         on_line=on_line,
         wall_timeout_s=t["wall"],

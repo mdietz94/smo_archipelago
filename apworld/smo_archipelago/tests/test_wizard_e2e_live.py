@@ -204,9 +204,11 @@ def test_full_wizard_install_against_real_network(
 
     # --- 5. Build phase: real cold switch-mod build ---------------------
     # wizard_cli.run_build calls _setup.build.run_sync_capture_table +
-    # run_build_switchmod, which use bundled_script / bundled_switch_mod
-    # -- our monkeypatched _find_apworld_zip routes those reads through
-    # the apworld zip we built in step 2.
+    # run_sync_shine_table + run_build_switchmod, which use bundled_script
+    # / bundled_switch_mod -- our monkeypatched _find_apworld_zip routes
+    # those reads through the apworld zip we built in step 2. shine_table.h
+    # is built from the stub shine_map.json release_audit.write_stub_maps
+    # plants in step 4 (no NSP available in this test).
     build_outcome = wizard_cli.run_build(
         bridge_host="127.0.0.1", callback=text_log,
     )

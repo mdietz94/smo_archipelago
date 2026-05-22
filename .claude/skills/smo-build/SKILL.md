@@ -11,15 +11,20 @@ The Switch mod targets SMO 1.0.0 and is built on [LibHakkun](https://github.com/
 
 **Ryujinx FIRST, real Switch never as the first test.** A failed Switch launch increments HOS's "title failed to launch" counter for SMO; enough failures shows "Corrupted data detected" prompts (recoverable in ~1 min via Settings → Data Management → Check for Corrupted Data, but a poor experience). Every subsdk build boots clean in Ryujinx before being copied to the SD card.
 
-## Step 0 (one-time after fresh clone or items.json change)
+## Step 0 (one-time after fresh clone, or after items.json / locations.json / shine_map.json changes)
 
-Generate `switch-mod/src/ap/capture_table.h`. The file is gitignored, so on first build `CaptureGate.cpp` fails with `../ap/capture_table.h: No such file or directory` until you run:
+Both `switch-mod/src/ap/capture_table.h` and `switch-mod/src/ap/shine_table.h` are gitignored — on first build `CaptureGate.cpp` / `SaveLoadHook.cpp` fail with `../ap/<table>.h: No such file or directory` until you run:
 
 ```pwsh
 python C:\Users\maxwe\Documents\smo_archipelago\scripts\sync_capture_table.py
+python C:\Users\maxwe\Documents\smo_archipelago\scripts\sync_shine_table.py
 ```
 
-Rerun this whenever `apworld/smo_archipelago/data/items.json` changes (the table maps cap-name → bit-index for the Switch mod; out-of-sync table = wrong bit assignments).
+Rerun:
+- **`sync_capture_table.py`** whenever `apworld/smo_archipelago/data/items.json` or `client/data/capture_map.json` changes (cap-name → bit-index mapping; out-of-sync = wrong bit assignments).
+- **`sync_shine_table.py`** whenever `apworld/smo_archipelago/data/locations.json` or `client/data/shine_map.json` changes (per-moon `(stage, obj_id, shine_uid, kingdom, name, progression)` table consumed by SaveLoadHook, MoonGetHook, and shine_lookup). When `shine_map.json` is absent the script emits an empty stub so the build still compiles, but Phase 2 pre-marking and Talkatoo% block silently no-op — extract first if you care about either.
+
+Both tables are gitignored because they join apworld JSON with the gitignored extracted maps and reproduce the load-bearing shape of those maps for AP-pool moons/captures. See CLAUDE.md's "Never commit Nintendo IP" section for the full rationale.
 
 ## Step 1: build (~30s)
 
@@ -165,13 +170,14 @@ A fresh `.claude/worktrees/<name>/` (or `git worktree add`) is missing three pie
    Copy-Item C:/Users/maxwe/Documents/smo_archipelago/apworld/smo_archipelago/client/data/*.json `
              <worktree>/apworld/smo_archipelago/client/data/
    ```
-   Skipping is **silent at build time** but corrupts runtime: `sync_capture_table.py` (step 3) falls back to identity-only `kCaptureHackNames` (every entry equals `kCaptureNames`), so M7 hack-name lookups for SMO-internal names like `Kuribo` / `TRex` fail-open and the capture-lock gate doesn't deny.
+   Skipping is **silent at build time** but corrupts runtime: `sync_capture_table.py` (step 3) falls back to identity-only `kCaptureHackNames` (every entry equals `kCaptureNames`), so M7 hack-name lookups for SMO-internal names like `Kuribo` / `TRex` fail-open and the capture-lock gate doesn't deny. `sync_shine_table.py` (also step 3) falls back to an empty `kShineTable`, which silently disables Phase 2 pre-marking and Talkatoo% block.
 
-3. **Run `sync_capture_table.py`** (Step 0 above; reads `capture_map.json` from step 2 to populate the diverged hack-name array):
+3. **Run `sync_capture_table.py` + `sync_shine_table.py`** (Step 0 above; both read the maps from step 2 to populate the joined tables):
    ```pwsh
    python <worktree>/scripts/sync_capture_table.py
+   python <worktree>/scripts/sync_shine_table.py
    ```
-   Skipping → first compile of `CaptureGate.cpp` fails with `../ap/capture_table.h: No such file or directory`.
+   Skipping either → first compile of `CaptureGate.cpp` / `SaveLoadHook.cpp` fails with `../ap/<table>.h: No such file or directory`.
 
 ## SMO already inits nn::socket — open a parallel hk::socket client
 

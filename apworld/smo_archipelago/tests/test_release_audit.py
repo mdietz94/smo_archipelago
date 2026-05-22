@@ -178,6 +178,7 @@ def _build_clean_sandbox(appdata: Path, switch_mod: Path) -> None:
     (sd / "main.npdm").write_bytes(b"stub")
     (switch_mod / "src" / "ap").mkdir(parents=True)
     (switch_mod / "src" / "ap" / "capture_table.h").write_text("// stub", encoding="utf-8")
+    (switch_mod / "src" / "ap" / "shine_table.h").write_text("// stub", encoding="utf-8")
     # cmake / ninja drop a CMakeLists.txt at the source-tree root; the
     # find_switch_mod_root() probe uses it as a sentinel.
     (switch_mod / "CMakeLists.txt").write_text("# stub", encoding="utf-8")
@@ -185,8 +186,8 @@ def _build_clean_sandbox(appdata: Path, switch_mod: Path) -> None:
     # Mark CMakeLists.txt as git-tracked so the audit doesn't flag it
     # as an unexpected build-time write. Source files under switch_mod/
     # are expected to be in git; only output-root files and the explicit
-    # capture_table.h write are allowed to appear post-build without
-    # being tracked.
+    # capture_table.h + shine_table.h writes are allowed to appear
+    # post-build without being tracked.
     env = {
         # Quiet `git init`'s "hint: Using 'master' as the name for the
         # initial branch" message in CI logs.

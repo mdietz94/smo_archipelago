@@ -496,7 +496,12 @@ def run_build(
     class is "resolver/consumer inconsistency", and every cache the
     build consumes has to be aligned.
     """
-    from .build import collect_build_outputs, run_build_switchmod, run_sync_capture_table
+    from .build import (
+        collect_build_outputs,
+        run_build_switchmod,
+        run_sync_capture_table,
+        run_sync_shine_table,
+    )
     from .prereqs import (
         check_all, resolved_cmake, resolved_llvm_bin, resolved_mingw_bin,
         resolved_ninja_bin, resolved_python312_bin,
@@ -539,6 +544,13 @@ def run_build(
              on_line=lambda line: _emit(
                  callback, "log",
                  phase=PHASE_BUILD, t0=anchor, step="sync_capture", line=line,
+             ),
+         )),
+        ("sync_shine",
+         lambda: run_sync_shine_table(
+             on_line=lambda line: _emit(
+                 callback, "log",
+                 phase=PHASE_BUILD, t0=anchor, step="sync_shine", line=line,
              ),
          )),
         ("build_switchmod",

@@ -71,6 +71,7 @@ def test_wizard_calls_each_run_phase(wizard_source: str, cli_fn: str) -> None:
 @pytest.mark.parametrize("primitive", [
     "run_extract_maps",
     "run_sync_capture_table",
+    "run_sync_shine_table",
     "run_build_switchmod",
     "verify_map_hashes",
     "maps_ready",
