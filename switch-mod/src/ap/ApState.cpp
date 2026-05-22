@@ -183,6 +183,14 @@ void ApState::applyOnFrame() {
 }
 
 void ApState::flushPendingCaptureGrants() {
+    // Silent early-out while prerequisites are missing — the per-frame retry
+    // loop runs at draw-hook frequency, and grantCapture's WARN paths would
+    // otherwise spam the log (~30/s) for every queued item across the entire
+    // "waiting for the scene to load" window. The one-time WARN from the
+    // initial applyOnFrame grant attempt is already enough signal that an
+    // item is queued for retry.
+    if (!scene_cache.load(std::memory_order_relaxed)) return;
+    if (!game_data_holder_cache.load(std::memory_order_relaxed)) return;
     while (true) {
         const Item* item_ptr = pending_capture_grant.peekRef();
         if (!item_ptr) break;
