@@ -477,6 +477,33 @@ inline constexpr const char* kGameDataFunctionTryFindShineMessage =
     "_ZN16GameDataFunction19tryFindShineMessageEPKN2al9LiveActorEPKNS0_17IUseMessageSystemEii";
 
 // =============================================================================
+// Instant seed growth — bypass the wait on seed-flower moons.
+// =============================================================================
+//
+// SMO's seed-pot moons (Sand Tostarena, Wooded Steam Gardens, etc.) check
+// elapsed real time between plant and bloom. The seed/flower actor polls
+// rs::getGrowFlowerTime(actor, pot) each tick and compares (now - it)
+// against an internal threshold. Returning 0 from this getter makes every
+// poll see "elapsed = now" — huge regardless of timebase — and the actor
+// transitions to bloomed on its next update.
+//
+// Empty pots are unaffected: SMO stores 0 as "not planted" anyway, so our
+// 0 is indistinguishable from "fresh empty pot" for those — the actor's
+// upstream guard on isUsedGrowFlowerSeed/grow level keeps them dormant.
+//
+// Why the rs:: wrapper and not GameDataFile::getGrowFlowerTime directly:
+// the GameDataFile method is inlined in 1.0.0 main.nso (no dynsym entry).
+// The rs:: namespace wrapper IS in dynsym — cross-checked against
+// MrKatzenGaming/BTT-Studio syms/game/System/GameDataUtil.sym which pins
+// it at 0x004dd230 and uses the same return-zero hook for their
+// "flower pot refresh" feature. Per RicBent/OdysseyHeaders/include/rs.h
+// the wrapper takes (const al::LiveActor*, const al::PlacementId*) and
+// returns u64. The actor pointer is only used to fetch the
+// GameDataHolder, so returning 0 without dereferencing is safe.
+inline constexpr const char* kRsGetGrowFlowerTime =
+    "_ZN2rs17getGrowFlowerTimeEPKN2al9LiveActorEPKNS0_11PlacementIdE";
+
+// =============================================================================
 // Legacy / aliasing — kept so existing call sites don't break.
 // =============================================================================
 inline constexpr const char* kSeadGameSystemCtor       = kGameSystemInit;

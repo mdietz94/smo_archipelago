@@ -46,6 +46,10 @@ void installSaveLoadHook();
 // Phase 4 (block non-named moon collection) lives inside the existing
 // MoonGetHook (universal setGotShine chokepoint) — see MoonGetHook.cpp.
 void installTalkatooSpeechHook();
+// Instant seed growth: trampolines GameDataFile::getGrowFlowerTime to return
+// 0, collapsing the 20–60 minute real-time wait on seed-pot moons. See
+// hooks/GrowSeedInstantHook.cpp.
+void installGrowSeedInstantHook();
 }  // namespace smoap::hooks
 
 namespace smoap::game {
@@ -286,6 +290,9 @@ extern "C" void hkMain() {
 
     SMOAP_LOG_INFO("installing TalkatooSpeechHook (Phase 3 — tryFindShineMessage tramp + Poetter vtable filter)");
     smoap::hooks::installTalkatooSpeechHook();
+
+    SMOAP_LOG_INFO("installing GrowSeedInstantHook (return 0 from getGrowFlowerTime)");
+    smoap::hooks::installGrowSeedInstantHook();
 
     SMOAP_LOG_INFO("=== hkMain END (waiting for GameSystem::init to fire) ===");
 }

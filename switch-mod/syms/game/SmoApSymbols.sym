@@ -65,3 +65,17 @@ _ZN16GameDataFunction19tryFindShineMessageEPKN2al9LiveActorEPKNS0_17IUseMessageS
 // (cutscenes, pause menu, hint UI), so without this we'd substitute moon
 // names project-wide.
 _ZTV7Poetter
+
+// GrowSeedInstantHook: rs::getGrowFlowerTime(const al::LiveActor*,
+// const al::PlacementId*). The public rs:: wrapper around
+// GameDataFile::getGrowFlowerTime — the direct GameDataFile method is
+// inlined in 1.0.0 main.nso and not in dynsym, but this wrapper IS
+// (cross-checked against MrKatzenGaming/BTT-Studio syms/game/System/
+// GameDataUtil.sym which pins it at 0x004dd230). Trampolined to return 0
+// unconditionally — the seed/flower actor polls this each tick and
+// compares (now - returned_time) against a bloom threshold; a returned
+// 0 makes the elapsed delta huge regardless of timebase, so the pot
+// advances to bloomed on the next frame. Same return-zero pattern that
+// BTT-Studio's "flower pot refresh" toggle ships. See
+// hooks/GrowSeedInstantHook.cpp.
+_ZN2rs17getGrowFlowerTimeEPKN2al9LiveActorEPKNS0_11PlacementIdE
