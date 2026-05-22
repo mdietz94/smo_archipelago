@@ -1,6 +1,15 @@
 {
   "versions": [
     {
+      "package_version": "0.1.32-alpha",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.32-alpha/smo-poptracker-v0.1.32-alpha.zip",
+      "sha256": "25dbdea035ac64c54c72f35983c8e95851352f61065d1ee61faa016cafae647c",
+      "changelog": [
+        "patch_hakkun: rewrite nso.py to composition (Python 3.14 Struct.__new__ fix)",
+        "wizard build: close remaining resolver/consumer leaks (ninja, cmake, _python_invoker)"
+      ]
+    },
+    {
       "package_version": "0.1.29-alpha",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.29-alpha/smo-poptracker-v0.1.29-alpha.zip",
       "sha256": "205f540911dd5d030225419fd54618d042609f5f30306c19e5f8a4c81457dea8",
