@@ -8,9 +8,9 @@ to exercise multi-world fill logic.
 
 Skipped by default. Enable with `SMOAP_LIVE_AP=1` to opt in (the same
 gate as test_ap_loopback — generation needs the Archipelago submodule
-checked out and its pip deps installed in the bridge venv).
+checked out and its pip deps installed in the repo-root `.venv`).
 
-    SMOAP_LIVE_AP=1 bridge/.venv/bin/python -m pytest -v bridge/tests/test_apworld_generation.py
+    SMOAP_LIVE_AP=1 .venv/Scripts/python -m pytest -v apworld/smo_archipelago/tests/test_apworld_generation.py
 
 Speed: each `--skip_output` generation is ~3-5s, so the full sweep takes a
 few minutes. Set `SMOAP_GEN_TEST_FAST=1` to keep only the headline cases

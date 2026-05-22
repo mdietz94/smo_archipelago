@@ -12,8 +12,9 @@ htmlcov/
 
 # Client runtime (formerly the bridge directory; bridge/ was deleted in
 # the Phase 4 merge that moved the bridge into apworld/smo_archipelago/
-# client/. Any leftover bridge/.venv in a contributor's worktree should
-# be relocated; keeping the rule around so leftover logs don't drift in).
+# client/. The dev venv now lives at repo-root `.venv/` (covered by the
+# Python block above). Keeping `bridge/` ignored so leftover seeds /
+# config.local.toml don't drift in.).
 bridge/
 apworld/smo_archipelago/client/logs/
 apworld/smo_archipelago/client/*.log

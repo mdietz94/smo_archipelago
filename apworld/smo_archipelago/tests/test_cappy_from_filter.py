@@ -6,8 +6,8 @@
 just checked back to ourselves). Server-injected items (`/send`, releases,
 collects) and items from other real players still get a bubble.
 
-Run with the bridge venv:
-  bridge/.venv/Scripts/python -m pytest \
+Run with the repo-root `.venv`:
+  .venv/Scripts/python -m pytest \
       apworld/smo_archipelago/tests/test_cappy_from_filter.py -v
 """
 

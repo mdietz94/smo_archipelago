@@ -5,8 +5,8 @@ to defer Archipelago imports, `SMOContext(CommonContext)` is a real
 subclass, so this test needs Archipelago on sys.path. Module-level
 importorskip handles a fresh checkout where the submodule isn't pulled in.
 
-Run with the bridge venv (which has AP's deps installed):
-  bridge/.venv/Scripts/python -m pytest apworld/smo_archipelago/tests/test_deathlink.py -v
+Run with the repo-root `.venv` (which has AP's deps installed):
+  .venv/Scripts/python -m pytest apworld/smo_archipelago/tests/test_deathlink.py -v
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ _AP = Path(__file__).resolve().parents[3] / "vendor" / "Archipelago"
 if _AP.exists() and str(_AP) not in sys.path:
     sys.path.insert(0, str(_AP))
 
-# Suppress AP's auto-pip update step (bridge venv already has the deps).
+# Suppress AP's auto-pip update step (.venv already has the deps).
 try:  # pragma: no cover
     import ModuleUpdate  # type: ignore[import-not-found]
     ModuleUpdate.update_ran = True

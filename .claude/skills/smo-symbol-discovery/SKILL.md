@@ -41,14 +41,15 @@ Output gives e.g. `_ZN16GameDataFunction19tryFindShineMessageEPKN2al9LiveActorEP
 
 For vtables and other RTTI-related data symbols, use `_ZTV<class>` (vtable), `_ZTI<class>` (typeinfo), `_ZTS<class>` (typeinfo name). Class name uses the same length-prefixed format as nm output: e.g. `Poetter` → `_ZTV7Poetter`.
 
-## The sail mangling-length trap
+## Three traps to avoid when writing `.sym` entries by hand
 
-Sail emits a stub for whatever you write into the .sym file. The linker resolves the stub against `fakesymbols.so` (also sail-generated). Runtime lookup happens by **string match** against `main.nso`'s `.dynsym`. If a length-prefix byte count is off-by-one (e.g. `_ZN15StaffRollScene` for a 14-char "StaffRollScene"), the linker is happy, but `hk::ro::lookupSymbol` returns 0 at runtime because the typo'd name isn't in `main.nso`'s dynsym.
+Sail emits a stub for whatever you write into the .sym file. The linker resolves the stub against `fakesymbols.so` (also sail-generated). Runtime lookup happens by **string match** against `main.nso`'s `.dynsym`. Three landmines, all of which sail and the linker happily ignore:
 
-The trap is captured in [project_sail_mangling_length_trap.md](memory/project_sail_mangling_length_trap.md). Two ways to defend:
+1. **Length-prefix off-by-one.** Itanium ABI mangling is `_ZN<len><name><len><name>...Ev`. `aarch64-none-elf-nm` computes the lengths automatically; hand-written entries do not. Concrete misses: `SubmitNetworkRequestAndWait` is 27 chars (not 28), `IsNetworkAvailable` is 18 (not 19). Build links clean against the typo'd `fakesymbols.so`; runtime `hk::ro::lookupSymbol` silently returns 0 because the typo'd name isn't in `main.nso`. Defense: mangle via `aarch64-none-elf-g++ + nm`, never write by hand.
 
-1. **Generate via `aarch64-none-elf-g++ + nm`** as above. Don't write a mangled name by hand.
-2. **Count bytes** on every length prefix: in `_ZN16GameDataFunction19tryFindShineMessage…`, the `16` matches `len("GameDataFunction")` and the `19` matches `len("tryFindShineMessage")`. Off-by-one is the most common typo.
+2. **`s64`/`u64` mangle as `l`/`m` on aarch64 LP64**, NOT `x`/`y`. Nintendo's SDK headers typedef them to `long`/`unsigned long`, so e.g. `nn::fs::CreateFile(char const*, s64)` mangles to `_ZN2nn2fs10CreateFileEPKcl` — not `…EPKcx`. If you write a scratch file with `using s64 = long long;` to feed g++, mangling silently produces the wrong (`x`/`y`) form and the symbol won't resolve at runtime. Defense: use `using s64 = long;`/`u64 = unsigned long;` (or `<cstdint>` + `int64_t`/`uint64_t`) in mangling scratch files. When in doubt, register both manglings via a `resolveAlt(primary, alt)` helper — see Log.cpp.
+
+3. **Sail load-time crash on a missing symbol.** When sail's `loadSymbols()` runs at subsdk init, it applies every `.sym` entry kept alive by the linker (i.e. referenced by code that survives `--gc-sections`). If the underlying symbol isn't in the real `main.nso` dynsym, `hk::sail::detail::SymbolEntry::apply` aborts the entire module before `hkMain` runs. Atmosphere crash signature: User Break, faulting frames `__module_entry__` → `loadSymbols` → `lookupSymbolFromDb` → `SymbolEntry::apply`. The `llvm-nm --dynamic fakesymbols.so` check below is necessary but NOT sufficient (fakesymbols.so is sail-generated from your `.sym`, so it always finds the name there). **Real verification** is against the actual `main.nso`: extract via the `smo-extract-data` skill, then `llvm-nm --dynamic main.nso | grep <mangled>`. For optional functionality whose symbol might not exist on retail (debug helpers, `nn::fs::*` SD-card calls), prefer runtime `hk::ro::lookupSymbol(mangled)` + nullptr check + function-pointer cast — that path soft-fails per-call instead of aborting init. Caveat: `hk::ro::lookupSymbol` itself has been observed to abort on retail when other module-state corruption is present (see [memory/project_hk_ro_lookup_unsafe_on_retail.md](../../../.claude/projects/C--Users-maxwe-Documents-smo-archipelago/memory/project_hk_ro_lookup_unsafe_on_retail.md)).
 
 ## Verification: llvm-nm against fakesymbols.so
 
@@ -86,8 +87,4 @@ After mangling + verification succeeds:
 
 Some types are hard to forward-declare cleanly (multi-inheritance, template instantiations, sead-namespaced things). Fallback: copy the relevant minimal headers from OdysseyDecomp into a scratch dir alongside `scratch.cpp` and let g++ resolve them. Then strip the headers — only the mangled output matters.
 
-In practice this only comes up for sead-template-heavy types. The 50+ symbols already in the project were all manglable from pure forward-decls.
-
-## Historical: scripts/check_nso_symbols.py (retired)
-
-Pre-cutover, the project had a `scripts/check_nso_symbols.py` that decompressed `main.nso`'s LZ4-packed segments and grepped its `.dynstr` for the names in `HookSymbols.hpp`. It was retired in the Hakkun cutover (2026-05-21) because the sail `.sym` → `llvm-nm --dynamic fakesymbols.so` flow above gives an equivalent check at link time. If a future version of `main.nso` (1.0.1+) ships and you want to run the same kind of pre-flight check against a non-1.0.0 build, the script's logic is preserved in git history at commit `4f19fca`.
+In practice this only comes up for sead-template-heavy types. The 40+ symbols already in the project were all manglable from pure forward-decls.
