@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from fnmatch import fnmatch
 from pathlib import Path
@@ -219,8 +218,15 @@ ALLOWED_GLOBS: dict[str, tuple[str, ...]] = {
 
 def _matches_any(rel: str, globs: tuple[str, ...]) -> bool:
     """Return True if `rel` (POSIX-form relative path) matches at least
-    one glob. `**` is honored by walking parent directories."""
-    rel_posix = rel.replace(os.sep, "/")
+    one glob. `**` is honored by walking parent directories.
+
+    Always normalizes backslashes to forward slashes — not just os.sep
+    — because the same audit log file may be read on Linux for grep'ing
+    even when produced on a Windows runner, and the inverse: a path
+    written with `\\` literals in a unit test must validate the matcher
+    works regardless of host platform.
+    """
+    rel_posix = rel.replace("\\", "/")
     for pat in globs:
         if fnmatch(rel_posix, pat):
             return True
