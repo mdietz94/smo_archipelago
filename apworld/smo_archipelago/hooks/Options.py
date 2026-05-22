@@ -142,6 +142,136 @@ class TalkatooMode(Toggle):
     AP-only playthroughs)."""
     display_name = "Talkatoo Mode"
 
+
+# Per-kingdom Moon-item-count caps.
+#
+# Each option caps how many of that kingdom's Power Moon + Multi-Moon items end up
+# in the AP item pool. Reducing it does NOT remove any AP checks — the surplus
+# kingdom-Moon items are dropped from the pool and `adjust_filler_items` tops up
+# the freed slots with filler. Effect: the player still has the same number of
+# checks in the kingdom, but receives fewer kingdom-flavored Moons (and so the
+# in-game kingdom-progress meter caps out lower).
+#
+# Floor is the smallest count that still satisfies the kingdom's KingdomMoons(K, N)
+# rule using the MM-greedy strategy in hooks/World.py::_trim_kingdom_moons_to_options
+# (Multi-Moons are kept first since each is worth 3 effective moons; Power Moons
+# are dropped first). `default = range_end` means everything-on behaves identically
+# to today. tests/test_kingdom_moon_count.py keeps these values in sync with
+# items.json + KINGDOM_MOON_GATES.
+
+class CascadeMoonCount(Range):
+    """Number of Cascade Kingdom Power Moons (and Multi-Moons) in the AP item pool.
+    Reducing this replaces the dropped Cascade moons with filler — the AP checks
+    themselves stay; the player just receives fewer Cascade-flavored moons. Floor
+    is the smallest count that still satisfies the Cascade kingdom gate."""
+    display_name = "Cascade Kingdom Moon Count"
+    range_start = 3
+    range_end = 20
+    default = 20
+
+class SandMoonCount(Range):
+    """Number of Sand Kingdom Power Moons (and Multi-Moons) in the AP item pool.
+    Reducing this replaces the dropped Sand moons with filler — the AP checks
+    themselves stay; the player just receives fewer Sand-flavored moons. Floor
+    is the smallest count that still satisfies the Sand kingdom gate."""
+    display_name = "Sand Kingdom Moon Count"
+    range_start = 12
+    range_end = 62
+    default = 62
+
+class LakeMoonCount(Range):
+    """Number of Lake Kingdom Power Moons (and Multi-Moons) in the AP item pool.
+    Reducing this replaces the dropped Lake moons with filler — the AP checks
+    themselves stay; the player just receives fewer Lake-flavored moons. Floor
+    is the smallest count that still satisfies the Lake kingdom gate."""
+    display_name = "Lake Kingdom Moon Count"
+    range_start = 6
+    range_end = 27
+    default = 27
+
+class WoodedMoonCount(Range):
+    """Number of Wooded Kingdom Power Moons (and Multi-Moons) in the AP item pool.
+    Reducing this replaces the dropped Wooded moons with filler — the AP checks
+    themselves stay; the player just receives fewer Wooded-flavored moons. Floor
+    is the smallest count that still satisfies the Wooded kingdom gate."""
+    display_name = "Wooded Kingdom Moon Count"
+    range_start = 12
+    range_end = 50
+    default = 50
+
+class LostMoonCount(Range):
+    """Number of Lost Kingdom Power Moons in the AP item pool. Reducing this
+    replaces the dropped Lost moons with filler — the AP checks themselves stay;
+    the player just receives fewer Lost-flavored moons. Floor is the smallest
+    count that still satisfies the Lost kingdom gate (Lost has no Multi-Moon,
+    so the floor equals the threshold directly)."""
+    display_name = "Lost Kingdom Moon Count"
+    range_start = 10
+    range_end = 21
+    default = 21
+
+class MetroMoonCount(Range):
+    """Number of Metro Kingdom Power Moons (and Multi-Moons) in the AP item pool.
+    Reducing this replaces the dropped Metro moons with filler — the AP checks
+    themselves stay; the player just receives fewer Metro-flavored moons. Floor
+    is the smallest count that still satisfies the Metro kingdom gate."""
+    display_name = "Metro Kingdom Moon Count"
+    range_start = 16
+    range_end = 53
+    default = 53
+
+class SnowMoonCount(Range):
+    """Number of Snow Kingdom Power Moons (and Multi-Moons) in the AP item pool.
+    Reducing this replaces the dropped Snow moons with filler — the AP checks
+    themselves stay; the player just receives fewer Snow-flavored moons. Floor
+    is the smallest count that still satisfies the Snow kingdom gate."""
+    display_name = "Snow Kingdom Moon Count"
+    range_start = 8
+    range_end = 34
+    default = 34
+
+class SeasideMoonCount(Range):
+    """Number of Seaside Kingdom Power Moons (and Multi-Moons) in the AP item pool.
+    Reducing this replaces the dropped Seaside moons with filler — the AP checks
+    themselves stay; the player just receives fewer Seaside-flavored moons. Floor
+    is the smallest count that still satisfies the Seaside kingdom gate."""
+    display_name = "Seaside Kingdom Moon Count"
+    range_start = 8
+    range_end = 50
+    default = 50
+
+class LuncheonMoonCount(Range):
+    """Number of Luncheon Kingdom Power Moons (and Multi-Moons) in the AP item pool.
+    Reducing this replaces the dropped Luncheon moons with filler — the AP checks
+    themselves stay; the player just receives fewer Luncheon-flavored moons. Floor
+    is the smallest count that still satisfies the Luncheon kingdom gate."""
+    display_name = "Luncheon Kingdom Moon Count"
+    range_start = 14
+    range_end = 49
+    default = 49
+
+class RuinedMoonCount(Range):
+    """Number of Ruined Kingdom Power Moons (and the Multi-Moon) in the AP item
+    pool. Reducing this replaces the dropped Ruined moons with filler — the AP
+    checks themselves stay; the player just receives fewer Ruined-flavored moons.
+    Floor is 1 because Ruined's threshold (3) is fully covered by its single
+    Multi-Moon."""
+    display_name = "Ruined Kingdom Moon Count"
+    range_start = 1
+    range_end = 4
+    default = 4
+
+class BowsersMoonCount(Range):
+    """Number of Bowser's Kingdom Power Moons (and Multi-Moons) in the AP item pool.
+    Reducing this replaces the dropped Bowser's moons with filler — the AP checks
+    themselves stay; the player just receives fewer Bowser's-flavored moons. Floor
+    is the smallest count that still satisfies the Bowser's kingdom gate."""
+    display_name = "Bowser's Kingdom Moon Count"
+    range_start = 6
+    range_end = 38
+    default = 38
+
+
 # This is called before any options are defined, in case you want to define your own with a clean slate
 def before_options_defined(options: dict) -> dict:
     options["goal"] = Goal
@@ -167,6 +297,18 @@ def before_options_defined(options: dict) -> dict:
     options["include_tourist_moons"] = IncludeTouristMoons
     options["include_long_course_moons"] = IncludeLongCourseMoons
     options["include_precision_capture_moons"] = IncludePrecisionCaptureMoons
+    # Per-kingdom Moon-item-count caps (only kingdoms with KingdomMoons(K, N) gates).
+    options["cascade_moon_count"] = CascadeMoonCount
+    options["sand_moon_count"] = SandMoonCount
+    options["lake_moon_count"] = LakeMoonCount
+    options["wooded_moon_count"] = WoodedMoonCount
+    options["lost_moon_count"] = LostMoonCount
+    options["metro_moon_count"] = MetroMoonCount
+    options["snow_moon_count"] = SnowMoonCount
+    options["seaside_moon_count"] = SeasideMoonCount
+    options["luncheon_moon_count"] = LuncheonMoonCount
+    options["ruined_moon_count"] = RuinedMoonCount
+    options["bowsers_moon_count"] = BowsersMoonCount
     return options
 
 # This is called after any options are defined, in case you want to see what options are defined or want to modify the defined options

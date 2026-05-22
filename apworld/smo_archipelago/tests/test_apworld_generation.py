@@ -58,6 +58,24 @@ ANNOYING_CLUSTER_TOGGLES = [
     "include_precision_capture_moons",
 ]
 
+# Per-kingdom moon-count floor (matches hooks/Options.py::*MoonCount.range_start
+# and tests/test_kingdom_moon_count.py). Used by the moon_count_* scenarios to
+# stress _trim_kingdom_moons_to_options + _demote_surplus_kingdom_moons against
+# the worst-case (smallest gate-satisfying) pool size.
+MOON_COUNT_FLOORS = {
+    "cascade_moon_count":  3,
+    "sand_moon_count":     12,
+    "lake_moon_count":     6,
+    "wooded_moon_count":   12,
+    "lost_moon_count":     10,
+    "metro_moon_count":    16,
+    "snow_moon_count":     8,
+    "seaside_moon_count":  8,
+    "luncheon_moon_count": 14,
+    "ruined_moon_count":   1,
+    "bowsers_moon_count":  6,
+}
+
 # Worlds known to be small + dependency-light, suitable as a multi-world partner.
 # generate_early/create_items shouldn't require external files (no rom, no save).
 CANDIDATE_PARTNER_WORLDS = [
@@ -177,6 +195,22 @@ def _all_off() -> dict[str, bool]:
     return {k: False for k in PER_KINGDOM_PEACE_TOGGLES + ANNOYING_CLUSTER_TOGGLES}
 
 
+def _moon_count_all_floor() -> dict[str, int]:
+    """Every per-kingdom moon-count option pinned to its floor. Worst case for
+    _demote_surplus_kingdom_moons — the trim pass leaves only the gate-required
+    number of Moon items per kingdom, and adjust_filler_items has to refill the
+    freed slots with filler / traps."""
+    return dict(MOON_COUNT_FLOORS)
+
+
+def _moon_count_with_peace_off() -> dict[str, object]:
+    """All moon-counts at floor AND all peace toggles off. Combines two
+    independent trim mechanisms — sanity check they stack without conflict."""
+    overrides: dict[str, object] = dict(MOON_COUNT_FLOORS)
+    overrides.update({k: False for k in PER_KINGDOM_PEACE_TOGGLES})
+    return overrides
+
+
 def _build_scenarios() -> list[tuple[str, dict[str, bool]]]:
     fast = os.environ.get("SMOAP_GEN_TEST_FAST") == "1"
     if fast:
@@ -187,12 +221,16 @@ def _build_scenarios() -> list[tuple[str, dict[str, bool]]]:
             # against the default option set so a regression in the
             # greedy permutation builder is caught even on the fast run.
             ("talkatoo_mode", {"talkatoo_mode": True}),
+            ("moon_count_all_floor", _moon_count_all_floor()),
         ]
     return [
         ("all_on", _all_on()),
         ("all_off", _all_off()),
         ("festival_goal", {"goal": "festival"}),
         ("talkatoo_mode", {"talkatoo_mode": True}),
+        ("moon_count_all_floor", _moon_count_all_floor()),
+        ("moon_count_cascade_floor", {"cascade_moon_count": MOON_COUNT_FLOORS["cascade_moon_count"]}),
+        ("moon_count_with_peace_off", _moon_count_with_peace_off()),
         *_individual_off_cases(),
     ]
 

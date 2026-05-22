@@ -37,6 +37,27 @@ KINGDOM_MOON_GATES = {
     "Bowser's": 8,
 }
 
+# Per-kingdom Moon-item-count cap, one Range option each. Mirrored to
+# KINGDOM_MOON_GATES so every gated kingdom has a corresponding cap. The
+# option floors (range_start in hooks/Options.py) are sized to leave the
+# gate satisfiable under the MM-greedy trim strategy below; the option
+# defaults (range_end == default) leave the pool identical to today.
+# tests/test_kingdom_moon_count.py keeps the option floors/ends in sync
+# with items.json and this table.
+KINGDOM_MOON_COUNT_OPTIONS = {
+    "Cascade":  "cascade_moon_count",
+    "Sand":     "sand_moon_count",
+    "Lake":     "lake_moon_count",
+    "Wooded":   "wooded_moon_count",
+    "Lost":     "lost_moon_count",
+    "Metro":    "metro_moon_count",
+    "Snow":     "snow_moon_count",
+    "Seaside":  "seaside_moon_count",
+    "Luncheon": "luncheon_moon_count",
+    "Ruined":   "ruined_moon_count",
+    "Bowser's": "bowsers_moon_count",
+}
+
 # Items dropped from the pool under the festival goal (Goal.option_festival).
 # Post-Metro kingdoms are emptied of locations in create_regions, so their
 # moon items have nowhere to land — adjust_filler_items would otherwise log
@@ -139,8 +160,41 @@ def before_create_items_starting(item_pool: list, world: World, multiworld: Mult
                 it.classification = ItemClassification.filler
     return item_pool
 
+def _trim_kingdom_moons_to_options(item_pool: list, multiworld: MultiWorld, player: int) -> None:
+    """Drop surplus per-kingdom Moon items down to the option-configured cap.
+
+    Power Moons are dropped first so Multi-Moons (worth 3 effective each toward
+    the KingdomMoons(K, N) gate) are preserved; this keeps the demotion in
+    _demote_surplus_kingdom_moons able to select a gate-satisfying progression
+    subset even at the option floor. adjust_filler_items in __init__.py refills
+    the freed pool slots with filler — same total check count, just fewer
+    kingdom-flavored Moon items received.
+    """
+    for kingdom, opt_name in KINGDOM_MOON_COUNT_OPTIONS.items():
+        target = get_option_value(multiworld, player, opt_name)
+        pm_name = f"{kingdom} Kingdom Power Moon"
+        mm_name = f"{kingdom} Kingdom Multi-Moon"
+        pm_indices = [i for i, it in enumerate(item_pool) if it.name == pm_name]
+        mm_indices = [i for i, it in enumerate(item_pool) if it.name == mm_name]
+        current = len(pm_indices) + len(mm_indices)
+        if current <= target:
+            continue
+        to_drop = current - target
+        # Drop PMs first; only dip into MMs once PMs are exhausted. Pop in
+        # descending index order so earlier pops don't shift the later ones.
+        pms_to_drop = pm_indices[: min(to_drop, len(pm_indices))]
+        mms_to_drop = mm_indices[: max(0, to_drop - len(pm_indices))]
+        for i in sorted(pms_to_drop + mms_to_drop, reverse=True):
+            item_pool.pop(i)
+
+
 # The item pool after starting items are processed but before filler is added, in case you want to see the raw item pool at that stage
 def before_create_items_filler(item_pool: list, world: World, multiworld: MultiWorld, player: int) -> list:
+    # Apply the per-kingdom moon-count caps before adjust_filler_items runs
+    # in create_items: the trim leaves locations > items, which then triggers
+    # adjust_filler_items' top-up branch (filler / traps). Runs before
+    # after_create_items so _demote_surplus_kingdom_moons sees the trimmed pool.
+    _trim_kingdom_moons_to_options(item_pool, multiworld, player)
     return item_pool
 
 # The complete item pool prior to being set for generation is provided here, in case you want to make changes to it
