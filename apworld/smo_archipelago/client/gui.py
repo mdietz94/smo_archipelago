@@ -373,7 +373,7 @@ class SwitchesPopup(Popup):
         self._body.clear_widgets()
         switches = self._ctx.state.get_switches()
         if not switches:
-            self._body.add_widget(Label(
+            self._body.add_widget(_wrapping_label(
                 text=(
                     "[i]No Switches connected.[/i]\n\n"
                     "Boot SMO with the mod installed (Ryujinx or real "
@@ -381,26 +381,18 @@ class SwitchesPopup(Popup):
                     "the bridge replies with its LAN IP and the Switch then "
                     "TCP-connects."
                 ),
-                markup=True,
-                halign="left",
-                valign="top",
-                size_hint_y=None,
                 height=dp(120),
-                text_size=(self.width - dp(40), None),
+                valign="top",
             ))
         else:
             for sw in switches:
                 self._body.add_widget(_switch_row(sw, self._on_pick))
         # Divider + Advanced row.
-        self._body.add_widget(Label(
+        self._body.add_widget(_wrapping_label(
             text="[b]Advanced[/b]",
-            markup=True,
-            size_hint_y=None,
             height=dp(24),
-            halign="left",
-            text_size=(self.width - dp(40), None),
         ))
-        self._body.add_widget(Label(
+        self._body.add_widget(_wrapping_label(
             text=(
                 f"[i]Detected LAN IP: {detect_lan_ip()}[/i]\n"
                 f"This is what the bridge advertises to discovering Switches "
@@ -409,12 +401,8 @@ class SwitchesPopup(Popup):
                 f"find the bridge after a reboot, re-run setup to rebuild "
                 f"the mod with the current address."
             ),
-            markup=True,
-            halign="left",
-            valign="top",
-            size_hint_y=None,
             height=dp(80),
-            text_size=(self.width - dp(40), None),
+            valign="top",
         ))
         rerun = Button(
             text="Re-run setup wizard",
@@ -439,6 +427,29 @@ class SwitchesPopup(Popup):
             launch_subprocess(_run_setup_wizard_no_smoap, name="SMOSetup")
         except Exception:
             logging.getLogger("SMO").exception("failed to launch setup wizard")
+
+
+def _wrapping_label(text: str, height: float, valign: str = "middle") -> Label:
+    """Label that wraps text to its own current width.
+
+    Binding text_size to the live width avoids the SwitchesPopup
+    compressed-text bug: refresh() builds the labels before open() is
+    called, so the popup's `self.width` is still the default 100 px
+    and a static `text_size=(self.width - dp(40), None)` would bake
+    that 60-ish-px wrap into the texture. The label later stretches
+    to fill the popup but text_size doesn't follow.
+    """
+    lbl = Label(
+        text=text,
+        markup=True,
+        halign="left",
+        valign=valign,
+        size_hint_y=None,
+        height=height,
+        text_size=(None, None),
+    )
+    lbl.bind(width=lambda inst, w: setattr(inst, "text_size", (w - dp(8), None)))
+    return lbl
 
 
 def _switch_row(sw: dict, on_pick) -> BoxLayout:
