@@ -341,21 +341,26 @@ async def test_connected_handler_filters_progression_moons_from_talkatoo_pool():
     # missing_locations + checked_locations through dp.location_id_to_name,
     # so loc_id values don't have to match real AP ids — they just have
     # to map onto the apworld's location names so classify_location +
-    # is_progression_location find them.
+    # is_progression_location find them. Use high ids in the SMO apworld
+    # range; CommonContext.__init__ pre-loads `network_data_package`
+    # (every installed apworld's id table) into `self.item_names` /
+    # `self.location_names`, and _populate_datapackage_from_self mirrors
+    # all of those into `ctx.dp`. Sub-10k ids collide with other apworlds
+    # (Super Mario Land 2, Starcraft 2) and get clobbered.
     fixtures = {
         # Progression: 2 Cascade entries (1 opener + 1 Multi Moon).
-        1001: "Cascade: Our First Power Moon",
-        1002: "Cascade: Multi Moon Atop the Falls",
+        70001001: "Cascade: Our First Power Moon",
+        70001002: "Cascade: Multi Moon Atop the Falls",
         # Progression: a Seaside seal + Bowser's chain entry.
-        1003: "Seaside: The Stone Pillar Seal",
-        1004: "Bowser's: Showdown at Bowser's Castle",
+        70001003: "Seaside: The Stone Pillar Seal",
+        70001004: "Bowser's: Showdown at Bowser's Castle",
         # Non-progression: regular Cascade moons. These MUST survive.
-        2001: "Cascade: Chomp Through the Rocks",
-        2002: "Cascade: Behind the Waterfall",
+        70002001: "Cascade: Chomp Through the Rocks",
+        70002002: "Cascade: Behind the Waterfall",
         # Non-moon: capture entries are skipped earlier in the loop
         # (classify_location returns CAPTURE, not MOON) — make sure
         # they don't sneak in.
-        3001: "Capture: Goomba",
+        70003001: "Capture: Goomba",
     }
     for loc_id, name in fixtures.items():
         ctx.dp.location_id_to_name[loc_id] = name
@@ -935,3 +940,113 @@ async def test_ap_received_multi_moon_batch_debounces_outstanding():
 # now derived from (lifetime_received_AP - PayShineNum); the new equivalent
 # tests live in test_outstanding.py — see test_crash_rollback_recovers_outstanding
 # for the headline bug-class regression.)
+
+
+@pytest.mark.asyncio
+async def test_populate_datapackage_mirrors_all_games_not_just_smo():
+    """Channel A cutscene-label regression: cross-game items must resolve.
+
+    Bug: `_populate_datapackage_from_self` iterated `(GAME_NAME,
+    "Archipelago")` only, so when an SMO location held an item destined
+    for another player's *game*, `dp.item_id_to_name.get(scout.item_id)`
+    missed and `compose_moon_label_for_location` returned None — the
+    Switch saw no MoonLabelMsg and the get-cinematic kept its vanilla
+    Nintendo text instead of "Sent X to <player>".
+
+    Two reported instances (Cap: Shopping in Bonneton → Paint, Cascade:
+    Very Nice Shot with the Chain Chomp! → Paint) were the same failure.
+    Fix is to iterate every game CommonContext has datapackage entries
+    for, not a hard-coded pair.
+    """
+    ctx = SMOContext(
+        server_address=None, password=None,
+        state=BridgeState(),
+        datapackage=DataPackage(),
+        shine_map=ShineMap(),
+        capture_map=CaptureMap(),
+    )
+
+    # Simulate CommonContext absorbing a DataPackage packet for three games:
+    # our own, the implicit "Archipelago" generic-items game, and a third
+    # one belonging to another player whose game we know nothing about.
+    ctx.item_names.update_game(
+        "Spicy Meatball Overdrive",
+        {"Cap Kingdom Power Moon": 71001},
+    )
+    ctx.location_names.update_game(
+        "Spicy Meatball Overdrive",
+        {"Cap: Shopping in Bonneton": 81001},
+    )
+    ctx.item_names.update_game("Archipelago", {"Nothing": 0})
+    ctx.location_names.update_game("Archipelago", {})
+    ctx.item_names.update_game(
+        "Paint",
+        {"Additional Palette Color": 234567},
+    )
+    ctx.location_names.update_game(
+        "Paint",
+        {"Paint Canvas 1": 345678},
+    )
+
+    ctx._populate_datapackage_from_self()
+
+    # Own-game ids: present (pre-fix worked here).
+    assert ctx.dp.item_id_to_name.get(71001) == "Cap Kingdom Power Moon"
+    assert ctx.dp.location_name_to_id.get(
+        "Cap: Shopping in Bonneton") == 81001
+    # Cross-game ids: present (the regression). Pre-fix, this assert
+    # failed because Paint's item id was never mirrored.
+    assert ctx.dp.item_id_to_name.get(234567) == "Additional Palette Color"
+    assert ctx.dp.location_name_to_id.get("Paint Canvas 1") == 345678
+
+
+@pytest.mark.asyncio
+async def test_compose_moon_label_for_cross_game_recipient_resolves():
+    """End-to-end Channel A path: collecting an SMO location that holds a
+    foreign-game item must produce a 'Sent <item> to <player>' label.
+
+    This is the bug as it presents externally — the cutscene-label hook
+    on the Switch wants a synthesized string, and the dispatcher gives
+    up (returns None) without it. Walks the same code path
+    SwitchServer._dispatch_check uses on a live moon collect.
+    """
+    ctx = SMOContext(
+        server_address=None, password=None,
+        state=BridgeState(),
+        datapackage=DataPackage(apworld_data_dir=_APWORLD_DATA),
+        shine_map=ShineMap(),
+        capture_map=CaptureMap(),
+    )
+    ctx.auth = "Talkatoo"
+    ctx.player_names = {1: "Paint", 2: "Talkatoo"}
+
+    LOC_ID = 81002    # SMO location id we own
+    ITEM_ID = 234567  # Item id in Paint's game
+    ctx.item_names.update_game(
+        "Spicy Meatball Overdrive",
+        {"Cap Kingdom Power Moon": 71001},
+    )
+    ctx.location_names.update_game(
+        "Spicy Meatball Overdrive",
+        {"Cap: Shopping in Bonneton": LOC_ID},
+    )
+    ctx.item_names.update_game(
+        "Paint",
+        {"Additional Palette Color": ITEM_ID},
+    )
+    ctx._populate_datapackage_from_self()
+
+    # Pre-warm the scout cache the way LocationInfo would: SMO location
+    # LOC_ID holds Paint's ITEM_ID, recipient is slot 1 ("Paint").
+    ctx.scout_cache.absorb(location=LOC_ID, item=ITEM_ID, recipient=1)
+
+    label = ctx.compose_moon_label_for_location(LOC_ID)
+
+    assert label is not None, (
+        "compose_moon_label returned None — Paint's item id never made it "
+        "into dp.item_id_to_name (the regression)"
+    )
+    # Paint is the recipient, Talkatoo is us → "Sent ... to Paint",
+    # truncated to ≤ 30 bytes by display.format_moon_label.
+    assert label.startswith("Sent "), label
+    assert "Paint" in label or label.endswith("…"), label

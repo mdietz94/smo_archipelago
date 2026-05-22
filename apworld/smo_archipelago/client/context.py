@@ -1273,8 +1273,16 @@ class SMOContext(CommonContext):
         DataPackage handling. Mirror those into our SMO-specific
         DataPackage so report_check can resolve canonical names to ids
         without re-implementing AP's lookups.
+
+        Iterates every game CommonContext knows about (not just our own),
+        because Channel A's `compose_moon_label_for_location` needs to
+        resolve the *recipient's* item name when our location holds an
+        item destined for another player's game — without the cross-game
+        ids in `dp.item_id_to_name`, the cutscene label falls back to
+        vanilla SMO text.
         """
-        for game in (GAME_NAME, "Archipelago"):
+        games = set(self.item_names) | set(self.location_names)
+        for game in games:
             try:
                 loc_map = self.location_names[game]  # {id: name}
                 item_map = self.item_names[game]
