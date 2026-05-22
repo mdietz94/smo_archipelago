@@ -9,17 +9,33 @@
 // arithmetic against a local bitset with identical layout, so a regression
 // in the indexing math is caught in CI without needing a Switch build.
 //
+// IP boundary: this test runs against a synthetic shine_table.h built from
+// switch-mod/tests/{locations,shine_map}_fixture.json — both fixtures use
+// invented stage names (TestStageAlpha, TestStageBeta), invented obj_ids
+// (objBravo, objCharlie, ...), invented uids (101..105), invented kingdom
+// labels (TestKingdom, OtherTestKingdom), and invented moon names — EXCEPT
+// for the one canonical M5.7 anchor "Our First Power Moon" that CLAUDE.md
+// explicitly allows as a verifiable test fixture. No production
+// (stage, obj_id) → uid mappings live in committed test source. Data-drift
+// of real production identifiers is the job of
+// apworld/smo_archipelago/tests/test_progression_moons.py (Python, runs
+// against committed locations.json — no Nintendo IP).
+//
 // Build (msys2 g++; single-line so it doesn't trip -Wcomment):
 //   "C:/msys64/mingw64/bin/g++.exe" -std=c++20 -Wall -Wextra -O0 -g -DSMOAP_HOST_TEST -Iswitch-mod/src switch-mod/tests/test_shine_lookup.cpp -o test_shine_lookup.exe
 //
+// Generate the synthetic shine_table.h first (CI workflow already does this;
+// single-line so it doesn't trip -Wcomment):
+//   python scripts/sync_shine_table.py --locations switch-mod/tests/locations_fixture.json --shine-map switch-mod/tests/shine_map_fixture.json
+//
 // Covers:
-//   - shineUidByStageObj: known moons resolve to expected uids; unknown
-//     returns -1; null/empty inputs return -1; both sides matter.
-//   - shineUidByDisplayName: known display names resolve; mismatched casing
-//     does NOT resolve (byte-for-byte semantics).
-//   - isProgressionShine: progression-flagged moons return true; regular
-//     moons return false; unknown returns false (fail-open). At least one
-//     case per kingdom that has a progression moon.
+//   - shineUidByStageObj: known synthetic moons resolve to expected uids;
+//     unknown returns -1; null/empty inputs return -1; partial matches don't
+//     resolve; wrong-stage-right-obj doesn't resolve.
+//   - shineUidByDisplayName: canonical anchor name resolves; mismatched
+//     casing does NOT resolve (byte-for-byte semantics).
+//   - isProgressionShine: progression-flagged synthetic moons return true;
+//     non-progression-flagged return false; unknown returns false (fail-open).
 //   - Named-set bit indexing: markMoonNamed → isMoonNamed roundtrips,
 //     boundary uids (0, 2047, 2048), out-of-range short-circuits.
 
@@ -68,24 +84,25 @@ const char* g_current_test = "";
 
 // --------------------------------------------------------------------------
 // shineUidByStageObj
+//
+// Fixture rows (see shine_map_fixture.json):
+//   TestStageAlpha / objAnchor  -> 101 ("Our First Power Moon", progression)
+//   TestStageAlpha / objBravo   -> 102 ("Test Moon Bravo",     progression)
+//   TestStageAlpha / objCharlie -> 103 ("Test Moon Charlie",   regular)
+//   TestStageBeta  / objDelta   -> 104 ("Test Moon Delta",     progression)
+//   TestStageBeta  / objEcho    -> 105 ("Test Moon Echo",      regular)
 // --------------------------------------------------------------------------
 
-TEST(stage_obj_known_cascade_progression) {
-    // From the CI fixture (switch-mod/tests/shine_map_fixture.json) the
-    // Cascade obj21 entry resolves to uid 218 — same stage/obj/uid triple
-    // the real shine_map.json holds, but with a synthetic shine_id so the
-    // fixture doesn't carry Nintendo IP. The real production table is
-    // verified by test_progression_moons.py against the live locations.json.
-    EXPECT_EQ_I(shineUidByStageObj("WaterfallWorldHomeStage", "obj21"), 218);
+TEST(stage_obj_known_alpha_bravo) {
+    EXPECT_EQ_I(shineUidByStageObj("TestStageAlpha", "objBravo"), 102);
 }
 
-TEST(stage_obj_known_first_power_moon) {
-    // Used as the canonical M5.7 fixture in CLAUDE.md: ground-truth datapoint.
-    EXPECT_EQ_I(shineUidByStageObj("WaterfallWorldHomeStage", "obj214"), 205);
+TEST(stage_obj_known_alpha_anchor) {
+    EXPECT_EQ_I(shineUidByStageObj("TestStageAlpha", "objAnchor"), 101);
 }
 
-TEST(stage_obj_known_cap_kingdom) {
-    EXPECT_EQ_I(shineUidByStageObj("CapWorldHomeStage", "obj2422"), 815);
+TEST(stage_obj_known_beta_delta) {
+    EXPECT_EQ_I(shineUidByStageObj("TestStageBeta", "objDelta"), 104);
 }
 
 TEST(stage_obj_unknown_returns_negative_one) {
@@ -93,34 +110,46 @@ TEST(stage_obj_unknown_returns_negative_one) {
 }
 
 TEST(stage_obj_null_stage_returns_negative_one) {
-    EXPECT_EQ_I(shineUidByStageObj(nullptr, "obj21"), -1);
+    EXPECT_EQ_I(shineUidByStageObj(nullptr, "objAnchor"), -1);
 }
 
 TEST(stage_obj_null_obj_returns_negative_one) {
-    EXPECT_EQ_I(shineUidByStageObj("WaterfallWorldHomeStage", nullptr), -1);
+    EXPECT_EQ_I(shineUidByStageObj("TestStageAlpha", nullptr), -1);
 }
 
 TEST(stage_obj_empty_returns_negative_one) {
-    EXPECT_EQ_I(shineUidByStageObj("", "obj21"), -1);
-    EXPECT_EQ_I(shineUidByStageObj("WaterfallWorldHomeStage", ""), -1);
+    EXPECT_EQ_I(shineUidByStageObj("", "objAnchor"), -1);
+    EXPECT_EQ_I(shineUidByStageObj("TestStageAlpha", ""), -1);
 }
 
 TEST(stage_obj_partial_match_does_not_resolve) {
     // Bare prefix shouldn't match a longer obj_id — comparison is whole-string.
-    EXPECT_EQ_I(shineUidByStageObj("WaterfallWorldHomeStage", "obj2"), -1);
+    EXPECT_EQ_I(shineUidByStageObj("TestStageAlpha", "obj"), -1);
+}
+
+TEST(stage_obj_wrong_stage_right_obj_does_not_resolve) {
+    // objAnchor lives on TestStageAlpha; querying TestStageBeta must not match.
+    EXPECT_EQ_I(shineUidByStageObj("TestStageBeta", "objAnchor"), -1);
 }
 
 // --------------------------------------------------------------------------
 // shineUidByDisplayName
 // --------------------------------------------------------------------------
 
-TEST(display_name_first_power_moon) {
+TEST(display_name_anchor) {
     // CLAUDE.md's canonical M5.7 anchor — the ONE verbatim moon name
-    // allowed in committed test fixtures, mirrored in the CI fixture's
-    // (Cascade, "Our First Power Moon") row. Other display-name lookups
+    // allowed in committed test fixtures. Other display-name lookups
     // would need a second real name; the by-display-name scan path is
-    // exercised by this single assertion.
-    EXPECT_EQ_I(shineUidByDisplayName("Our First Power Moon"), 205);
+    // exercised by this single assertion against the anchor entry in
+    // shine_map_fixture.json.
+    EXPECT_EQ_I(shineUidByDisplayName("Our First Power Moon"), 101);
+}
+
+TEST(display_name_synthetic_resolves) {
+    // Validate the by-display-name scan against a synthetic moon name too,
+    // so the case-sensitive / boundary tests below have something invented
+    // (not the anchor) to assert against.
+    EXPECT_EQ_I(shineUidByDisplayName("Test Moon Bravo"), 102);
 }
 
 TEST(display_name_unknown_returns_negative_one) {
@@ -129,7 +158,7 @@ TEST(display_name_unknown_returns_negative_one) {
 
 TEST(display_name_case_sensitive) {
     // shine_id comparison is byte-for-byte. Lowercase miss should return -1.
-    EXPECT_EQ_I(shineUidByDisplayName("multi moon atop the falls"), -1);
+    EXPECT_EQ_I(shineUidByDisplayName("test moon bravo"), -1);
 }
 
 TEST(display_name_null_empty) {
@@ -139,61 +168,38 @@ TEST(display_name_null_empty) {
 
 // --------------------------------------------------------------------------
 // isProgressionShine
+//
+// Real-production progression-flag drift is covered by
+// apworld/smo_archipelago/tests/test_progression_moons.py — that suite runs
+// against committed locations.json (no IP). Here we only verify the
+// scan-logic correctness on the synthetic fixture.
 // --------------------------------------------------------------------------
 
-TEST(progression_cascade_multimoon) {
-    // The canonical example.
-    EXPECT_TRUE(isProgressionShine("WaterfallWorldHomeStage", "obj21"));
+TEST(progression_alpha_anchor_flagged) {
+    // objAnchor row has "progression": true in locations_fixture.json.
+    EXPECT_TRUE(isProgressionShine("TestStageAlpha", "objAnchor"));
 }
 
-TEST(progression_cascade_first_power_moon) {
-    // Story 1->2 advancer added during 2026-05-21 audit.
-    EXPECT_TRUE(isProgressionShine("WaterfallWorldHomeStage", "obj214"));
+TEST(progression_alpha_bravo_flagged) {
+    // Second progression entry on the same stage — validates per-row scan.
+    EXPECT_TRUE(isProgressionShine("TestStageAlpha", "objBravo"));
 }
 
-TEST(progression_sand_both_multimoons) {
-    // Sand has TWO Multi Moons (Hariet + Knucklotec). Audit caught the
-    // missing one (The Hole in the Desert) — guard against regression.
-    EXPECT_TRUE(isProgressionShine("SandWorldHomeStage", "obj1432"));      // Hariet MM
-    EXPECT_TRUE(isProgressionShine("SandWorldUnderground001Stage", "obj9")); // Knucklotec MM
+TEST(progression_beta_delta_flagged_other_kingdom) {
+    // Progression entry on a different stage / kingdom — validates the scan
+    // doesn't accidentally key on stage_name prefix.
+    EXPECT_TRUE(isProgressionShine("TestStageBeta", "objDelta"));
 }
 
-TEST(progression_seaside_seals_and_mollusque) {
-    // 4 seals + Mollusque MM — all five must be flagged for the seal chain
-    // → boss spawn → MM to complete in talkatoo_mode.
-    EXPECT_TRUE(isProgressionShine("SeaWorldHomeStage", "obj382"));         // Stone Pillar Seal
-    EXPECT_TRUE(isProgressionShine("SeaWorldLighthouseZone", "obj16"));     // Lighthouse Seal
-    EXPECT_TRUE(isProgressionShine("SeaWorldLavaZone", "obj168"));          // Hot Spring Seal
-    EXPECT_TRUE(isProgressionShine("SeaWorldDamageBallZone", "obj60"));     // Above the Canyon Seal
-    EXPECT_TRUE(isProgressionShine("SeaWorldHomeStage", "obj1277"));        // Glass Is Half Full (Mollusque MM)
+TEST(progression_alpha_charlie_not_flagged) {
+    // Same stage as the flagged anchor entry, but charlie's row is regular
+    // (progression: false). Validates the scan doesn't bleed flags across
+    // rows that share a stage_name.
+    EXPECT_FALSE(isProgressionShine("TestStageAlpha", "objCharlie"));
 }
 
-TEST(progression_bowsers_full_chain) {
-    // 4-step Bowser's story chain — all four must be flagged.
-    EXPECT_TRUE(isProgressionShine("SkyWorldHomeStage", "obj1921"));   // Infiltrate
-    EXPECT_TRUE(isProgressionShine("SkyWorldWallZone", "obj1671"));    // Smart Bombing
-    EXPECT_TRUE(isProgressionShine("SkyWorldCastleZone", "obj3811"));  // Big Broodal Battle
-    EXPECT_TRUE(isProgressionShine("SkyWorldCastleZone", "obj3819"));  // Showdown (RoboBrood MM)
-}
-
-TEST(progression_regular_moon_not_flagged) {
-    // A run-of-the-mill Cascade moon — should NOT be flagged. Picked from
-    // the actual user-collected moon that triggered the block in testing.
-    EXPECT_FALSE(isProgressionShine("WaterfallWorldHomeStage", "obj2618")); // Cascade Kingdom Timer Challenge 1
-}
-
-TEST(progression_pruned_lost_no_progression) {
-    // Audit removed "Lost: A Propeller Pillar's Secret" — Lost Kingdom has
-    // no progression moon per Mario Wiki Multi_Moon page. Regression guard
-    // so it doesn't drift back in.
-    EXPECT_FALSE(isProgressionShine("ClashWorldHomeStage", "obj1144"));
-}
-
-TEST(progression_pruned_make_the_secret_flower) {
-    // Audit removed "Wooded: Make the Secret Flower Field Bloom" — not a
-    // Multi Moon (just a scenario-5 spawn after Torkdrift). Player can
-    // advance past Wooded with the Torkdrift MM alone.
-    EXPECT_FALSE(isProgressionShine("ForestWorldBossStage", "obj488"));
+TEST(progression_beta_echo_not_flagged) {
+    EXPECT_FALSE(isProgressionShine("TestStageBeta", "objEcho"));
 }
 
 TEST(progression_unknown_returns_false) {
@@ -201,8 +207,8 @@ TEST(progression_unknown_returns_false) {
 }
 
 TEST(progression_null_returns_false) {
-    EXPECT_FALSE(isProgressionShine(nullptr, "obj21"));
-    EXPECT_FALSE(isProgressionShine("WaterfallWorldHomeStage", nullptr));
+    EXPECT_FALSE(isProgressionShine(nullptr, "objAnchor"));
+    EXPECT_FALSE(isProgressionShine("TestStageAlpha", nullptr));
 }
 
 // --------------------------------------------------------------------------
@@ -233,26 +239,26 @@ struct LocalNamedSet {
 
 TEST(named_set_empty_returns_false) {
     LocalNamedSet s;
-    EXPECT_FALSE(s.query(218));
+    EXPECT_FALSE(s.query(101));
     EXPECT_FALSE(s.query(0));
     EXPECT_FALSE(s.query(kMaxBit - 1));
 }
 
 TEST(named_set_mark_then_query_roundtrip) {
     LocalNamedSet s;
-    s.mark(218);  // Cascade Multi Moon uid from shine_table.h
-    EXPECT_TRUE(s.query(218));
+    s.mark(101);  // Synthetic anchor uid from shine_map_fixture.json.
+    EXPECT_TRUE(s.query(101));
     // Neighbors stay clean.
-    EXPECT_FALSE(s.query(217));
-    EXPECT_FALSE(s.query(219));
+    EXPECT_FALSE(s.query(9000));
+    EXPECT_FALSE(s.query(102));
 }
 
 TEST(named_set_mark_idempotent) {
     LocalNamedSet s;
-    s.mark(218);
-    s.mark(218);
-    s.mark(218);
-    EXPECT_TRUE(s.query(218));
+    s.mark(101);
+    s.mark(101);
+    s.mark(101);
+    EXPECT_TRUE(s.query(101));
 }
 
 TEST(named_set_boundary_bits) {
@@ -284,6 +290,10 @@ TEST(named_set_covers_all_known_shine_uids) {
     // The real shine_table.h max uid is well under 2048; this guards
     // against an apworld expansion that pushes uids past the bitset size
     // (a silent bug since markMoonNamed early-returns on out-of-range).
+    // Synthetic fixture uses 101..105, which is also well under 2048
+    // when treated as a sanity check on the scan logic, but the real
+    // production max is what matters in practice — this is verified by
+    // a dev-only run against the populated header.
     int max_uid = 0;
     for (const auto& row : kShineTable) {
         if (row.shine_uid > max_uid) max_uid = row.shine_uid;

@@ -1,121 +1,37 @@
 [
   {
-    "stage_name": "WaterfallWorldHomeStage",
-    "object_id": "obj214",
-    "shine_uid": 205,
-    "kingdom": "Cascade",
+    "stage_name": "TestStageAlpha",
+    "object_id": "objAnchor",
+    "shine_uid": 101,
+    "kingdom": "TestKingdom",
     "shine_id": "Our First Power Moon"
   },
   {
-    "stage_name": "WaterfallWorldHomeStage",
-    "object_id": "obj21",
-    "shine_uid": 218,
-    "kingdom": "Cascade",
-    "shine_id": "Cascade Progression A"
+    "stage_name": "TestStageAlpha",
+    "object_id": "objBravo",
+    "shine_uid": 102,
+    "kingdom": "TestKingdom",
+    "shine_id": "Test Moon Bravo"
   },
   {
-    "stage_name": "WaterfallWorldHomeStage",
-    "object_id": "obj2618",
-    "shine_uid": 219,
-    "kingdom": "Cascade",
-    "shine_id": "Cascade Regular A"
+    "stage_name": "TestStageAlpha",
+    "object_id": "objCharlie",
+    "shine_uid": 103,
+    "kingdom": "TestKingdom",
+    "shine_id": "Test Moon Charlie"
   },
   {
-    "stage_name": "CapWorldHomeStage",
-    "object_id": "obj2422",
-    "shine_uid": 815,
-    "kingdom": "Cap",
-    "shine_id": "Cap Regular A"
+    "stage_name": "TestStageBeta",
+    "object_id": "objDelta",
+    "shine_uid": 104,
+    "kingdom": "OtherTestKingdom",
+    "shine_id": "Test Moon Delta"
   },
   {
-    "stage_name": "SandWorldHomeStage",
-    "object_id": "obj1432",
-    "shine_uid": 300,
-    "kingdom": "Sand",
-    "shine_id": "Sand Progression Hariet"
-  },
-  {
-    "stage_name": "SandWorldUnderground001Stage",
-    "object_id": "obj9",
-    "shine_uid": 301,
-    "kingdom": "Sand",
-    "shine_id": "Sand Progression Knucklotec"
-  },
-  {
-    "stage_name": "SeaWorldHomeStage",
-    "object_id": "obj382",
-    "shine_uid": 400,
-    "kingdom": "Lake",
-    "shine_id": "Sea Progression Seal A"
-  },
-  {
-    "stage_name": "SeaWorldLighthouseZone",
-    "object_id": "obj16",
-    "shine_uid": 401,
-    "kingdom": "Lake",
-    "shine_id": "Sea Progression Seal B"
-  },
-  {
-    "stage_name": "SeaWorldLavaZone",
-    "object_id": "obj168",
-    "shine_uid": 402,
-    "kingdom": "Lake",
-    "shine_id": "Sea Progression Seal C"
-  },
-  {
-    "stage_name": "SeaWorldDamageBallZone",
-    "object_id": "obj60",
-    "shine_uid": 403,
-    "kingdom": "Lake",
-    "shine_id": "Sea Progression Seal D"
-  },
-  {
-    "stage_name": "SeaWorldHomeStage",
-    "object_id": "obj1277",
-    "shine_uid": 404,
-    "kingdom": "Lake",
-    "shine_id": "Sea Progression Mollusque"
-  },
-  {
-    "stage_name": "SkyWorldHomeStage",
-    "object_id": "obj1921",
-    "shine_uid": 500,
-    "kingdom": "Bowser's",
-    "shine_id": "Sky Progression A"
-  },
-  {
-    "stage_name": "SkyWorldWallZone",
-    "object_id": "obj1671",
-    "shine_uid": 501,
-    "kingdom": "Bowser's",
-    "shine_id": "Sky Progression B"
-  },
-  {
-    "stage_name": "SkyWorldCastleZone",
-    "object_id": "obj3811",
-    "shine_uid": 502,
-    "kingdom": "Bowser's",
-    "shine_id": "Sky Progression C"
-  },
-  {
-    "stage_name": "SkyWorldCastleZone",
-    "object_id": "obj3819",
-    "shine_uid": 503,
-    "kingdom": "Bowser's",
-    "shine_id": "Sky Progression D"
-  },
-  {
-    "stage_name": "ClashWorldHomeStage",
-    "object_id": "obj1144",
-    "shine_uid": 600,
-    "kingdom": "Lost",
-    "shine_id": "Lost Regular A"
-  },
-  {
-    "stage_name": "ForestWorldBossStage",
-    "object_id": "obj488",
-    "shine_uid": 700,
-    "kingdom": "Wooded",
-    "shine_id": "Wooded Regular A"
+    "stage_name": "TestStageBeta",
+    "object_id": "objEcho",
+    "shine_uid": 105,
+    "kingdom": "OtherTestKingdom",
+    "shine_id": "Test Moon Echo"
   }
 ]
