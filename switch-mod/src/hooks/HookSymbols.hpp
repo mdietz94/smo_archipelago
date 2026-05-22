@@ -89,6 +89,30 @@ inline constexpr const char* kPlayerHackKeeperStartHack =
 inline constexpr const char* kPlayerHackKeeperForceKillHack =
     "_ZN16PlayerHackKeeper13forceKillHackEv";
 
+// PlayerHackKeeper::tryEscapeHack() — gentler release used for the 7
+// inanimate captures (Cactus, BazookaElectric, Tree, RockForest, Guidepost,
+// Manhole, HackFork). Those have no intro state machine to race against
+// teardown, so the actor-despawn cost of forceKillHack is pure visual
+// noise. KGamer77's SuperMarioOdysseyArchipelago uses the same split for
+// the same 7 caps. If resolution fails the affected caps fall back to
+// forceKillHack with the actor-despawn visual (CaptureStartHook logs).
+inline constexpr const char* kPlayerHackKeeperTryEscapeHack =
+    "_ZN16PlayerHackKeeper13tryEscapeHackEv";
+
+// PlayerHackKeeper::isActiveHackStartDemo() const — true while the
+// capture-entry "dive in" cinematic is playing, false after. M7's
+// tickPendingUncapture polls it per frame and fires the release the
+// instant it returns false — no fixed wall-clock delay. Replaces the
+// prior per-cap delay table (4s default, 6s TRex, 2s Killer/Fastener).
+// If resolution fails the M7 deny path is disabled entirely (captures
+// go ungated), failing closed beats firing forceKillHack mid-cinematic
+// which crashes T-Rex (the original T-Rex failure mode that pushed
+// earlier iterations to the fixed-delay design in the first place).
+// Pattern lifted from KGamer77/SuperMarioOdysseyArchipelago
+// Mod/source/main.cpp:73.
+inline constexpr const char* kPlayerHackKeeperIsActiveHackStartDemo =
+    "_ZNK16PlayerHackKeeper21isActiveHackStartDemoEv";
+
 // --- Scenario flag set ---
 // GameDataFile::setMainScenarioNo(s32)  (s32 = int on aarch64)
 // Source: MonsterDruide1/OdysseyDecomp src/System/GameDataFile.h:456
