@@ -314,8 +314,16 @@ extern "C" void hkMain() {
     SMOAP_LOG_INFO("installing TalkatooSpeechHook (Phase 3 — tryFindShineMessage tramp + Poetter vtable filter)");
     smoap::hooks::installTalkatooSpeechHook();
 
-    SMOAP_LOG_INFO("installing TalkatooMenuMarkHook (pause-menu mark fix)");
-    smoap::hooks::installTalkatooMenuMarkHook();
+    // TalkatooMenuMarkHook disabled 2026-05-22: the GameDataFile::tryUnlockShineName
+    // suppression breaks Talkatoo's speech path. User log SMOClient_2026_05_22_18_26_16
+    // shows one `[talkatoo-menu] suppressing` line and zero `[talkatoo] substituting`
+    // lines — Talkatoo says "no hints". Returning bool true from the suppress (per
+    // 7b0fc6a) didn't unblock it. The actual Talkatoo-facing API is
+    // `rs::tryUnlockShineName(LiveActor*, s32)` (GameDataUtil.h:92, namespace `rs`),
+    // not the GameDataFile class method we hook here. Re-enable only after the menu
+    // mark redesign targets the correct layer.
+    // SMOAP_LOG_INFO("installing TalkatooMenuMarkHook (pause-menu mark fix)");
+    // smoap::hooks::installTalkatooMenuMarkHook();
 
     SMOAP_LOG_INFO("installing GrowSeedInstantHook (rs::getGrowFlowerTime -> 1 for planted)");
     smoap::hooks::installGrowSeedInstantHook();
