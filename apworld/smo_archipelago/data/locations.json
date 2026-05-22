@@ -270,7 +270,8 @@
             "Sand Kingdom"
         ],
         "region": "Sand Kingdom",
-        "requires": []
+        "requires": [],
+        "progression": true
     },
     {
         "name": "Sand: Moon Shards in the Sand",
@@ -278,7 +279,8 @@
             "Sand Kingdom"
         ],
         "region": "Sand Kingdom",
-        "requires": []
+        "requires": [],
+        "progression": true
     },
     {
         "name": "Sand: Showdown on the Inverted Pyramid",
@@ -1036,7 +1038,8 @@
             "Wooded Kingdom"
         ],
         "region": "Wooded Kingdom",
-        "requires": "{MazeSkip()}"
+        "requires": "{MazeSkip()}",
+        "progression": true
     },
     {
         "name": "Wooded: Flower Thieves of Sky Garden",
@@ -1053,7 +1056,8 @@
             "Wooded Kingdom"
         ],
         "region": "Wooded Kingdom",
-        "requires": "{MazeSkip()} and {OptOne(Sherm)}"
+        "requires": "{MazeSkip()} and {OptOne(Sherm)}",
+        "progression": true
     },
     {
         "name": "Wooded: Defend the Secret Flower Field!",
@@ -1660,7 +1664,8 @@
             "Metro Kingdom"
         ],
         "region": "Metro Kingdom",
-        "requires": []
+        "requires": [],
+        "progression": true
     },
     {
         "name": "Metro: Guitarist on Board!",
@@ -1668,7 +1673,8 @@
             "Metro Kingdom"
         ],
         "region": "Metro Kingdom",
-        "requires": []
+        "requires": [],
+        "progression": true
     },
     {
         "name": "Metro: Bassist on Board!",
@@ -1676,7 +1682,8 @@
             "Metro Kingdom"
         ],
         "region": "Metro Kingdom",
-        "requires": []
+        "requires": [],
+        "progression": true
     },
     {
         "name": "Metro: Trumpeter on Board!",
@@ -1684,7 +1691,8 @@
             "Metro Kingdom"
         ],
         "region": "Metro Kingdom",
-        "requires": "{PostTrumpeter()}"
+        "requires": "{PostTrumpeter()}",
+        "progression": true
     },
     {
         "name": "Metro: Powering Up the Station",
@@ -1692,7 +1700,8 @@
             "Metro Kingdom"
         ],
         "region": "Metro Kingdom",
-        "requires": "{PostTrumpeter()} and {OptOne(Manhole)}"
+        "requires": "{PostTrumpeter()} and {OptOne(Manhole)}",
+        "progression": true
     },
     {
         "name": "Metro: A Traditional Festival!",
@@ -2095,7 +2104,8 @@
             "post-metro"
         ],
         "region": "Snow Kingdom",
-        "requires": ""
+        "requires": "",
+        "progression": true
     },
     {
         "name": "Snow: The Ice Wall Barrier",
@@ -2104,7 +2114,8 @@
             "post-metro"
         ],
         "region": "Snow Kingdom",
-        "requires": []
+        "requires": [],
+        "progression": true
     },
     {
         "name": "Snow: The Gusty Barrier",
@@ -2113,7 +2124,8 @@
             "post-metro"
         ],
         "region": "Snow Kingdom",
-        "requires": "{OptOne(Ty-foo)}"
+        "requires": "{OptOne(Ty-foo)}",
+        "progression": true
     },
     {
         "name": "Snow: The Snowy Mountain Barrier",
@@ -2122,7 +2134,8 @@
             "post-metro"
         ],
         "region": "Snow Kingdom",
-        "requires": []
+        "requires": [],
+        "progression": true
     },
     {
         "name": "Snow: The Bound Bowl Grand Prix",
@@ -2881,7 +2894,8 @@
             "post-metro"
         ],
         "region": "Luncheon Kingdom",
-        "requires": []
+        "requires": [],
+        "progression": true
     },
     {
         "name": "Luncheon: Under the Cheese Rocks",
@@ -2890,7 +2904,8 @@
             "post-metro"
         ],
         "region": "Luncheon Kingdom",
-        "requires": "{OptOne(Hammer Bro)}"
+        "requires": "{OptOne(Hammer Bro)}",
+        "progression": true
     },
     {
         "name": "Luncheon: Big Pot on the Volcano: Dive In!",
@@ -2909,7 +2924,8 @@
             "post-metro"
         ],
         "region": "Luncheon Kingdom",
-        "requires": "{LuncheonPeace()}"
+        "requires": "{LuncheonPeace()}",
+        "progression": true
     },
     {
         "name": "Luncheon: Cookatiel Showdown!",

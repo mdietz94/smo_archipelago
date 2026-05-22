@@ -55,6 +55,11 @@ void installTalkatooSpeechHook();
 // Talkatoo% mode: pause-menu mark fix (isOpenShineName getter +
 // tryUnlockShineName setter trampolines). See hooks/TalkatooMenuMarkHook.cpp.
 void installTalkatooMenuMarkHook();
+// Instant seed growth: trampolines rs::getGrowFlowerTime to return 1 for
+// planted pots (orig==0 passes through), collapsing the 20–60 min real-time
+// wait on seed-pot moons to a single area re-entry. See
+// hooks/GrowSeedInstantHook.cpp.
+void installGrowSeedInstantHook();
 }  // namespace smoap::hooks
 
 namespace smoap::game {
@@ -294,6 +299,9 @@ extern "C" void hkMain() {
 
     SMOAP_LOG_INFO("installing TalkatooMenuMarkHook (pause-menu mark fix)");
     smoap::hooks::installTalkatooMenuMarkHook();
+
+    SMOAP_LOG_INFO("installing GrowSeedInstantHook (rs::getGrowFlowerTime -> 1 for planted)");
+    smoap::hooks::installGrowSeedInstantHook();
 
 #ifdef SMOAP_HAS_DEBUG_RENDERER
     // Install the Nvn bootstrap trampoline so ImGuiBackendNvn auto-wires

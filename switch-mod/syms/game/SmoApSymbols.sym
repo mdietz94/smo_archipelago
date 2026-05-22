@@ -98,3 +98,16 @@ _ZN4sead14SafeStringBaseIcEaSERKS1_
 _ZNK12GameDataFile15isOpenShineNameEii
 _ZN12GameDataFile18tryUnlockShineNameEii
 _ZNK12GameDataFile9findShineEii
+
+// GrowSeedInstantHook: rs::getGrowFlowerTime(const al::LiveActor*,
+// const al::PlacementId*). The public rs:: wrapper around
+// GameDataFile::getGrowFlowerTime — the direct GameDataFile method is
+// inlined in 1.0.0 main.nso and not in dynsym, but this wrapper IS
+// (cross-checked against MrKatzenGaming/BTT-Studio syms/game/System/
+// GameDataUtil.sym which pins it at 0x004dd230). Trampolined to return
+// 1 for planted pots (orig==0 passes through), making (now - returned)
+// enormous in any timebase so the pot blooms on next stage re-entry.
+// NOT the same as BTT-Studio's "Refresh Seeds" toggle, which returns
+// 0 from this wrapper as a deliberate RESET (clears the planted state +
+// the seed item). See hooks/GrowSeedInstantHook.cpp.
+_ZN2rs17getGrowFlowerTimeEPKN2al9LiveActorEPKNS0_11PlacementIdE

@@ -209,22 +209,39 @@ void CappyMessenger::tryPump(const void* scene) {
     // delay SECOND. (Spent a playtest pass thinking otherwise — the bubble
     // was getting a 5-second delay-before-appearing and a 0-tick on-screen
     // hold.)
-    SMOAP_LOG_INFO("[cappy] >> tryShow(scene=%p label='%s' wait=%d delay=0) "
-                   "text='%s' utf16_words=%u",
-                   scene, kArchipelagoLabel, kWaitTicks, e.text,
-                   static_cast<unsigned>(n));
+    // DEBUG-bracketed — fires every frame while we're stuck retrying (the
+    // !ok branch below can repeat for thousands of frames in scenes where
+    // the priority-low CapMessage queue refuses us, e.g. 2D / title). INFO
+    // here floods the SMOClient log file. Meaningful events log at INFO
+    // separately: enqueue, dispatched, and the WARN drop below.
+    SMOAP_LOG_DEBUG("[cappy] >> tryShow(scene=%p label='%s' wait=%d delay=0) "
+                    "text='%s' utf16_words=%u",
+                    scene, kArchipelagoLabel, kWaitTicks, e.text,
+                    static_cast<unsigned>(n));
     const bool ok = s_tryShow(scene, kArchipelagoLabel,
                               /*waitTime=*/kWaitTicks,
                               /*delayTime=*/0);
-    SMOAP_LOG_INFO("[cappy] << tryShow returned %d", ok);
+    SMOAP_LOG_DEBUG("[cappy] << tryShow returned %d", ok);
 
     if (!ok) {
-        // Priority-low queue declined us (probably a rare race between our
-        // isActive check and the system actually scheduling). Release the
-        // buffer so the next pump can retry — the text in queue_[head_] is
-        // unchanged.
+        // Priority-low queue declined us. Usually a rare race between our
+        // isActive check and the system actually scheduling, but in some
+        // scenes (2D, title, etc.) the queue refuses indefinitely. Release
+        // the buffer so the next pump can retry — the text in queue_[head_]
+        // is unchanged — and bump the same retry counter the nintendo_active
+        // branch uses so a permanently-undeliverable bubble eventually drops.
         buffer_in_use_ = false;
         ++retry_frames_;
+        if (retry_frames_ >= kMaxRetryFrames) {
+            SMOAP_LOG_WARN("[cappy] dropping head after %u frames of tryShow "
+                           "refusals (text='%s')",
+                           static_cast<unsigned>(retry_frames_),
+                           queue_[head_].text);
+            queue_[head_].live = false;
+            head_ = (head_ + 1) % kQueueCap;
+            --live_count_;
+            retry_frames_ = 0;
+        }
         return;
     }
 

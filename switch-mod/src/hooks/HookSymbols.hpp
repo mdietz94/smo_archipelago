@@ -511,6 +511,31 @@ inline constexpr const char* kGameDataFileFindShine =
     "_ZNK12GameDataFile9findShineEii";
 
 // =============================================================================
+// Instant seed growth — bypass the wait on seed-flower moons.
+// =============================================================================
+//
+// SMO's seed-pot moons (Sand Tostarena, Wooded Steam Gardens, etc.) compare
+// (now - planted_time) against a bloom threshold. GrowSeedInstantHook.cpp
+// trampolines this getter to return 1 for planted pots (orig==0 passes
+// through), making the elapsed delta enormous regardless of timebase
+// (Unix-epoch seconds, nn::time ticks, etc.). Verified in Ryujinx + Sand
+// Kingdom Tostarena: the planted-then-reload cycle blooms the moon on
+// stage re-entry (the actor caches its visible level at spawn, so it's
+// not mid-frame instant).
+//
+// Why the rs:: wrapper and not GameDataFile::getGrowFlowerTime directly:
+// the GameDataFile method is inlined in 1.0.0 main.nso (no dynsym entry).
+// The rs:: namespace wrapper IS in dynsym — cross-checked against
+// MrKatzenGaming/BTT-Studio syms/game/System/GameDataUtil.sym which pins
+// it at 0x004dd230. BTT-Studio's "Refresh Seeds" toggle returns 0 from the
+// same wrapper as a deliberate RESET (clears the pot's planted state +
+// the seed item on save). We want the opposite — keep the planted bit
+// set while lying about *when* it was planted — so we substitute 1 for
+// real timestamps and pass orig==0 through untouched.
+inline constexpr const char* kRsGetGrowFlowerTime =
+    "_ZN2rs17getGrowFlowerTimeEPKN2al9LiveActorEPKNS0_11PlacementIdE";
+
+// =============================================================================
 // Legacy / aliasing — kept so existing call sites don't break.
 // =============================================================================
 inline constexpr const char* kSeadGameSystemCtor       = kGameSystemInit;
