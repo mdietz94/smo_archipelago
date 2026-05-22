@@ -1779,7 +1779,7 @@
         "requires": []
     },
     {
-        "name": "Metro: Left at the Café?",
+        "name": "Metro: Left at the Caf\u00e9?",
         "category": [
             "Metro Kingdom"
         ],
@@ -3183,7 +3183,7 @@
         "requires": "{Meat()} and {OptOne(Lava Bubble)}"
     },
     {
-        "name": "Luncheon: Bon Appétit, Captain Toad!",
+        "name": "Luncheon: Bon App\u00e9tit, Captain Toad!",
         "category": [
             "post-metro",
             "Luncheon Kingdom"
