@@ -70,9 +70,12 @@ const char* g_current_test = "";
 // shineUidByStageObj
 // --------------------------------------------------------------------------
 
-TEST(stage_obj_known_cascade_multimoon) {
-    // From shine_table.h: { "WaterfallWorldHomeStage", "obj21", 218,
-    //                       "Cascade", "Multi Moon Atop the Falls" }
+TEST(stage_obj_known_cascade_progression) {
+    // From the CI fixture (switch-mod/tests/shine_map_fixture.json) the
+    // Cascade obj21 entry resolves to uid 218 — same stage/obj/uid triple
+    // the real shine_map.json holds, but with a synthetic shine_id so the
+    // fixture doesn't carry Nintendo IP. The real production table is
+    // verified by test_progression_moons.py against the live locations.json.
     EXPECT_EQ_I(shineUidByStageObj("WaterfallWorldHomeStage", "obj21"), 218);
 }
 
@@ -111,11 +114,12 @@ TEST(stage_obj_partial_match_does_not_resolve) {
 // shineUidByDisplayName
 // --------------------------------------------------------------------------
 
-TEST(display_name_cascade_multimoon) {
-    EXPECT_EQ_I(shineUidByDisplayName("Multi Moon Atop the Falls"), 218);
-}
-
 TEST(display_name_first_power_moon) {
+    // CLAUDE.md's canonical M5.7 anchor — the ONE verbatim moon name
+    // allowed in committed test fixtures, mirrored in the CI fixture's
+    // (Cascade, "Our First Power Moon") row. Other display-name lookups
+    // would need a second real name; the by-display-name scan path is
+    // exercised by this single assertion.
     EXPECT_EQ_I(shineUidByDisplayName("Our First Power Moon"), 205);
 }
 

@@ -167,6 +167,19 @@ jobs:
             -Iswitch-mod/src -o test_cappy_messenger
           ./test_cappy_messenger
 
+      # shine_table.h is gitignored (joins committed locations.json with
+      # the gitignored extracted shine_map.json; see CLAUDE.md). CI has
+      # no NSP to extract from, so we point sync_shine_table.py at a
+      # checked-in IP-free fixture pair (synthetic moon names + real
+      # stage/obj/uid identifiers from the production data the test
+      # already asserts against). Generated header lands at the path
+      # shine_lookup.hpp expects.
+      - name: Generate shine_table.h from CI fixture
+        run: |
+          python scripts/sync_shine_table.py \
+            --locations switch-mod/tests/locations_fixture.json \
+            --shine-map switch-mod/tests/shine_map_fixture.json
+
       - name: Build + run test_shine_lookup
         run: |
           g++ -std=c++20 -Wall -Wextra -O0 -g -DSMOAP_HOST_TEST \
@@ -209,10 +222,20 @@ jobs:
 
       - name: Count bare-name execute_process invocations
         run: |
-          # Defended occurrences in scripts/build_switchmod.py:
-          #   sail.cmake:18         -> ensure_sail_built()
-          #   toolchain.cmake:111   -> ensure_libstd_downloaded()
-          EXPECTED=2
+          # Upstream LibHakkun used to ship two such calls (sail.cmake and
+          # toolchain.cmake), each pre-defended in build_switchmod.py by
+          # ensure_sail_built() / ensure_libstd_downloaded() materializing
+          # the host binary / stdlib before cmake even runs. The 2026-05-22
+          # submodule pin bump (PR #203, e92ac56...) replaced both with
+          # variable-driven `COMMAND ${SAIL_CMD}` style invocations that
+          # this guard's regex doesn't match, so the bare-name count
+          # dropped to 0. The ensure_*() defenses still run — they just
+          # backstop a path the upstream now takes via a different shape.
+          # Bump EXPECTED if a future upstream pull re-introduces bare-name
+          # COMMAND words; each new hit MUST be pre-defended in
+          # build_switchmod.py before the bump lands. See PR #164 for the
+          # pattern.
+          EXPECTED=0
           ACTUAL=$(grep -rnE 'execute_process[[:space:]]*\(COMMAND[[:space:]]+(python3|python|curl|wget|bash|sh)\b' switch-mod/sys/cmake/ | wc -l)
           if [ "$ACTUAL" -ne "$EXPECTED" ]; then
             echo "::error::Bare-name cmake execute_process count changed: expected $EXPECTED, found $ACTUAL"

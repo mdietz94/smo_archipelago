@@ -1,0 +1,19 @@
+[
+    {"name": "Cascade: Our First Power Moon", "category": ["Cascade Kingdom"], "region": "Cascade Kingdom", "requires": [], "progression": true},
+    {"name": "Cascade: Cascade Progression A", "category": ["Cascade Kingdom"], "region": "Cascade Kingdom", "requires": [], "progression": true},
+    {"name": "Cascade: Cascade Regular A", "category": ["Cascade Kingdom"], "region": "Cascade Kingdom", "requires": []},
+    {"name": "Cap: Cap Regular A", "category": ["Cap Kingdom"], "region": "Cap Kingdom", "requires": []},
+    {"name": "Sand: Sand Progression Hariet", "category": ["Sand Kingdom"], "region": "Sand Kingdom", "requires": [], "progression": true},
+    {"name": "Sand: Sand Progression Knucklotec", "category": ["Sand Kingdom"], "region": "Sand Kingdom", "requires": [], "progression": true},
+    {"name": "Lake: Sea Progression Seal A", "category": ["Lake Kingdom"], "region": "Lake Kingdom", "requires": [], "progression": true},
+    {"name": "Lake: Sea Progression Seal B", "category": ["Lake Kingdom"], "region": "Lake Kingdom", "requires": [], "progression": true},
+    {"name": "Lake: Sea Progression Seal C", "category": ["Lake Kingdom"], "region": "Lake Kingdom", "requires": [], "progression": true},
+    {"name": "Lake: Sea Progression Seal D", "category": ["Lake Kingdom"], "region": "Lake Kingdom", "requires": [], "progression": true},
+    {"name": "Lake: Sea Progression Mollusque", "category": ["Lake Kingdom"], "region": "Lake Kingdom", "requires": [], "progression": true},
+    {"name": "Bowser's: Sky Progression A", "category": ["Bowser's Kingdom"], "region": "Bowser's Kingdom", "requires": [], "progression": true},
+    {"name": "Bowser's: Sky Progression B", "category": ["Bowser's Kingdom"], "region": "Bowser's Kingdom", "requires": [], "progression": true},
+    {"name": "Bowser's: Sky Progression C", "category": ["Bowser's Kingdom"], "region": "Bowser's Kingdom", "requires": [], "progression": true},
+    {"name": "Bowser's: Sky Progression D", "category": ["Bowser's Kingdom"], "region": "Bowser's Kingdom", "requires": [], "progression": true},
+    {"name": "Lost: Lost Regular A", "category": ["Lost Kingdom"], "region": "Lost Kingdom", "requires": []},
+    {"name": "Wooded: Wooded Regular A", "category": ["Wooded Kingdom"], "region": "Wooded Kingdom", "requires": []}
+]
