@@ -174,6 +174,138 @@ jobs:
             -Iswitch-mod/src -o test_shine_lookup
           ./test_shine_lookup
 
+  windows-path-strip:
+    # Cheaper sibling of release.yml's clean-windows-audit job — runs on
+    # every PR. Build switch-mod with PATH narrowed to ONLY the vendored
+    # toolchain dirs (no system Python, no msys2, no MS Store stubs).
+    # If a future patch to build_switchmod.py or its cmake includes
+    # shells out to a bare `python` / `python3` / `bash`, the build
+    # breaks here — long before a tagged release surfaces it on a real
+    # user's machine.
+    #
+    # Skips the heavy parts of clean-windows-audit (Python quarantine,
+    # apworld zip build + bundled-tree extract, release_audit walk) and
+    # invokes build_switchmod.py directly. ~8-12 min vs ~20-25 min for
+    # the full audit.
+    name: Windows PATH-strip build
+    runs-on: windows-2022
+    timeout-minutes: 20
+    env:
+      SMOAP_LLVM_BIN: ${{ github.workspace }}\ci-toolchain\llvm\bin
+      SMOAP_MINGW_BIN: ${{ github.workspace }}\ci-toolchain\winlibs\mingw64\bin
+      SMOAP_PYTHON_BIN: ${{ github.workspace }}\.python312
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          # switch-mod/sys (LibHakkun) + switch-mod/lib/OdysseyHeaders
+          # are the AArch64-only submodules the build configure needs.
+          submodules: recursive
+          fetch-depth: 1
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: '3.12'
+
+      - name: Pin Python 3.12 to a fixed location
+        shell: pwsh
+        run: |
+          $src = Split-Path -Parent (Get-Command python).Source
+          Copy-Item -Recurse -Force $src ${{ env.SMOAP_PYTHON_BIN }}
+          & "${{ env.SMOAP_PYTHON_BIN }}\python.exe" -m pip install --upgrade pip
+          & "${{ env.SMOAP_PYTHON_BIN }}\python.exe" -m pip install lz4 pyelftools mmh3
+
+      - name: Cache LLVM 19 + WinLibs
+        id: toolchain-cache
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57  # v4
+        with:
+          path: ${{ github.workspace }}\ci-toolchain
+          # Keep this key in sync with the matching one in release.yml's
+          # clean-windows-audit job so both workflows hit the same cache
+          # entry.
+          key: ci-toolchain-llvm19.1.7-winlibs-gcc16.1.0-r2
+
+      - name: Download + extract LLVM 19.1.7
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $dst = "${{ github.workspace }}\ci-toolchain\llvm"
+          New-Item -ItemType Directory -Force $dst | Out-Null
+          $url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.7/clang+llvm-19.1.7-x86_64-pc-windows-msvc.tar.xz"
+          $tar = "$env:RUNNER_TEMP\llvm.tar.xz"
+          Invoke-WebRequest -Uri $url -OutFile $tar -UseBasicParsing
+          $expected = "b4557b4f012161f56a2f5d9e877ab9635cafd7a08f7affe14829bd60c9d357f0"
+          $actual = (Get-FileHash $tar -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $expected) { throw "LLVM SHA256 mismatch: $actual vs $expected" }
+          $tmp = "$env:RUNNER_TEMP\llvm-extract"
+          New-Item -ItemType Directory -Force $tmp | Out-Null
+          tar -xf $tar -C $tmp
+          $root = Get-ChildItem $tmp | Where-Object { $_.PSIsContainer } | Select-Object -First 1
+          Move-Item "$($root.FullName)\*" $dst
+          if (-not (Test-Path "$dst\bin\clang.exe")) { throw "LLVM extract failed" }
+
+      - name: Download + extract WinLibs g++
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $dst = "${{ github.workspace }}\ci-toolchain\winlibs"
+          New-Item -ItemType Directory -Force $dst | Out-Null
+          $url = "https://github.com/brechtsanders/winlibs_mingw/releases/download/16.1.0posix-14.0.0-ucrt-r2/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r2.zip"
+          $zip = "$env:RUNNER_TEMP\winlibs.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+          Expand-Archive -Path $zip -DestinationPath $dst -Force
+          if (-not (Test-Path "$dst\mingw64\bin\g++.exe")) { throw "WinLibs extract failed" }
+
+      - name: Resolve cmake + ninja bin dirs
+        shell: pwsh
+        run: |
+          $cmakeDir = Split-Path -Parent (Get-Command cmake).Source
+          $ninjaDir = Split-Path -Parent (Get-Command ninja).Source
+          echo "SMOAP_CMAKE_BIN=$cmakeDir" >> $env:GITHUB_ENV
+          echo "SMOAP_NINJA_BIN=$ninjaDir" >> $env:GITHUB_ENV
+          Write-Host "[resolve] cmake bin: $cmakeDir"
+          Write-Host "[resolve] ninja bin: $ninjaDir"
+
+      - name: Sync capture table (gitignored header the build needs)
+        shell: pwsh
+        run: |
+          & "${{ env.SMOAP_PYTHON_BIN }}\python.exe" scripts\sync_capture_table.py
+
+      - name: Build with PATH stripped to vendored toolchain only
+        shell: pwsh
+        # The whole point of this job: a PATH that contains NOTHING
+        # except the SMOAP_*_BIN dirs + the bare minimum Windows system
+        # dirs (System32 for curl/tar; the resolved cmake/ninja dirs).
+        # If build_switchmod.py or any of its cmake-driven children
+        # shells out to bare `python` / `python3` / `bash` / etc and
+        # the lookup escapes the vendored install, the build fails.
+        run: |
+          $env:PATH = @(
+            "${{ env.SMOAP_PYTHON_BIN }}",
+            "${{ env.SMOAP_LLVM_BIN }}",
+            "${{ env.SMOAP_MINGW_BIN }}",
+            "$env:SMOAP_CMAKE_BIN",
+            "$env:SMOAP_NINJA_BIN",
+            "$env:windir\System32",
+            "$env:windir"
+          ) -join ';'
+          Write-Host "[path-strip] effective PATH: $env:PATH"
+          Write-Host "[path-strip] python.exe resolves to:"
+          Get-Command python -All -ErrorAction SilentlyContinue | Select-Object -First 3 | Format-Table Source
+          & "${{ env.SMOAP_PYTHON_BIN }}\python.exe" scripts\build_switchmod.py -DBRIDGE_HOST=127.0.0.1
+
+      - name: Verify build outputs exist
+        shell: pwsh
+        run: |
+          $sd = "switch-mod\build\sd\atmosphere\contents\0100000000010000\exefs"
+          $required = @("$sd\subsdk9", "$sd\main.npdm", "switch-mod\src\ap\capture_table.h")
+          $missing = $required | Where-Object { -not (Test-Path $_) }
+          if ($missing) {
+            Write-Host "[verify] FAIL: missing build outputs:"
+            $missing | ForEach-Object { Write-Host "  $_" }
+            exit 1
+          }
+          Write-Host "[verify] OK: all required artifacts present"
+
   hakkun-bare-shellouts:
     # Guard against the next LibHakkun upstream pull adding a new bare-name
     # `execute_process(COMMAND python3 ...)` (or python/curl/wget/bash/sh)

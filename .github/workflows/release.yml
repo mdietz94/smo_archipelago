@@ -95,9 +95,211 @@ jobs:
           path: release-artifacts/*
           if-no-files-found: error
 
+  clean-windows-audit:
+    # Heavyweight install + build + audit on a fresh windows-2022 runner.
+    # Tags only — PRs don't pay this cost; the cheaper PATH-strip variant
+    # in test.yml is what runs on PR.
+    #
+    # The audit is the load-bearing check: release_audit.py walks
+    # %APPDATA%\SMOArchipelago\ and the switch-mod tree post-build and
+    # fails if the build touched anything outside the documented scope.
+    # Combined with the post-install Python sweep below (which removes
+    # incidental python*.exe instances OUTSIDE the vendored
+    # %LOCALAPPDATA%\SMOArchipelago\ install), this catches the
+    # "build_switchmod.py shelled out to a system Python that
+    # silently pip-installed somewhere" failure mode the unit tests
+    # can't see.
+    name: Clean Windows install + audit
+    needs: build-apworld
+    runs-on: windows-2022
+    timeout-minutes: 30
+    if: startsWith(github.ref, 'refs/tags/v')
+    env:
+      # Pin the vendored toolchain dirs the same way the wizard does
+      # (the build.py wrapper reads these and prepends them to the
+      # subprocess PATH). Defining them at job scope means every
+      # PowerShell step inherits them; build_switchmod.py also reads
+      # them directly so they ride into cmake too.
+      SMOAP_LLVM_BIN: ${{ github.workspace }}\ci-toolchain\llvm\bin
+      SMOAP_MINGW_BIN: ${{ github.workspace }}\ci-toolchain\winlibs\mingw64\bin
+      # actions/setup-python's default location on windows-2022. Pinned
+      # here so build_switchmod.py invokes the SAME 3.12 we pip-installed
+      # lz4 into, not whatever the runner's PATH resolves first.
+      SMOAP_PYTHON_BIN: ${{ github.workspace }}\.python312
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: '3.12'
+
+      - name: Pin Python 3.12 to a fixed location
+        # actions/setup-python lands Python under the tool cache, whose
+        # path varies between runner images. Copy the install into a
+        # stable location under the workspace so SMOAP_PYTHON_BIN above
+        # can be a job-scope constant.
+        shell: pwsh
+        run: |
+          $src = Split-Path -Parent (Get-Command python).Source
+          Copy-Item -Recurse -Force $src ${{ env.SMOAP_PYTHON_BIN }}
+          # sync_capture_table imports nothing exotic, but build's elf2nso.py
+          # needs lz4. Pip into the pinned dir's site-packages so SMOAP_PYTHON_BIN
+          # is fully self-contained.
+          & "${{ env.SMOAP_PYTHON_BIN }}\python.exe" -m pip install --upgrade pip
+          & "${{ env.SMOAP_PYTHON_BIN }}\python.exe" -m pip install lz4 pyelftools mmh3
+
+      # Toolchain cache: LLVM 19 + WinLibs are ~4 GB combined. Without
+      # caching every tag download costs ~5 min. Keyed on the versions
+      # baked into installers.py.
+      - name: Cache LLVM 19 + WinLibs
+        id: toolchain-cache
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57  # v4
+        with:
+          path: ${{ github.workspace }}\ci-toolchain
+          # Bump this key whenever LLVM_VERSION / WINLIBS_VERSION change
+          # in apworld/smo_archipelago/_setup/installers.py.
+          key: ci-toolchain-llvm19.1.7-winlibs-gcc16.1.0-r2
+
+      - name: Download + extract LLVM 19.1.7
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $dst = "${{ github.workspace }}\ci-toolchain\llvm"
+          New-Item -ItemType Directory -Force $dst | Out-Null
+          $url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.7/clang+llvm-19.1.7-x86_64-pc-windows-msvc.tar.xz"
+          $tar = "$env:RUNNER_TEMP\llvm.tar.xz"
+          Invoke-WebRequest -Uri $url -OutFile $tar -UseBasicParsing
+          $expected = "b4557b4f012161f56a2f5d9e877ab9635cafd7a08f7affe14829bd60c9d357f0"
+          $actual = (Get-FileHash $tar -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $expected) { throw "LLVM SHA256 mismatch: $actual vs $expected" }
+          # tar.exe ships with Windows 10 1803+ and handles .tar.xz.
+          # Extract to a temp dir then move contents up one level (the
+          # tarball roots at clang+llvm-19.1.7-x86_64-pc-windows-msvc/).
+          $tmp = "$env:RUNNER_TEMP\llvm-extract"
+          New-Item -ItemType Directory -Force $tmp | Out-Null
+          tar -xf $tar -C $tmp
+          $root = Get-ChildItem $tmp | Where-Object { $_.PSIsContainer } | Select-Object -First 1
+          Move-Item "$($root.FullName)\*" $dst
+          if (-not (Test-Path "$dst\bin\clang.exe")) { throw "LLVM extract failed (no bin\clang.exe)" }
+
+      - name: Download + extract WinLibs g++
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $dst = "${{ github.workspace }}\ci-toolchain\winlibs"
+          New-Item -ItemType Directory -Force $dst | Out-Null
+          $url = "https://github.com/brechtsanders/winlibs_mingw/releases/download/16.1.0posix-14.0.0-ucrt-r2/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r2.zip"
+          $zip = "$env:RUNNER_TEMP\winlibs.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+          # WinLibs zip is sha-pinned in installers.py — match that. If
+          # the upstream hash drifts, bump both here and there together.
+          Expand-Archive -Path $zip -DestinationPath $dst -Force
+          if (-not (Test-Path "$dst\mingw64\bin\g++.exe")) { throw "WinLibs extract failed (no mingw64\bin\g++.exe)" }
+
+      - name: Resolve cmake + ninja bin dirs
+        # Windows-2022 ships both, but the exact dirs drift between
+        # image revisions. Capture whatever Get-Command resolves to BEFORE
+        # the strip step narrows PATH; subsequent steps that prepend
+        # SMOAP_CMAKE_BIN / SMOAP_NINJA_BIN to PATH (the build_switchmod.py
+        # wrapper does this) get the right dirs without depending on
+        # whatever the runner image happened to pin.
+        shell: pwsh
+        run: |
+          $cmakeDir = Split-Path -Parent (Get-Command cmake).Source
+          $ninjaDir = Split-Path -Parent (Get-Command ninja).Source
+          echo "SMOAP_CMAKE_BIN=$cmakeDir" >> $env:GITHUB_ENV
+          echo "SMOAP_NINJA_BIN=$ninjaDir" >> $env:GITHUB_ENV
+          Write-Host "[resolve] cmake bin: $cmakeDir"
+          Write-Host "[resolve] ninja bin: $ninjaDir"
+
+      # Audit prerequisite: scrub incidental python*.exe interpreters
+      # OUTSIDE the vendored install. The threat is build_switchmod.py
+      # (or one of its CMake child calls) shelling out to bare `python`
+      # / `python3` and landing on an interpreter that doesn't have
+      # SMOAP_PYTHON_BIN's lz4 — masking PATH-leakage regressions until
+      # an end user reports a build that "worked on the dev machine".
+      # We blank the WindowsApps Store stubs in place (renaming is the
+      # only safe edit; the stubs are reparse points and Remove-Item
+      # refuses without elevation).
+      - name: Strip incidental Pythons from PATH
+        shell: pwsh
+        run: |
+          $allowed = @(
+            "${{ env.SMOAP_PYTHON_BIN }}".ToLower(),
+            "$($env:windir)\system32".ToLower()
+          )
+          # Enumerate every python*.exe / py.exe Get-Command can see,
+          # then quarantine those outside the allowlist by renaming.
+          $candidates = @("python.exe", "python3.exe", "python3.12.exe", "py.exe")
+          foreach ($name in $candidates) {
+            Get-Command $name -All -ErrorAction SilentlyContinue | ForEach-Object {
+              $dir = (Split-Path -Parent $_.Source).ToLower()
+              if ($allowed -notcontains $dir) {
+                Write-Host "[strip] quarantining $($_.Source)"
+                try {
+                  Rename-Item -Path $_.Source -NewName "$($_.Source).ci-quarantined" -ErrorAction Stop
+                } catch {
+                  Write-Host "[strip] could not rename $($_.Source): $_"
+                }
+              }
+            }
+          }
+          # Trim PATH to only allowed dirs so a leftover python.exe in a
+          # tool-cache dir we missed above isn't reachable by bare name.
+          # The resolved cmake + ninja dirs (captured above) MUST be on
+          # PATH for the build to work, so they're added unconditionally.
+          $kept = $env:PATH -split ';' | Where-Object {
+            $_ -and ($allowed -contains $_.ToLower())
+          }
+          $kept += "$($env:windir)\System32"
+          $kept += "$($env:windir)"
+          $kept += "$env:SMOAP_CMAKE_BIN"
+          $kept += "$env:SMOAP_NINJA_BIN"
+          $env:PATH = ($kept | Where-Object { Test-Path $_ }) -join ';'
+          [System.Environment]::SetEnvironmentVariable('PATH', $env:PATH, 'Process')
+          echo "PATH=$env:PATH" >> $env:GITHUB_ENV
+          Write-Host "[strip] post-strip python resolution:"
+          Get-Command python -All -ErrorAction SilentlyContinue | Select-Object -First 5 | Format-Table Source
+
+      # sync_capture_table is what release_audit.py would run anyway as
+      # the first sub-step of --build. Running it explicitly here keeps
+      # the build apworld → build switch-mod ordering visible in the
+      # job log (sync_capture_table.py needs apworld/data/items.json,
+      # which the loose checkout has). The audit's --build re-runs it
+      # idempotently against the resolved bundled paths.
+      - name: Sync capture table (gitignored header the build needs)
+        shell: pwsh
+        run: |
+          & "${{ env.SMOAP_PYTHON_BIN }}\python.exe" scripts\sync_capture_table.py
+
+      - name: Run release audit (--skip-extract --build --audit)
+        shell: pwsh
+        run: |
+          & "${{ env.SMOAP_PYTHON_BIN }}\python.exe" scripts\release_audit.py --all --bridge-host 127.0.0.1
+
+      - name: Upload audit log on failure
+        if: failure()
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808  # v4
+        with:
+          name: clean-windows-audit-log
+          # The wizard.log under %APPDATA% is only written by the Kivy
+          # wizard's `wizard_log()` helper, not by release_audit.py — so
+          # there's no point uploading it from this job. The cmake +
+          # ninja build logs under switch-mod\build\ are what failures
+          # here actually need for diagnosis.
+          path: |
+            ${{ github.workspace }}\switch-mod\build\**\*.log
+            ${{ github.workspace }}\switch-mod\build\**\CMakeCache.txt
+            ${{ github.workspace }}\switch-mod\build\**\CMakeOutput.log
+            ${{ github.workspace }}\switch-mod\build\**\CMakeError.log
+          if-no-files-found: ignore
+
   publish-release:
     name: Publish GitHub Release
-    needs: build-apworld
+    needs: [build-apworld, clean-windows-audit]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # workflow_dispatch runs don't create a release — they only produce
