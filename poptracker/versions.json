@@ -1,6 +1,14 @@
 {
   "versions": [
     {
+      "package_version": "0.1.38-alpha",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.38-alpha/smo-poptracker-v0.1.38-alpha.zip",
+      "sha256": "88da487b35ee85ddb272d982a67a78bfc612acf5a0ea8fd83a383f5c25d70fdc",
+      "changelog": [
+        "fix(setup): catch missing MSVC runtime as a prereq instead of infinite-looping the extractor"
+      ]
+    },
+    {
       "package_version": "0.1.36-alpha",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.36-alpha/smo-poptracker-v0.1.36-alpha.zip",
       "sha256": "6097d681fb6eccfb82e80afb5d454647531d5dc4d6e8da9bc6434001b398d683",
