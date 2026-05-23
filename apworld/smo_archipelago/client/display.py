@@ -21,7 +21,13 @@ from .protocol import ItemKind
 # (`char text[32]` in PendingMoonLabel) including the null terminator, so
 # 30 chars is the practical max before the C++ side trims further.
 MAX_MOON_LABEL_BYTES = 30
-ELLIPSIS = "…"  # U+2026 (3 bytes UTF-8)
+# Suffix appended to truncated labels. The TxtScenario pane uses SMO's
+# stage-clear font, whose glyph set covers vanilla scenario names —
+# letters, spaces, apostrophes, hyphens, the few ASCII punctuation marks
+# used in vanilla names. U+2026 (…) is NOT in that set; the missing-glyph
+# fallback renders as '?', so a truncated "Sent X to LongName…" reads
+# "Sent X to LongName?" in-game. Hyphen is one of the confirmed glyphs.
+TRUNCATION_MARKER = "-"
 
 # Kingdom prefix shortcuts. Keeps "Sand Kingdom Power Moon" → "Sand Power
 # Moon" rather than spending half the label on "Kingdom". The mapping
@@ -54,9 +60,9 @@ _KINGDOM_SHORT = {
 def truncate_utf8(s: str, max_bytes: int = MAX_MOON_LABEL_BYTES) -> str:
     """Return `s` clipped to ≤ max_bytes UTF-8 bytes.
 
-    When clipping is needed, the result ends with U+2026 (…). The ellipsis
-    itself costs 3 bytes; if max_bytes < 3 the truncation degrades to a
-    byte-exact prefix (no ellipsis room).
+    When clipping is needed, the result ends with `TRUNCATION_MARKER`.
+    If max_bytes is smaller than the marker itself, the truncation
+    degrades to a byte-exact prefix (no marker appended).
 
     Will never split a UTF-8 codepoint. Safe to feed directly into a
     null-terminated C buffer of size max_bytes + 1.
@@ -67,21 +73,23 @@ def truncate_utf8(s: str, max_bytes: int = MAX_MOON_LABEL_BYTES) -> str:
     if len(encoded) <= max_bytes:
         return s
 
-    if max_bytes < 3:
-        # Not enough room for ellipsis; just byte-trim.
+    marker_bytes = len(TRUNCATION_MARKER.encode("utf-8"))
+
+    if max_bytes < marker_bytes:
+        # Not enough room for marker; just byte-trim.
         # Walk back to a codepoint boundary.
         cut = max_bytes
         while cut > 0 and (encoded[cut] & 0xC0) == 0x80:
             cut -= 1
         return encoded[:cut].decode("utf-8", errors="ignore")
 
-    budget = max_bytes - len(ELLIPSIS.encode("utf-8"))
+    budget = max_bytes - marker_bytes
     cut = budget
     # Back up to a codepoint boundary (first byte of a UTF-8 sequence
     # has its top two bits != 0b10).
     while cut > 0 and (encoded[cut] & 0xC0) == 0x80:
         cut -= 1
-    return encoded[:cut].decode("utf-8", errors="ignore") + ELLIPSIS
+    return encoded[:cut].decode("utf-8", errors="ignore") + TRUNCATION_MARKER
 
 
 def _short_kingdom(name: str | None) -> str | None:
