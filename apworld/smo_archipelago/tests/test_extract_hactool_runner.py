@@ -350,3 +350,58 @@ def test_lookup_title_key_returns_none_for_missing_file(extract_mod, tmp_path):
         tmp_path / "does-not-exist.keys",
         "01000000000100000000000000000003")
     assert got is None
+
+
+# -- resolve_hactool fallback paths --
+#
+# Regression guard for the e1bcdbd drift bug: install_hactool moved the
+# wizard's auto-install destination from `%APPDATA%/SMOArchipelago/
+# bundled/hactool.exe` → `%APPDATA%/SMOArchipelago/hactool.exe`, but the
+# extractor's fallback constant kept pointing at the old `bundled/` path.
+# Auto-install users whose wizard didn't persist a `--hactool` override
+# got "ERROR: hactool.exe not found" even though the wizard had just
+# downloaded it successfully. Lock the new-location + legacy-location
+# resolution in.
+
+
+def test_resolve_hactool_finds_new_appdata_root_location(extract_mod, tmp_path):
+    """When `bundled_hactool_path()` is populated (the new top-level
+    APPDATA location), `resolve_hactool(None)` returns it."""
+    new_loc = tmp_path / "hactool.exe"
+    new_loc.write_bytes(b"")
+    with patch.object(extract_mod, "DEFAULT_HACTOOL_FALLBACK", new_loc), \
+         patch.object(extract_mod, "LEGACY_HACTOOL_FALLBACK",
+                      tmp_path / "bundled" / "hactool.exe"), \
+         patch.object(extract_mod.shutil, "which", return_value=None):
+        got = extract_mod.resolve_hactool(None)
+    assert got == new_loc
+
+
+def test_resolve_hactool_falls_back_to_legacy_bundled_location(extract_mod, tmp_path):
+    """Users mid-migration (installed pre-e1bcdbd, haven't re-run the
+    wizard's install_hactool) still have `bundled/hactool.exe`. Probe
+    it as a secondary fallback so they aren't broken."""
+    legacy = tmp_path / "bundled" / "hactool.exe"
+    legacy.parent.mkdir()
+    legacy.write_bytes(b"")
+    with patch.object(extract_mod, "DEFAULT_HACTOOL_FALLBACK",
+                      tmp_path / "hactool.exe"), \
+         patch.object(extract_mod, "LEGACY_HACTOOL_FALLBACK", legacy), \
+         patch.object(extract_mod.shutil, "which", return_value=None):
+        got = extract_mod.resolve_hactool(None)
+    assert got == legacy
+
+
+def test_resolve_hactool_error_mentions_both_locations(extract_mod, tmp_path):
+    """When nothing resolves, the error names BOTH fallback paths so a
+    user staring at it can figure out where to drop the file."""
+    new_loc = tmp_path / "hactool.exe"
+    legacy = tmp_path / "bundled" / "hactool.exe"
+    with patch.object(extract_mod, "DEFAULT_HACTOOL_FALLBACK", new_loc), \
+         patch.object(extract_mod, "LEGACY_HACTOOL_FALLBACK", legacy), \
+         patch.object(extract_mod.shutil, "which", return_value=None):
+        with pytest.raises(SystemExit) as exc_info:
+            extract_mod.resolve_hactool(None)
+    msg = str(exc_info.value)
+    assert str(new_loc) in msg
+    assert str(legacy) in msg

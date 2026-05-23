@@ -56,15 +56,24 @@ DEFAULT_KEYS = Path.home() / ".switch" / "prod.keys"
 # bundled_hactool_path()` is the single source of truth). Keeping the
 # fallback in sync means a direct CLI invocation of this script without
 # `--hactool` Just Works on a machine where the wizard ran. The wizard
-# itself always passes `--hactool` explicitly from setup_state.json, so
-# this constant only matters for hand-invoked runs.
+# also passes `--hactool` explicitly when a value is persisted in
+# setup_state.json or when `bundled_hactool_path()` is populated, but
+# this constant is the safety net for auto-install users whose wizard
+# never persisted an override.
+#
+# History: install_hactool used to write to `bundled/hactool.exe`; the
+# bundled tree is `rmtree`d on every apworld refresh and silently
+# clobbered the install, so it was moved to the appdata root in commit
+# e1bcdbd. The legacy `bundled/` path is kept as a secondary probe so
+# users mid-migration aren't broken until the next install_hactool run
+# promotes the file to the new location.
 _APPDATA = os.environ.get("APPDATA")
 if _APPDATA:
-    DEFAULT_HACTOOL_FALLBACK = Path(_APPDATA) / "SMOArchipelago" / "bundled" / "hactool.exe"
+    _APPDATA_ROOT = Path(_APPDATA) / "SMOArchipelago"
 else:
-    DEFAULT_HACTOOL_FALLBACK = (
-        Path.home() / ".local" / "share" / "SMOArchipelago" / "bundled" / "hactool.exe"
-    )
+    _APPDATA_ROOT = Path.home() / ".local" / "share" / "SMOArchipelago"
+DEFAULT_HACTOOL_FALLBACK = _APPDATA_ROOT / "hactool.exe"
+LEGACY_HACTOOL_FALLBACK = _APPDATA_ROOT / "bundled" / "hactool.exe"
 DEFAULT_ROMFS_CACHE = REPO_ROOT / ".romfs-cache"
 DEFAULT_OUT = REPO_ROOT / "bridge" / "smo_ap_bridge" / "data" / "shine_map.json"
 DEFAULT_REVIEW = REPO_ROOT / "bridge" / "smo_ap_bridge" / "data" / "shine_map_review.json"
@@ -551,8 +560,11 @@ def resolve_hactool(arg: Path | None) -> Path:
         return Path(on_path)
     if DEFAULT_HACTOOL_FALLBACK.exists():
         return DEFAULT_HACTOOL_FALLBACK
+    if LEGACY_HACTOOL_FALLBACK.exists():
+        return LEGACY_HACTOOL_FALLBACK
     sys.exit(
-        f"ERROR: hactool.exe not found on PATH or at {DEFAULT_HACTOOL_FALLBACK}.\n"
+        f"ERROR: hactool.exe not found on PATH or at {DEFAULT_HACTOOL_FALLBACK} "
+        f"(or legacy {LEGACY_HACTOOL_FALLBACK}).\n"
         f"Pass --hactool <path>."
     )
 
