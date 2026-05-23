@@ -1048,5 +1048,6 @@ async def test_compose_moon_label_for_cross_game_recipient_resolves():
     )
     # Paint is the recipient, Talkatoo is us → "Sent ... to Paint",
     # truncated to ≤ 30 bytes by display.format_moon_label.
+    from client.display import TRUNCATION_MARKER
     assert label.startswith("Sent "), label
-    assert "Paint" in label or label.endswith("…"), label
+    assert "Paint" in label or label.endswith(TRUNCATION_MARKER), label

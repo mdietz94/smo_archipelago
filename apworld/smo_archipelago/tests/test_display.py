@@ -21,15 +21,15 @@ def test_truncate_passes_short_strings_through():
     assert truncate_utf8("", 30) == ""
 
 
-def test_truncate_appends_ellipsis_on_clip():
+def test_truncate_appends_marker_on_clip():
     s = "a" * 50
     out = truncate_utf8(s, 10)
-    assert out.endswith("…")
+    assert out.endswith("-")
     assert len(out.encode("utf-8")) <= 10
 
 
 def test_truncate_respects_byte_budget_with_multibyte_chars():
-    # "é" is 2 bytes in UTF-8; ellipsis is 3.
+    # "é" is 2 bytes in UTF-8.
     s = "café" * 10  # 40 chars, ~50 bytes
     out = truncate_utf8(s, 10)
     assert len(out.encode("utf-8")) <= 10
@@ -42,13 +42,13 @@ def test_truncate_never_splits_codepoint():
     s = "ab" + "🦊" * 5  # 'a'+'b' = 2, fox = 4 bytes each → total 22
     out = truncate_utf8(s, 7)
     # Must not include half a fox.
-    assert all(c in "ab🦊…" for c in out)
+    assert all(c in "ab🦊-" for c in out)
 
 
-def test_truncate_tiny_budget_no_ellipsis():
-    out = truncate_utf8("hello world", 2)
-    # Less than ellipsis size: just byte-trim, no ellipsis appended.
-    assert out == "he"
+def test_truncate_zero_budget_drops_marker():
+    # max_bytes < marker size: byte-trim path, no marker appended.
+    out = truncate_utf8("hello world", 0)
+    assert out == ""
 
 
 def test_truncate_default_budget_matches_constant():
@@ -99,7 +99,7 @@ def test_format_long_kingdom_long_recipient_still_fits():
     item = _moon("Darker Side Kingdom Power Moon", "Darker Side", "Power Moon")
     text = format_moon_label(item, recipient_slot="VeryLongPlayerNameHere", me_slot="me")
     assert len(text.encode("utf-8")) <= MAX_MOON_LABEL_BYTES
-    assert text.endswith("…")  # got clipped
+    assert text.endswith("-")  # got clipped
 
 
 def test_format_other_kind_uses_raw_name():
