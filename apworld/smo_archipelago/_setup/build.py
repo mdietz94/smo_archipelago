@@ -790,6 +790,18 @@ def run_extract_maps(
     ]
     if keys_path:
         args += ["--keys", str(keys_path)]
+    # Belt-and-braces: when the caller didn't pass an explicit hactool
+    # path (auto-install users never have one persisted in setup_state),
+    # probe the wizard's auto-install location and pass it through. The
+    # extractor has its own fallback to the same path, but passing
+    # `--hactool` explicitly produces a clearer error when the file is
+    # missing and avoids re-introducing the e1bcdbd-style drift bug if
+    # the install location moves again.
+    if not hactool_path:
+        from .prereqs import bundled_hactool_path
+        bundled = bundled_hactool_path()
+        if bundled.is_file():
+            hactool_path = bundled
     if hactool_path:
         args += ["--hactool", str(hactool_path)]
     env = {**os.environ, "PYTHONUNBUFFERED": "1"}
