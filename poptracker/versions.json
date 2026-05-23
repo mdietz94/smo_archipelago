@@ -1,6 +1,22 @@
 {
   "versions": [
     {
+      "package_version": "0.2.0-beta",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.2.0-beta/smo-poptracker-v0.2.0-beta.zip",
+      "sha256": "9db7026a957cfa1c5042d62e71ba0d2a6ef2fc847f8cbcdcf363c0bf09581ce2",
+      "changelog": [
+        "fix(launcher): never fall through to sys.argv on .meatballsap click",
+        "fix(extract): auto-trim trailing zero padding in oversized prod.keys entries",
+        "fix(client): reset per-slot bridge state on slot-change reconnect",
+        "test(commands): update cross-game label assertion for new truncation marker",
+        "fix(display): use ASCII hyphen instead of U+2026 for moon-label truncation",
+        "fix(extract): point hactool fallback at post-e1bcdbd install location",
+        "feat(apworld): mark Cascade scenario moons as filler-only (1.0.0 missable)",
+        "fix(ci): use PAT_FOR_RELEASES instead of GITHUB_TOKEN for poptracker PR",
+        "PopTracker auto-update: add v0.1.39-alpha to versions.json"
+      ]
+    },
+    {
       "package_version": "0.1.39-alpha",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.1.39-alpha/smo-poptracker-v0.1.39-alpha.zip",
       "sha256": "9295a3873ff628718e46f0a9c54feb59b8684e42571eb62697853b670eedfaea",
