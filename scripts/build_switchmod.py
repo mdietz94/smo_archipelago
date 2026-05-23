@@ -16,6 +16,25 @@ import shutil
 import subprocess
 import sys
 
+# Force stdout/stderr to UTF-8 before any print runs. Several of the
+# diagnostic strings below contain em-dashes (U+2014), which raise
+# UnicodeEncodeError under Windows code pages that lack them (cp932 on
+# JP locale, cp949 on KR, cp936 on simplified Chinese). The wizard's
+# `_stream_subprocess` already plumbs PYTHONIOENCODING=utf-8 into the
+# env when it spawns us, but this guard keeps standalone invocations
+# (devs running `python scripts/build_switchmod.py` directly) from
+# crashing on the same locale. Python 3.7+ exposes `.reconfigure`.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+# Propagate UTF-8 to every child Python we spawn below (patch_hakkun.py,
+# setup_libcxx_prepackaged.py, setup_sail_winpath.py). Without this, each
+# child inherits the JP/KR/CN locale and crashes on its own em-dashes.
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Probe the dev-checkout name first (`switch-mod`) and fall back to the
 # bundled-apworld name (`switch_mod`). The apworld zip's contents must

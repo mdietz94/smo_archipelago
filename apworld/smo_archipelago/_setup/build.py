@@ -527,14 +527,30 @@ def _stream_subprocess(
     if stall_timeout_s is not None:
         _emit(f"[stream] stall timeout: {stall_timeout_s:.0f}s")
 
+    # Force UTF-8 end-to-end. Every caller in this module spawns a bundled
+    # Python script, and several of those (build_switchmod.py and the
+    # children it chains into) print em-dashes in diagnostic messages.
+    # Without this pin, `text=True` defaults to `locale.getpreferredencoding()`
+    # on BOTH sides — cp932 on a Japanese Windows host — and the child's
+    # first `print()` containing U+2014 raises UnicodeEncodeError and dies
+    # with exit code 1 before doing any real work. PYTHONIOENCODING tells
+    # the child Python to encode stdout as UTF-8; `encoding="utf-8"` here
+    # tells Popen to decode it the same way. `errors="replace"` keeps a
+    # misbehaving non-Python tool that gets routed through here from
+    # crashing the reader on invalid bytes.
+    child_env = dict(env) if env is not None else os.environ.copy()
+    child_env.setdefault("PYTHONIOENCODING", "utf-8")
+
     try:
         proc = subprocess.Popen(
             cmd,
             cwd=str(cwd) if cwd else None,
-            env=env,
+            env=child_env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,  # line-buffered
             creationflags=_NO_WINDOW,
         )
