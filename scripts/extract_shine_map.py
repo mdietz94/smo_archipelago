@@ -455,6 +455,121 @@ def _parse_keys_file(path: Path) -> dict[str, bytes]:
     return out
 
 
+# Expected sizes (bytes) for the prod.keys entries hactool reads during the
+# NSP/XCI -> NCA -> RomFS pipeline. Keys not listed here are passed through
+# unchanged — we only normalize entries we positively know the spec'd size
+# for, so a future XTS key with a different layout never gets silently
+# rewritten. Names are lowercased (matching _parse_keys_file).
+#
+# `header_key` is the one 32-byte entry — an AES-XTS key, stored as
+# `enc_key (16) || tweak_key (16)`. Its positional layout is the load-
+# bearing detail that makes trailing-zero trimming safe: bytes 0..15 and
+# 16..31 are independent AES keys, so any byte at offset >= 32 cannot be
+# part of the key by definition.
+EXPECTED_KEY_SIZES: dict[str, int] = {"header_key": 32}
+for _i in range(0x20):
+    EXPECTED_KEY_SIZES[f"master_key_{_i:02x}"] = 16
+    EXPECTED_KEY_SIZES[f"titlekek_{_i:02x}"] = 16
+    EXPECTED_KEY_SIZES[f"key_area_key_application_{_i:02x}"] = 16
+    EXPECTED_KEY_SIZES[f"key_area_key_ocean_{_i:02x}"] = 16
+    EXPECTED_KEY_SIZES[f"key_area_key_system_{_i:02x}"] = 16
+del _i
+
+# Overage budget for the trailing-zero auto-trim. A few bytes of zero
+# padding from a buffer-overrun bug in a key dumper is plausible; anything
+# bigger is wholesale corruption and the user should re-dump rather than
+# have us guess.
+MAX_KEY_OVERAGE = 4
+
+
+def _normalize_keys_file(keys_path: Path, work_dir: Path) -> Path:
+    """Audit `keys_path` against EXPECTED_KEY_SIZES; if any entry is
+    oversized by <= MAX_KEY_OVERAGE bytes AND every extra byte is 0x00,
+    write a trimmed copy under `work_dir` and return that path. Otherwise
+    return `keys_path` unchanged.
+
+    Raises RuntimeError for any other mismatch (undersized entry, oversized
+    with non-zero trailing bytes, or overage > MAX_KEY_OVERAGE) — those
+    cases indicate a corrupt dump, not padding, and silently fixing them
+    would hide a real problem.
+
+    The original file is NEVER modified. This is the same read-only
+    contract `_parse_keys_file` follows.
+
+    Backstory: some older Lockpick_RCM forks and ad-hoc key dumpers emit
+    `header_key` as 34 bytes (64 hex chars + a stray `0000`), likely from
+    a buffer-overrun bug — hactool then refuses with "key 'header_key' is
+    wrong size; should be 32 bytes!" Trimming trailing zeros from an XTS
+    key is safe because the layout is positional (bytes 0..15 = enc,
+    16..31 = tweak); any byte at offset >= 32 cannot be part of the key.
+    """
+    try:
+        original_text = keys_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError as e:
+        raise RuntimeError(f"could not read {keys_path}: {e}") from e
+
+    trimmed: list[tuple[str, int, int]] = []  # (name, old_bytes, new_bytes)
+    out_lines: list[str] = []
+    for raw in original_text.splitlines():
+        # Preserve comments / blank lines / non-hex entries verbatim so
+        # the rewritten file reads as a faithful copy of the user's file.
+        bare = raw.split(";", 1)[0].split("#", 1)[0].strip()
+        if "=" not in bare:
+            out_lines.append(raw)
+            continue
+        k, _, v = bare.partition("=")
+        name = k.strip().lower()
+        hex_str = v.strip()
+        try:
+            value = bytes.fromhex(hex_str)
+        except ValueError:
+            out_lines.append(raw)
+            continue
+        expected = EXPECTED_KEY_SIZES.get(name)
+        if expected is None or len(value) == expected:
+            out_lines.append(raw)
+            continue
+        if len(value) < expected:
+            raise RuntimeError(
+                f"{keys_path}: key '{name}' is {len(value)} bytes, expected "
+                f"{expected}. Your prod.keys appears truncated — re-dump "
+                f"with a current Lockpick_RCM."
+            )
+        overage = len(value) - expected
+        if overage > MAX_KEY_OVERAGE:
+            raise RuntimeError(
+                f"{keys_path}: key '{name}' is {len(value)} bytes, expected "
+                f"{expected} (+{overage}). The size mismatch is too large to "
+                f"be padding — re-dump with a current Lockpick_RCM."
+            )
+        tail = value[expected:]
+        if any(b != 0 for b in tail):
+            raise RuntimeError(
+                f"{keys_path}: key '{name}' is {len(value)} bytes, expected "
+                f"{expected}, and the {overage} trailing byte(s) are not "
+                f"zero ({tail.hex()}). Trimming could corrupt the key — "
+                f"re-dump with a current Lockpick_RCM."
+            )
+        out_lines.append(f"{k.rstrip()} = {value[:expected].hex()}")
+        trimmed.append((name, len(value), expected))
+
+    if not trimmed:
+        return keys_path
+
+    work_dir.mkdir(parents=True, exist_ok=True)
+    normalized = work_dir / "prod.keys.normalized"
+    normalized.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+    for name, old_n, new_n in trimmed:
+        print(
+            f"[keys] {keys_path.name}: '{name}' was {old_n} bytes "
+            f"(expected {new_n}); trimmed {old_n - new_n} trailing zero "
+            f"byte(s). Using normalized copy at {normalized} — original "
+            f"untouched.",
+            file=sys.stderr, flush=True,
+        )
+    return normalized
+
+
 def _read_ticket(tik_path: Path) -> tuple[bytes, bytes, int, int]:
     """Parse a Switch ticket (signature type RSA-2048-SHA256, 0x2C0 bytes).
 
@@ -699,6 +814,12 @@ def extract_romfs(
     work_dir = romfs_dir.parent / (romfs_dir.name + suffix)
     work_dir.mkdir(parents=True, exist_ok=True)
     romfs_dir.mkdir(parents=True, exist_ok=True)
+
+    # Some key dumpers emit oversized entries (most commonly a 34-byte
+    # `header_key`, 64 hex chars + a stray `0000`). hactool rejects these
+    # with "key '...' is wrong size". Audit + trim trailing zeros into a
+    # copy under `work_dir`; the user's prod.keys is never modified.
+    keys = _normalize_keys_file(keys, work_dir)
 
     if dump_kind == "nsp":
         container_result = _run_hactool(
