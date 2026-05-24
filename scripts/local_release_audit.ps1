@@ -40,13 +40,13 @@ if (-not $pythonCmd) {
   throw "python not found on PATH -- install Python 3.12 (the wizard's prereq install handles this)."
 }
 
-# Locate the pre-merge bridge venv at the main checkout's bridge/.venv
-# if running from a worktree (where the venv isn't symlinked in). Falls
-# back to the system python if the venv isn't there.
-$venvPython = Join-Path $repoRoot "bridge\.venv\Scripts\python.exe"
+# Locate the repo-root .venv at the main checkout if running from a
+# worktree (where the venv isn't symlinked in). Falls back to the system
+# python if the venv isn't there.
+$venvPython = Join-Path $repoRoot ".venv\Scripts\python.exe"
 if (-not (Test-Path $venvPython)) {
   # Probe the main checkout (worktrees live under .claude/worktrees/...).
-  $maybeMain = Join-Path $repoRoot "..\..\..\bridge\.venv\Scripts\python.exe"
+  $maybeMain = Join-Path $repoRoot "..\..\..\.venv\Scripts\python.exe"
   if (Test-Path $maybeMain) {
     $venvPython = (Resolve-Path $maybeMain).Path
   } else {
