@@ -1,6 +1,20 @@
 {
   "versions": [
     {
+      "package_version": "0.2.2-beta",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.2.2-beta/smo-poptracker-v0.2.2-beta.zip",
+      "sha256": "742037ad4f970ea64349f32ddb15639012e25576f1a50c22af17fba279d51546",
+      "changelog": [
+        "fix(client): surface held-snapshot prompt in the Archipelago tab",
+        "ci: bump softprops/action-gh-release from 1 to 3",
+        "fix(switch-mod): stop Talkatoo% from saying \"No more hints now\"",
+        "fix(client): reload shine/capture maps mid-session and warn on persistent miss",
+        "Allow Drive download_file_content MCP tool in local settings",
+        "Allow Drive search_files MCP tool in local settings",
+        "PopTracker auto-update: add v0.2.1-beta to versions.json"
+      ]
+    },
+    {
       "package_version": "0.2.1-beta",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v0.2.1-beta/smo-poptracker-v0.2.1-beta.zip",
       "sha256": "92dd836843536cc17d318c1347ca5ff633e0ae6f4d672ca37de5025abba3963a",
