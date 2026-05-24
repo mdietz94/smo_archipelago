@@ -80,7 +80,7 @@ Remove-Item -Force test_json.exe, test_protocol.exe, test_cappy_messenger.exe, t
 - New MessageFont38 substitution rule / sanitizer behavior → add to `test_msg_font_safe.cpp` (regenerate the coverage data with `scripts/inspect_smo_font.py` first if a SMO version bump changed the font).
 - New shine_table.h column / shine_lookup helper → add to `test_shine_lookup.cpp`.
 
-Pattern from M6.1: any field that holds a string in the Switch wire-protocol must be a fixed `char[N]` — the worker thread can NOT use `std::string` historically (libstdc++ allocator NULL-derefs in the exlaunch-era subsdk9). Hakkun's musl + LLVM libc++ + HeapSourceDynamic addon lifts the restriction at runtime, but the fixed-buffer pattern stays in the wire format because the message shapes are committed contracts. Tests should cover the truncation behavior at the N boundary.
+Wire-protocol string fields use fixed `char[N]` — the shapes are committed contracts. Tests should cover the truncation behavior at the N boundary.
 
 ## CI mirror
 

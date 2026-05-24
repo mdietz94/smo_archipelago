@@ -1,15 +1,6 @@
-"""SMOContext — CommonContext subclass that owns both the AP-side websocket
-connection (via CommonClient's inherited machinery) and the SwitchServer
-(asyncio TCP server the Switch mod connects to over LAN).
-
-Replaces the bridge's `SmoApBridgeContext` composition wrapper. Methods that
-were previously bound to the wrapper now live directly on the context.
-
-The merge collapses one process boundary: where the bridge used to be a
-standalone `python -m smo_ap_bridge` script that connected to AP on one end
-and the Switch on the other, this lives inside the apworld and ships with
-the .apworld zip. Launched via the Archipelago Launcher's "SMO Client"
-button.
+"""SMOContext — CommonContext subclass owning the AP-side websocket connection
+and the SwitchServer (asyncio TCP server the Switch mod connects to over LAN).
+Launched via the Archipelago Launcher's "SMO Client" button.
 """
 
 from __future__ import annotations
@@ -345,13 +336,10 @@ class SMOContext(CommonContext):
     # ----------------------------------------------------------- AP overrides
 
     async def connect(self, address: str | None = None) -> None:
-        """Dial AP immediately. No Switch-presence gate.
+        """Dial AP immediately regardless of Switch presence.
 
-        Earlier builds parked the dial until the Switch HELLO'd (SNI-style
-        gate), which prevented the user from validating creds before booting
-        SMO. The dial is cheap and CommonContext's reconnect loop tolerates
-        the AP-up / Switch-down state: items arrive into BridgeState and
-        get replayed to the Switch on its eventual HELLO.
+        Items received while the Switch is offline queue in BridgeState and
+        replay to the Switch on its eventual HELLO.
         """
         if address is None:
             address = self.server_address
@@ -566,10 +554,8 @@ class SMOContext(CommonContext):
         await self._push_outstanding_to_switch()
 
     async def _process_received_items(self, args: dict) -> None:
-        """Handle a ReceivedItems packet.
+        """Handle a ReceivedItems packet. Two jobs:
 
-        Two jobs (M6 phase D simplification — outstanding is derived, so
-        there's no rii dedup, no v1 migration, no apply_grant, no persist):
           1. Mirror every item into ``state.received_items`` (the canonical
              history; rebuilds moons_received_by_kingdom on every Connected
              via add_received_item). Mirror dedup by current length so AP's
@@ -657,13 +643,12 @@ class SMOContext(CommonContext):
         name = self.dp.item_id_to_name.get(item_id, f"<unknown:{item_id}>")
         ci = self.dp.classify_item(name)
         ref = ci.to_ref()
-        # M6 phase B: stamp hack_name onto the ItemRef now so reconnect
-        # replay carries it through SwitchServer without re-resolving.
+        # Stamp hack_name onto the ItemRef now so reconnect replay carries
+        # it through SwitchServer without re-resolving.
         if ref.kind == "capture" and ref.cap:
             ref.hack_name = self.capture_map.cap_to_hack(ref.cap)
-        # M-color: thread AP item classification flags through so log lines
-        # + future post-collection effects can branch on
-        # progression/useful/trap/filler.
+        # Thread AP item classification flags through so log lines and
+        # post-collection effects can branch on progression/useful/trap/filler.
         classification = classification_from_flags(int(flags or 0)).value
         ref.classification = classification
         sender_name = self._sender_name(sender_idx)
@@ -684,7 +669,7 @@ class SMOContext(CommonContext):
         """Re-resolve shine_map / capture_map paths and load any new content.
 
         Called from two sites that together close the "user ran wizard
-        but never restarted SMOClient" loop the 2026-05-23 logs caught:
+        but never restarted SMOClient" loop:
 
           - `_handle_ap_package('Connected')` (sentinel-driven): the
             wizard touches `<%APPDATA%>/SMOArchipelago/.maps-updated`
@@ -911,11 +896,10 @@ class SMOContext(CommonContext):
                 # kingdom AP-pool. push_talkatoo_pool is a no-op when the
                 # payload isn't set yet.
                 self.talkatoo_mode = bool(slot_data.get("talkatoo_mode", 0))
-                # Phase 5 (Gap #3): apworld ships a per-kingdom sphere-safe
-                # order so Talkatoo never names a moon the player can't
-                # reach. When absent (older apworld builds), the bridge
-                # falls back to the full filtered pool — see
-                # _derive_and_push_talkatoo_pool for both paths.
+                # Sphere-safe per-kingdom order from slot_data so Talkatoo
+                # never names a moon the player can't reach. Falls back to
+                # the full filtered pool when absent — see
+                # _derive_and_push_talkatoo_pool.
                 raw_order = slot_data.get("talkatoo_order") or {}
                 self.talkatoo_order = {
                     str(k): [str(s) for s in (v or [])]
@@ -923,21 +907,15 @@ class SMOContext(CommonContext):
                 }
                 await self._derive_and_push_talkatoo_pool()
                 await self.switch.send_ap_state("ready")
-                # M6 phase C — datapackage is now hot. If the Switch's
-                # state-snapshot landed during the AP handshake window, its
-                # entries were buffered (report_check couldn't resolve loc_ids
-                # without dp.location_name_to_id). Drain now so AP learns
-                # about anything collected during the disconnect.
+                # Datapackage is now hot. If the Switch's state-snapshot
+                # landed during the AP handshake window, its entries were
+                # buffered (report_check couldn't resolve loc_ids without
+                # dp.location_name_to_id). Drain now so AP learns about
+                # anything collected during the disconnect.
                 try:
                     await self.switch.drain_pending_snapshot()
                 except Exception:
                     log.exception("drain_pending_snapshot failed")
-            # M6 phase D — no AP data-store key to subscribe to: outstanding
-            # is now derived from (lifetime_received_AP − PayShineNum).
-            # lifetime_received comes from state.received_items on every
-            # Connected; PayShineNum comes from the Switch's PaySnapshotMsg.
-            # The legacy `smo_outstanding_<team>_<slot>` key is abandoned in
-            # place — no read, no write, no migration.
             if self.display_enabled or self.colors.enabled:
                 # Warm the scout cache so (a) Channel A's moon-get cutscene
                 # label is ready before the cutscene fires, and (b) M-color
@@ -1006,11 +984,9 @@ class SMOContext(CommonContext):
         # Bounced/DeathLink is handled via on_deathlink (CommonContext routes
         # for us; on_package needn't double-handle).
 
-    # Phase 5 (Gap #3): cursor window size. Mirror of switch-mod's
-    # pickThreeUncollectedFromKingdom 3-slot output; capped here so we don't
-    # ship surplus to the Switch (TalkatooKingdomPool::kMaxMoons is 96, but
-    # the Switch picker only uses up to 3). One slot beyond what the picker
-    # consumes would still work, but keeping it at 3 is the contract.
+    # Cursor window size — mirror of switch-mod's 3-slot picker. Capped here
+    # so we don't ship surplus to the Switch (TalkatooKingdomPool::kMaxMoons
+    # is 96, but the Switch picker only uses up to 3).
     _TALKATOO_WINDOW = 3
 
     def _any_check_in_talkatoo_order(self, loc_ids: set[int]) -> bool:

@@ -85,22 +85,16 @@ namespace nn::socket {
 
 namespace {
 
-// Larger socket pool than SMO's stock setup — borrowed from Kgamer77/
-// SMOO-Plus-Hakkun's main.cpp pattern. 6 MB transfer pool + 128 KB
-// allocator pool, page-aligned. We need this because:
+// 6 MB transfer pool + 128 KB allocator pool for nn::socket. Larger than
+// SMO's stock setup because:
 //   1. nn::socket::Initialize can only be called ONCE per process; the
-//      first call wins. If SMO calls it first with its (smaller) pool,
-//      we either get a re-init assert (if we re-call) or are stuck with
-//      whatever SMO chose. Either way we lose pool control.
-//   2. Opening a parallel hk::socket client against bsd:u — our prior
-//      approach — fails on retail with `KernelResult_OutOfSessions`
-//      because svcConnectToNamedPort("sm:") exceeds the per-process
-//      session quota. See project_sail_missing_symbol_crashes_init's
-//      sibling memory about Kgamer's init pattern.
+//      first call wins. Pre-orig, we call it ourselves so our pool wins.
+//   2. A parallel hk::socket client against bsd:u fails on retail with
+//      KernelResult_OutOfSessions (svcConnectToNamedPort("sm:") exceeds
+//      the per-process session quota). Pattern from Kgamer77/SMOO-Plus-Hakkun.
 //
-// Wired in below: pre-orig, we call Initialize ourselves with this pool,
-// then install a no-op HkTrampoline at nn::socket::Initialize so SMO's
-// later call is neutered.
+// Wired below: pre-orig we call Initialize with this pool, then install a
+// no-op HkTrampoline at nn::socket::Initialize so SMO's later call is neutered.
 constexpr unsigned long kSocketPoolSize      = 0x600000;   // 6 MB
 constexpr unsigned long kSocketAllocPoolSize = 0x20000;    // 128 KB
 alignas(0x1000) char g_socket_pool[kSocketPoolSize + kSocketAllocPoolSize];
@@ -114,30 +108,19 @@ HkTrampoline<unsigned int, void*, unsigned long, unsigned long, int>
             return 0;  // nn::Result success
         });
 
-// Hook 1: GameSystem::init runs during SMO startup. We do the socket
-// bring-up BEFORE orig (so our pool wins the one-shot Initialize race),
-// then call orig, then start the AP worker. Mirrors Kgamer77/SMOO-Plus-
-// Hakkun (which has the same nn::socket pre-orig hijack — confirmed in
-// their src/main.cpp).
+// Hook 1: GameSystem::init. Socket bring-up BEFORE orig so our pool wins
+// the one-shot Initialize race, then orig, then start the AP worker.
 HkTrampoline<void, GameSystem*> gameSystemInitHook =
     hk::hook::trampoline([](GameSystem* self) -> void {
         SMOAP_LOG_INFO(">>> GameSystem::init hook FIRED");
 
-        // ImGui setup MUST land before orig. Kgamer77/SMOO-Plus-Hakkun
-        // calls imgui::setup() as the FIRST thing in its gameSystemInit
-        // pre-orig, before nn::socket::Initialize. Their imgui::setup
-        // creates the ExpHeap + wires the allocator + calls
-        // ImGuiBackendNvn::tryInitialize(). By initializing ImGui BEFORE
-        // SMO touches NVN, the addon's nvnDeviceInitialize override
-        // gets to call setDevice on an already-prepared backend. Our
-        // prior pattern (defer to first-draw lazy-init) hung at first
-        // drawMain.orig — putting init here matches their proven setup.
+        // ImGui MUST be initialized pre-orig (before SMO touches NVN).
+        // Deferring to first-draw silently hangs drawMain.orig — see the
+        // pre-orig invariant in CLAUDE.md.
         smoap::ui::initDebugConsole();
 
-        // Socket init MUST land before orig so our 6 MB pool wins the
-        // one-shot nn::socket::Initialize race. Pattern from Kgamer's
-        // gameSystemInit hook body. Without our larger pool the bridge's
-        // many-concurrent-connection scenarios run out of session slots.
+        // Socket init MUST land before orig so our pool wins the one-shot
+        // nn::socket::Initialize race.
         SMOAP_LOG_INFO("[init] nn::socket::Initialize (our pool, %lu+%lu bytes)",
                        kSocketPoolSize, kSocketAllocPoolSize);
         const unsigned int sock_rc = nn::socket::Initialize(

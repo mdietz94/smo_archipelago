@@ -1,4 +1,4 @@
-"""Talkatoo% sphere-safe ordering — Gap #3 (Phase 5).
+"""Talkatoo% sphere-safe ordering.
 
 Produces a per-kingdom ordered list of moon shine_ids such that as the
 player collects moons in order, the next 3 entries always contain at
@@ -69,8 +69,7 @@ Progression filter
 Excludes locations flagged `progression: true` in locations.json (Multi
 Moons, scenario-advance bosses, Seaside seals, Bowser's chain). Those
 bypass the Talkatoo% block via isProgressionShine on the Switch, so
-they're handled outside the cursor-window mechanism — and Gap #1 already
-filters them out of the bridge-side talkatoo_pool.
+they're handled outside the cursor-window mechanism.
 """
 
 from __future__ import annotations

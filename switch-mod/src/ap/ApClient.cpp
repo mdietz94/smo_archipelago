@@ -4,14 +4,9 @@
 // thread (drawMain trampoline) only touches ApState's lock-free SPSC
 // rings; this thread does all blocking I/O.
 //
-// Socket session: we use nn::socket::* directly (no parallel hk::socket
-// client + no parallel sm: session). main.cpp's GameSystemInit pre-orig
-// hook calls nn::socket::Initialize with our own 6MB+128KB pool and
-// installs a no-op trampoline at the SMO-side Initialize so the game
-// can't re-init / clobber the pool. By the time initNetworking() runs
-// post-orig, nn::socket is fully up. Pattern from Kgamer77/
-// SMOO-Plus-Hakkun:main.cpp — fixes KernelResult_OutOfSessions seen on
-// retail when opening a second sm: connection via hk::sm.
+// Socket session: we use nn::socket::* directly. main.cpp's pre-orig hook
+// calls nn::socket::Initialize with our 6MB+128KB pool before SMO's own
+// call, so by the time initNetworking() runs the session is fully up.
 //
 // Thread sequence:
 //   1. start() (called from frame thread inside GameSystemInit hook):

@@ -71,12 +71,12 @@ _SWITCH_LEVEL_MAP = {
 }
 
 
-# M6 phase C reconcile — when a single drain produces more freshly-checked
-# loc_ids than this, suppress all Cappy bubbles for that drain. Protects
-# against the first-connect / "fresh AP slot" case where the snapshot enumerates
-# every owned moon + capture as new — a 41-bubble flood is worse than silence.
-# Real "I missed a few while offline" sessions sit comfortably under this cap.
-# CappyMessenger queues at most 8 anyway; this threshold trips first.
+# When a single snapshot drain produces more freshly-checked loc_ids than this,
+# suppress all Cappy bubbles for that drain. Protects against the first-connect
+# case where the snapshot enumerates every owned moon + capture as new — a
+# 41-bubble flood is worse than silence. Real "missed a few while offline"
+# sessions sit comfortably under this cap. CappyMessenger queues at most 8
+# anyway; this threshold trips first.
 RECONCILE_CAPPY_BURST_THRESHOLD = 5
 
 
@@ -94,10 +94,9 @@ def _classify_snapshot_for_user_confirm(
     The Switch-side `save_was_loaded && CappyMessenger::hasDispatchedSinceReset()`
     gate proves only that Mario is in a live gameplay scene with save data
     fully resident — NOT that the player picked this save for this AP run.
-    User report 2026-05-23: an existing 8-moon save auto-loaded after a Switch
-    reboot and the snapshot credited 3 moons to AP before the user could click
-    "New Game". LocationChecks are persisted server-side; once sent the user
-    must `/forfeit` to unwind.
+    Without the bridge-side confirm gate, a wrong-save snapshot can credit
+    moons to AP before the user can react. LocationChecks are persisted
+    server-side; once sent the user must `/forfeit` to unwind.
 
     Auto-confirm (``True``) when the snapshot is a no-op against current AP
     state — empty New-Game snapshot, reconnect-mid-session where every entry
@@ -161,48 +160,42 @@ CheckHandler = Callable[[dict], Awaitable["int | None"]]  # returns AP loc_id or
 GoalHandler = Callable[[], Awaitable[None]]
 DeathHandler = Callable[[int], Awaitable[None]]
 LabelComposer = Callable[[int], "str | None"]              # loc_id -> label text
-# M6 phase D — PaySnapshotHandler(totals=dict[str, int]) -> None.
+# PaySnapshotHandler(totals=dict[str, int]) -> None.
 # `totals` is keyed by AP-form kingdom name (dispatcher does the
 # Switch→AP translation). Handler folds into BridgeState and re-derives
 # outstanding, then pushes OutstandingMsg to the Switch.
 PaySnapshotHandler = Callable[..., Awaitable[None]]
-# M6 phase D — OutstandingProvider() -> list[OutstandingEntry]. Used at HELLO
-# time to snapshot the current per-kingdom balance for the Switch.
+# OutstandingProvider() -> list[OutstandingEntry]. Used at HELLO time to
+# snapshot the current per-kingdom balance for the Switch.
 OutstandingProvider = Callable[[], "list"]
 # Capturesanity-OFF replay — returns every known (cap_name, hack_name) pair so
 # the bridge can synthesize per-capture ItemMsgs that set every bit of the
 # Switch's captures_unlocked bitset. Without this, CaptureStartHook would
 # block every capture for the entire seed (no AP Capture items will arrive).
 AllCapturesProvider = Callable[[], list]
-# M6 phase C reconcile — `() -> bool` predicate: is AP fully ready (datapackage
-# loaded so report_check can resolve loc_ids)? Used to gate the snapshot drain
-# when the Switch HELLO arrives before the AP dial has handshaked.
+# `() -> bool`: True when datapackage is loaded and report_check can resolve
+# loc_ids. Gates snapshot drain when the Switch HELLO arrives before AP dials.
 ApReadyProbe = Callable[[], bool]
-# M6 phase C reconcile — `(loc_id) -> ItemMsg | None`: builds a Cappy-bubble
-# ItemMsg for a moon reconciled from a snapshot. Returns None when scouts
-# aren't loaded yet, when the item isn't for our slot, or when the loc isn't
-# a moon. SwitchServer keeps a pending-set of loc_ids and re-tries on every
-# LocationInfo absorption until the cache catches up.
+# `(loc_id) -> ItemMsg | None`: builds a Cappy-bubble ItemMsg for a moon
+# reconciled from a snapshot. Returns None when scouts aren't loaded yet,
+# when the item isn't for our slot, or when the loc isn't a moon.
+# SwitchServer keeps a pending-set and re-tries on every LocationInfo
+# absorption until the cache catches up.
 ReconcileItemBuilder = Callable[[int], "ItemMsg | None"]
-# M6 phase C reconcile — `() -> set[int]`: snapshot of currently-checked AP
-# location ids. Captured once before drain so we can distinguish "newly
-# checked from reconcile" (fire Cappy) vs "already known" (skip Cappy — the
-# player either checked it live or saw it announced on a previous reconnect).
-# Implemented in SMOContext as `lambda: set(self.locations_checked)`.
+# `() -> set[int]`: snapshot of currently-checked AP location ids. Captured
+# once before drain to distinguish "newly checked from reconcile" (fire Cappy)
+# vs "already known" (skip Cappy — player checked it live or saw it announced
+# on a previous reconnect).
 AlreadyCheckedProvider = Callable[[], "set[int]"]
-# Bridge-side /confirm_snapshot gate — `(entry) -> loc_id | None`: pure
-# resolution of a single snapshot entry to its AP location_id without any I/O
-# or state mutation. Mirrors SMOContext.report_check's resolution logic but
-# diverges on side effects — used only to decide whether a snapshot would
-# credit any NEW AP location (and therefore should be held for the operator
-# to confirm via /confirm_snapshot).
+# `(entry) -> loc_id | None`: pure resolution of a snapshot entry to its AP
+# location_id without I/O or state mutation. Used only to decide whether a
+# snapshot would credit a NEW location (hold for /confirm_snapshot) vs
+# nothing new (auto-confirm).
 EntryResolver = Callable[[dict], "int | None"]
-# Bridge-side /confirm_snapshot gate — `() -> bool`: True iff the goal has
-# already been reported for the current AP session. Combined with the
-# snapshot's `goal_reached` meta flag to decide whether a goal-reaching
-# snapshot would credit a fresh goal (hold) or just redundantly reconfirm
-# a goal we already shipped (auto-confirm). Implemented in SMOContext as
-# `lambda: self._goal_reported`.
+# `() -> bool`: True iff the goal has already been reported for the current AP
+# session. Combined with snapshot's `goal_reached` flag to decide whether a
+# goal-reaching snapshot would credit a fresh goal (hold) or redundantly
+# reconfirm one already shipped (auto-confirm).
 GoalFinishedProbe = Callable[[], bool]
 # UI notification — fired whenever the set of connected Switches OR the
 # active selection changes. Synchronous callback (typically schedules a
@@ -332,10 +325,9 @@ class SwitchServer:
         self._get_already_checked = get_already_checked_loc_ids
         self._resolve_entry_to_loc_id = resolve_entry_to_loc_id
         self._is_goal_finished = is_goal_finished
-        # Per-device_id connection registry. Replaces the legacy single
-        # `_writer` slot. Exactly one entry's id is in `_active_device_id`
-        # at any time; that one forwards telemetry to AP and receives
-        # items / replays.
+        # Per-device_id connection registry. Exactly one entry's id is in
+        # `_active_device_id` at any time; that one forwards telemetry to AP
+        # and receives items / replays.
         self._connections: dict[str, _SwitchConn] = {}
         self._active_device_id: str | None = None
         # Notified whenever connections or the active selection changes.
@@ -344,38 +336,33 @@ class SwitchServer:
         # refresh on the next polling tick).
         self._on_switches_changed: SwitchesChangedHandler | None = None
         self._server: asyncio.AbstractServer | None = None
-        # M6 phase C reconcile — entries buffered when state_end arrived but
-        # AP wasn't ready yet (datapackage not loaded → report_check can't
-        # resolve loc_ids). Drained by drain_pending_snapshot() once AP is
-        # ready. None means "no buffered snapshot" (distinct from [] which
-        # would be a valid empty snapshot we already drained).
+        # Snapshot entries buffered when state_end arrived but AP wasn't ready
+        # yet (datapackage not loaded → report_check can't resolve loc_ids).
+        # Drained by drain_pending_snapshot() once AP is ready. None means
+        # "no buffered snapshot" (distinct from [] — a valid empty snapshot).
         self._pending_snapshot_entries: list[dict] | None = None
         self._pending_snapshot_goal: bool = False
-        # M6 phase C reconcile — live `check` messages buffered when they
-        # arrived during the AP-handshake window. The Switch's outbound
-        # check ring drains queued offline collects on reconnect; without
-        # buffering they hit the same "no AP id" race as the snapshot.
-        # Drained by drain_pending_snapshot() alongside the snapshot.
+        # Live `check` messages buffered during the AP-handshake window. The
+        # Switch's outbound check ring drains queued offline collects on
+        # reconnect; without buffering they hit the same "no AP id" race as
+        # the snapshot. Drained by drain_pending_snapshot() alongside it.
         self._pending_live_checks: list[dict] = []
-        # Bridge-side /confirm_snapshot gate (2026-05-23). When the
-        # classifier ("would this snapshot credit any NEW AP location?")
-        # returns auto_confirm=False, the snapshot lands here instead of
-        # being forwarded. The operator types /confirm_snapshot in
-        # SMOClient to release it, or /reject_snapshot to discard.
-        # `_held_*_from_reconcile` preserves the original from_reconcile
-        # flag so the Cappy-burst threshold + reconcile-Cappy path keep
-        # the right behavior across the confirm.
-        # Last-write-wins: a fresh state_end / drain replaces whatever was
-        # held so a "now I actually clicked New Game" snapshot can
-        # supersede the earlier wrong-save hold.
+        # /confirm_snapshot gate. When the classifier ("would this snapshot
+        # credit any NEW AP location?") returns auto_confirm=False, the
+        # snapshot lands here instead of being forwarded. The operator types
+        # /confirm_snapshot to release it, or /reject_snapshot to discard.
+        # `_held_*_from_reconcile` preserves the original from_reconcile flag
+        # so the Cappy-burst threshold keeps the right behavior across confirm.
+        # Last-write-wins: a fresh state_end / drain replaces whatever was held
+        # so a "now I actually clicked New Game" snapshot supersedes the hold.
         self._held_snapshot_entries: "list[dict] | None" = None
         self._held_snapshot_goal: bool = False
         self._held_snapshot_from_reconcile: bool = False
-        # M6 phase C reconcile — loc_ids freshly dispatched from a snapshot
-        # drain (i.e. NOT already in locations_checked when drain began).
-        # Each waits for its scout to land via LocationInfo absorption; when
-        # the scout shows the item is for our slot, we synthesize a Cappy
-        # ItemMsg so the player learns what they got offline.
+        # loc_ids freshly dispatched from a snapshot drain (NOT already in
+        # locations_checked when drain began). Each waits for its scout to
+        # land via LocationInfo absorption; when the scout shows the item is
+        # for our slot, we synthesize a Cappy ItemMsg so the player learns
+        # what they got offline.
         self._reconcile_cappy_pending: set[int] = set()
         # Talkatoo% mode payload. Set by SMOContext after Connected once the
         # slot_data + datapackage are both available. Stored as the input

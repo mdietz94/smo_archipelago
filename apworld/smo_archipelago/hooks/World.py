@@ -279,14 +279,10 @@ def before_fill_slot_data(slot_data: dict, world: World, multiworld: MultiWorld,
 
 # This is called after slot data is set and provides the slot data at the time, in case you want to check and modify it after the world fills it
 def after_fill_slot_data(slot_data: dict, world: World, multiworld: MultiWorld, player: int) -> dict:
-    # Talkatoo% Phase 5 (Gap #3): when the player opts into talkatoo_mode,
-    # ship a per-kingdom sphere-safe ordered list of AP-pool moon shine_ids
-    # to the bridge. The bridge keeps a per-kingdom cursor + window of 3
-    # so Talkatoo only ever names moons whose collection prefix is
-    # reachable from items already earned. Without this, fresh-start
-    # Talkatoo% seeds can soft-lock when all 3 Talkatoo picks in a
-    # kingdom are gated behind a Capture/Cap item the player hasn't
-    # received yet.
+    # When talkatoo_mode is on, ship a per-kingdom sphere-safe ordered list
+    # of AP-pool moon shine_ids so the bridge can keep a per-kingdom cursor
+    # + window of 3. Without this, fresh-start seeds can soft-lock when all
+    # 3 Talkatoo picks in a kingdom are gated behind items not yet received.
     if not slot_data.get("talkatoo_mode"):
         return slot_data
     from ..talkatoo_order import build_talkatoo_order

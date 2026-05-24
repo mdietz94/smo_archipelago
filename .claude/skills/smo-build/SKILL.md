@@ -5,7 +5,7 @@ description: Build the SMO Switch mod (subsdk9 / switch-mod/, LibHakkun + Odysse
 
 # Building the SMO Switch mod
 
-The Switch mod targets SMO 1.0.0 and is built on [LibHakkun](https://github.com/fruityloops1/LibHakkun) (subsdk runtime) + [OdysseyHeaders](https://github.com/MonsterDruide1/OdysseyHeaders) (SMO type layouts) + sail (the LibHakkun symbol-DB resolver). The exlaunch + lunakit-vendor toolchain it ran on through 2026-05-21 was retired in the Phase 6 cutover.
+The Switch mod targets SMO 1.0.0 and is built on [LibHakkun](https://github.com/fruityloops1/LibHakkun) (subsdk runtime) + [OdysseyHeaders](https://github.com/MonsterDruide1/OdysseyHeaders) (SMO type layouts) + sail (the LibHakkun symbol-DB resolver).
 
 ## Golden rule
 

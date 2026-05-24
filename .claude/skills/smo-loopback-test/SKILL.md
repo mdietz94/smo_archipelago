@@ -88,9 +88,7 @@ Run with SMOClient already up (no AP needed; the Client's SwitchServer accepts t
 
 ## Connect behavior
 
-SMOClient does NOT auto-dial AP on launch (default host is unset to avoid `archipelago.gg` "Connection refused" before the user configures anything), but Click-Connect dials AP immediately whether or not the Switch is up. The user can validate creds and watch items flow before booting SMO. The earlier SNI-style gate that parked the dial until HELLO was removed 2026-05-22 — see the "Eager AP dial" row in CLAUDE.md's decisions table.
-
-For the loopback flow above, AP connection proceeds the moment Connect fires, regardless of when `switch_smoke_test.py` sends HELLO.
+SMOClient does NOT auto-dial AP on launch (default host is unset to avoid `archipelago.gg` "Connection refused" before the user configures anything), but Click-Connect dials AP immediately whether or not the Switch is up. The user can validate creds and watch items flow before booting SMO. For the loopback flow above, AP connection proceeds the moment Connect fires, regardless of when `switch_smoke_test.py` sends HELLO.
 
 ## Settings overrides
 
