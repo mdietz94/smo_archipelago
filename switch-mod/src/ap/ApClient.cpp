@@ -985,6 +985,21 @@ void ApClient::handleLine(char* line, std::size_t line_len) {
             ++applied;
         }
         SMOAP_LOG_INFO("[m6-outstanding] applied %zu kingdom balances", applied);
+    } else if (eq(m.t, "shop_labels")) {
+        // Shop moon label table — full overwrite. Bridge sends one message
+        // on AP Connected and again on every HELLO replay; an empty
+        // `entries` array clears the table. ShopItemMessageHook's patched
+        // callback consults ApState::lookupShopLabel for each (fileName,
+        // key) the shop UI requests; misses fall through to vanilla
+        // al::getSystemMessageString so non-moon shop slots render unchanged.
+        auto& st = ApState::instance();
+        const auto& sl = m.shop_labels;
+        st.writeShopLabels(sl.entries, sl.entry_count);
+        if (sl.truncated) {
+            SMOAP_LOG_WARN("[shop-labels] truncated at %zu entries "
+                           "(bump kShopLabelMax?)", sl.entry_count);
+        }
+        SMOAP_LOG_INFO("[shop-labels] applied %zu entries", sl.entry_count);
     } else if (eq(m.t, "talkatoo_pool")) {
         // Talkatoo% mode — bridge ships one message per kingdom on HELLO
         // replay (and again whenever the user toggles mode), or a single

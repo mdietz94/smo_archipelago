@@ -501,6 +501,42 @@ class ActivateMsg:
 
 
 @dataclass
+class ShopLabelEntry:
+    """One row in a ShopLabelsMsg: substitute the label in slot
+    (file_name, key) of Crazy Cap's shop UI with `label`.
+
+    `file_name` and `key` are SMO 1.0.0 strings observed empirically — the
+    Switch's ShopItemMessageHook logs each unique (file_name, key) pair on
+    first sighting via SMOAP_LOG_INFO; the bridge's hard-coded
+    {kingdom → (file_name, key)} dict (in switch_server.py) is populated
+    from those logs.
+
+    `label` is plain UTF-8 in human form (e.g. "Got Cap Power Moon!" /
+    "Sent Cascade Power Moon to Player3"). The Switch sanitizes via
+    util::sanitizeForMsgFont and UTF-8→UTF-16 converts before storing.
+    """
+    file: str = ""
+    key: str = ""
+    label: str = ""
+
+
+@dataclass
+class ShopLabelsMsg:
+    """Bridge -> Switch: full overwrite of the shop moon-label table.
+
+    Sent once on AP Connected (after scout cache fills) and again on every
+    HELLO replay. An empty `entries` list clears the substitution and the
+    shop UI falls back to vanilla "Power Moon" / SMO's own moon names.
+
+    Wire size: 32 entries × ~250 B JSON ≈ 8 KB worst case (≈ kShopLabelMax
+    on the Switch side). 11 vanilla SMO shops fit with comfortable
+    headroom.
+    """
+    t: str = "shop_labels"
+    entries: list[dict] = field(default_factory=list)
+
+
+@dataclass
 class TalkatooPoolMsg:
     """Talkatoo% per-kingdom AP-pool payload — ONE kingdom per message.
 

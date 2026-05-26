@@ -151,3 +151,30 @@ def format_moon_label(
     else:
         text = f"Sent {body} to {recipient_slot}"
     return truncate_utf8(text, max_bytes)
+
+
+def format_shop_moon_label(
+    item: ClassifiedItem,
+    recipient_slot: str,
+    me_slot: str | None,
+    max_bytes: int = MAX_MOON_LABEL_BYTES,
+) -> str:
+    """Pre-purchase label for a Crazy Cap shop moon slot.
+
+    Unlike `format_moon_label` (past-tense "Got X!" / "Sent X to Y" for the
+    moon-get cutscene that fires AFTER collection), the shop slot is read
+    BEFORE the player decides whether to buy. Tense matches:
+
+      * routes to me    → "<name>"            (e.g. "Cap Power Moon")
+      * routes to other → "<name> for <slot>" (e.g. "Cap Power Moon for P3")
+
+    Same shortening rules, byte budget, and truncation marker as
+    `format_moon_label`. The Switch's ShopItemMessageHook substitutes this
+    string verbatim for SMO's vanilla "Power Moon" text.
+    """
+    body = _shorten_item_name(item)
+    if me_slot is not None and recipient_slot == me_slot:
+        text = body
+    else:
+        text = f"{body} for {recipient_slot}"
+    return truncate_utf8(text, max_bytes)

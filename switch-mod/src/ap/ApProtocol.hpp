@@ -438,6 +438,48 @@ struct TalkatooPool {
     bool truncated = false;
 };
 
+// Bridge -> Switch shop-moon label table.
+//
+// SMO's Crazy Cap shops sell one Power Moon per kingdom for purple coins
+// (the "Shopping in <city>" AP location). Vanilla, the shop UI fetches the
+// localized moon name via `al::getSystemMessageString(messageSystem,
+// fileName, key)` inside `ShopLayoutInfo::updateItemPartsData`. The mod
+// patches the two BL sites that make that call and substitutes whatever
+// label this message ships for the matching (file_name, key) pair.
+//
+// Lifecycle: bridge sends ONE message on AP Connected and again on every
+// HELLO replay; entries are full-overwrite (the previous table is dropped).
+// Sending an empty table clears the substitution.
+//
+// Mapping discovery: the (file_name, key) strings the shop UI uses are
+// observed empirically — ShopItemMessageHook logs each unique pair once
+// via SMOAP_LOG_INFO. The bridge consults a hard-coded
+// {kingdom → (file_name, key)} dict; populating that dict for an unknown
+// kingdom is a single Python edit after watching the Switch tab in the
+// SMOClient log on the first Crazy Cap visit.
+//
+// Per-entry byte budget: 64 (file_name) + 64 (key) + 64 (label) ≈ 192 +
+// JSON overhead. 32 entries × ~250 B JSON = 8 KB worst case — at the
+// 8 KiB line cap, so 32 is the max here. 11 vanilla shop slots fits
+// comfortably; the headroom covers future apworld additions (e.g. if a
+// shop ever sells more than the purple-coin moon).
+inline constexpr std::size_t kShopLabelMax = 32;
+inline constexpr std::size_t kShopLabelTextCap = 64;
+    // 64 bytes is comfortable headroom over Channel-A's 30-byte MoonLabel
+    // budget; the shop pane is wider than the cutscene's TxtScenario.
+
+struct ShopLabelEntry {
+    char file_name[kCheckFieldCap] = {};
+    char key[kCheckFieldCap] = {};
+    char label[kShopLabelTextCap] = {};
+};
+
+struct ShopLabels {
+    ShopLabelEntry entries[kShopLabelMax]{};
+    std::size_t entry_count = 0;
+    bool truncated = false;
+};
+
 // (de)serialization --------------------------------------------------------
 // Implementations in ApProtocol.cpp use util/Json.hpp (no STL exceptions).
 //
@@ -476,6 +518,7 @@ struct DecodedMsg {
     ShineScouts shine_scouts{};
     Outstanding outstanding{};
     TalkatooPool talkatoo_pool{};
+    ShopLabels shop_labels{};
 };
 bool decode(const char* data, std::size_t len, DecodedMsg& out);
 

@@ -470,6 +470,37 @@ bool parseTalkatooPool(Reader& r, TalkatooPool& out) {
     return true;
 }
 
+bool parseShopLabels(Reader& r, ShopLabels& out) {
+    out.entry_count = 0;
+    out.truncated = false;
+    std::string_view key;
+    while (r.nextField(key)) {
+        if (key == "entries") {
+            if (!r.enterArray()) return false;
+            while (r.hasMoreInArray()) {
+                if (!r.enterObject()) return false;
+                ShopLabelEntry tmp{};
+                std::string_view fk;
+                while (r.nextField(fk)) {
+                    if      (fk == "file")  { if (!readIntoField(r, tmp.file_name)) return false; }
+                    else if (fk == "key")   { if (!readIntoField(r, tmp.key))       return false; }
+                    else if (fk == "label") { if (!readIntoField(r, tmp.label))     return false; }
+                    else                    { return false; }
+                }
+                if (!r.exitObject()) return false;
+                if (out.entry_count < kShopLabelMax) {
+                    out.entries[out.entry_count] = tmp;
+                    ++out.entry_count;
+                } else {
+                    out.truncated = true;
+                }
+            }
+            if (!r.exitArray()) return false;
+        } else { return false; }
+    }
+    return true;
+}
+
 bool parseMoonLabel(Reader& r, MoonLabel& out) {
     std::int64_t tmp = 0;
     std::string_view key;
@@ -512,6 +543,7 @@ bool decode(const char* data, std::size_t len, DecodedMsg& out) {
     else if (eqStr(out.t, "shine_scouts"))   ok = parseShineScouts(r, out.shine_scouts);
     else if (eqStr(out.t, "outstanding"))    ok = parseOutstanding(r, out.outstanding);
     else if (eqStr(out.t, "talkatoo_pool"))  ok = parseTalkatooPool(r, out.talkatoo_pool);
+    else if (eqStr(out.t, "shop_labels"))    ok = parseShopLabels(r, out.shop_labels);
     else {
         // Unknown type: leave out.t set so handleLine can warn. Don't bother
         // draining the rest of the object — caller treats unknown as ignored.

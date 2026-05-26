@@ -16,7 +16,7 @@ from Utils import async_start
 from .commands import parse_command
 from .config import ColorsConfig
 from .datapackage import DataPackage
-from .display import format_moon_label
+from .display import format_moon_label, format_shop_moon_label
 from .maps import CaptureMap, ShineMap
 from .protocol import (
     ItemKind,
@@ -27,6 +27,7 @@ from .protocol import (
     classification_from_flags,
 )
 from .scout_cache import ScoutCache, request_scout
+from .shop_labels import SHOP_LOCATION_TO_FILEKEY, has_any_populated_keys
 from .state import BridgeState, ItemEvent
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -906,6 +907,10 @@ class SMOContext(CommonContext):
                     for k, v in raw_order.items()
                 }
                 await self._derive_and_push_talkatoo_pool()
+                # Shop moon label substitution. Depends on the datapackage
+                # being hot (loc_name_to_id) AND scout cache lookups
+                # working — both are true by the time we reach here.
+                await self._derive_and_push_shop_labels()
                 await self.switch.send_ap_state("ready")
                 # Datapackage is now hot. If the Switch's state-snapshot
                 # landed during the AP handshake window, its entries were
@@ -981,6 +986,15 @@ class SMOContext(CommonContext):
                     await self.switch.try_fire_reconcile_cappy()
                 except Exception:
                     log.exception("try_fire_reconcile_cappy failed")
+            # Shop moon labels — same scout-warmup hazard as the M-color
+            # palette push above. The Connected-time call returned 0/11 entries
+            # because LocationInfo replies hadn't arrived yet. Re-derive on
+            # every batch so the table grows as scouts come in; last-write-
+            # wins on the Switch side means each push is idempotent.
+            try:
+                await self._derive_and_push_shop_labels()
+            except Exception:
+                log.exception("_derive_and_push_shop_labels failed on LocationInfo batch")
         # Bounced/DeathLink is handled via on_deathlink (CommonContext routes
         # for us; on_package needn't double-handle).
 
@@ -1122,6 +1136,66 @@ class SMOContext(CommonContext):
             )
         self.switch.set_talkatoo_pool(self.talkatoo_mode, kingdoms)
         await self.switch.push_talkatoo_pool()
+
+    async def _derive_and_push_shop_labels(self) -> None:
+        """Build the {(file_name, key) → AP-aware label} table for Crazy Cap
+        shop moons and ship to the Switch.
+
+        For each kingdom in shop_labels.SHOP_LOCATION_TO_FILEKEY whose
+        (file_name, key) tuple is populated, looks up the corresponding AP
+        location id, asks `compose_moon_label_for_location` for the same
+        text Channel A uses in the moon-get cutscene, and ships the
+        (file_name, key, label) triple.
+
+        Skips entries whose:
+          * (file_name, key) is empty (the user hasn't filled them in yet —
+            see shop_labels.py for the discovery flow);
+          * location id resolves to None (AP slot doesn't have the location,
+            apworld drift, or the location is excluded);
+          * label is empty (scout miss / classifier fallthrough — the
+            cutscene path makes the same call and degrades the same way).
+
+        No-op when no Switch is attached or the AP datapackage hasn't
+        been loaded yet.
+        """
+        if self.switch is None:
+            return
+        if not self.is_ap_ready():
+            return
+
+        entries: list[dict] = []
+        for ap_loc_name, (file_name, key) in SHOP_LOCATION_TO_FILEKEY.items():
+            if not file_name or not key:
+                continue
+            loc_id = self.dp.location_name_to_id.get(ap_loc_name)
+            if loc_id is None:
+                continue
+            label = self.compose_shop_label_for_location(loc_id)
+            if not label:
+                continue
+            entries.append({"file": file_name, "key": key, "label": label})
+
+        if not entries and not has_any_populated_keys():
+            # First-time setup: the static map hasn't been populated yet.
+            # Skip the ship entirely so we don't constantly clear the
+            # Switch's table (which is already empty by default). Once the
+            # user fills in shop_labels.py, this branch goes silent.
+            log.debug("[shop-labels] static map empty — skipping push")
+            return
+
+        # Dedupe — this gets called on every LocationInfo batch to handle the
+        # scout-warmup race. Skip the wire push and log line when the table
+        # is byte-identical to the last successful push. Tracks the prior
+        # payload via a tuple-of-tuples (hashable + cheap).
+        signature = tuple((e["file"], e["key"], e["label"]) for e in entries)
+        if signature == getattr(self, "_shop_labels_last_signature", None):
+            return
+        self._shop_labels_last_signature = signature
+
+        self.switch.set_shop_labels(entries)
+        await self.switch.push_shop_labels()
+        log.info("[shop-labels] shipped %d / %d entries",
+                 len(entries), len(SHOP_LOCATION_TO_FILEKEY))
 
     async def _push_palette_for_scout_batch(self, args: dict) -> None:
         """Derive (shine_uid -> palette) from one LocationInfo packet's
@@ -1343,6 +1417,30 @@ class SMOContext(CommonContext):
             return format_moon_label(ci, recipient, self.auth)
         except Exception:
             log.exception("format_moon_label failed for loc_id=%d", loc_id)
+            return None
+
+    def compose_shop_label_for_location(self, loc_id: int) -> str | None:
+        """Crazy Cap shop slot: synthesize a pre-purchase label for `loc_id`.
+
+        Same scout-cache lookup as `compose_moon_label_for_location`, but
+        routes through `format_shop_moon_label` so the tense reads correctly
+        BEFORE the purchase ("X" / "X for Y" instead of past-tense "Got X!"
+        / "Sent X to Y"). Used by `_derive_and_push_shop_labels`.
+        """
+        if not self.display_enabled:
+            return None
+        scout = self.scout_cache.lookup(loc_id)
+        if scout is None:
+            return None
+        item_name = self.dp.item_id_to_name.get(scout.item_id)
+        if not item_name:
+            return None
+        ci = self.dp.classify_item(item_name)
+        recipient = self._sender_name(scout.recipient)
+        try:
+            return format_shop_moon_label(ci, recipient, self.auth)
+        except Exception:
+            log.exception("format_shop_moon_label failed for loc_id=%d", loc_id)
             return None
 
     def is_festival_goal(self) -> bool:

@@ -44,6 +44,7 @@ void installWorldMapSelectHook();
 void installMoonLabelHook();
 void installShineAppearanceHook();
 void installCreditsStartHook();
+void installShopItemMessageHook();
 void installCappyMessageTextHooks();
 void installCappyMessengerSymbols();
 void installSaveLoadHook();
@@ -287,6 +288,14 @@ extern "C" void hkMain() {
     // (the other public Hakkun-based SMO Archipelago project) verbatim.
     SMOAP_LOG_INFO("installing CreditsStartHook (Strategy A: +0x4C54A4 BL inline)");
     smoap::hooks::installCreditsStartHook();
+
+    // ShopItemMessageHook — inline BL patches at +0x2089C4 and +0x208A44
+    // (ShopLayoutInfo::updateItemPartsData call sites for
+    // al::getSystemMessageString). Substitutes AP-aware labels into shop
+    // moon slots; non-moon slots fall through to vanilla. Bridge ships the
+    // {(fileName, key) → label} table via `shop_labels` wire message.
+    SMOAP_LOG_INFO("installing ShopItemMessageHook (BL inline at +0x2089C4 / +0x208A44)");
+    smoap::hooks::installShopItemMessageHook();
 
     SMOAP_LOG_INFO("installing CappyMessenger text-lookup trampolines (4)");
     smoap::hooks::installCappyMessageTextHooks();

@@ -10,6 +10,9 @@
 #include "../hooks/DeathHook.hpp"
 #include "../ui/CappyMessenger.hpp"
 #include "../util/Log.hpp"
+#include "../util/MsgFontSafe.hpp"
+
+#include <cstring>
 
 class PlayerHitPointData;
 
@@ -396,6 +399,126 @@ bool ApState::buildPaySnapshot(PendingPaySnapshot& out) const {
         out.totals[bit] = (n < 0) ? 0 : n;
     }
     return true;
+}
+
+namespace {
+
+// Decode a single UTF-8 codepoint at `src[*pos]`. Advances `*pos` past the
+// consumed bytes. Returns 0xFFFD on malformed input (and advances 1 byte to
+// avoid infinite loops). Used by writeShopLabels to convert sanitized UTF-8
+// labels into UTF-16 BMP codepoints for the patched shop hook.
+std::uint32_t decodeOneUtf8(const char* src, std::size_t len, std::size_t* pos) {
+    if (*pos >= len) return 0;
+    const auto b0 = static_cast<std::uint8_t>(src[*pos]);
+    if (b0 < 0x80) {
+        ++(*pos);
+        return b0;
+    }
+    auto consume_continuation = [&](std::size_t off, std::uint32_t* out) -> bool {
+        if (*pos + off >= len) return false;
+        const auto b = static_cast<std::uint8_t>(src[*pos + off]);
+        if ((b & 0xC0) != 0x80) return false;
+        *out = (*out << 6) | (b & 0x3F);
+        return true;
+    };
+    std::uint32_t cp = 0;
+    std::size_t nbytes = 0;
+    if ((b0 & 0xE0) == 0xC0) { cp = b0 & 0x1F; nbytes = 2; }
+    else if ((b0 & 0xF0) == 0xE0) { cp = b0 & 0x0F; nbytes = 3; }
+    else if ((b0 & 0xF8) == 0xF0) { cp = b0 & 0x07; nbytes = 4; }
+    else { ++(*pos); return 0xFFFD; }
+    for (std::size_t i = 1; i < nbytes; ++i) {
+        if (!consume_continuation(i, &cp)) { ++(*pos); return 0xFFFD; }
+    }
+    *pos += nbytes;
+    return cp;
+}
+
+}  // namespace
+
+void ApState::writeShopLabels(const ShopLabelEntry* entries, std::size_t count) {
+    // Seqlock: even=stable, odd=writing. Frame-thread reader retries on
+    // torn reads (lookupShopLabel). Worker thread is the sole writer.
+    const auto seq0 = shop_label_seq.load(std::memory_order_relaxed);
+    shop_label_seq.store(seq0 + 1, std::memory_order_release);  // even -> odd
+
+    std::size_t written = 0;
+    for (std::size_t i = 0; i < count && written < kShopLabelMax; ++i) {
+        const auto& e = entries[i];
+        // Skip empties — they could never match a hook call and silently
+        // bloat the linear scan.
+        if (e.file_name[0] == '\0' || e.key[0] == '\0') continue;
+
+        auto& slot = shop_labels[written];
+        std::memcpy(slot.file_name, e.file_name, sizeof(slot.file_name));
+        slot.file_name[sizeof(slot.file_name) - 1] = '\0';
+        std::memcpy(slot.key, e.key, sizeof(slot.key));
+        slot.key[sizeof(slot.key) - 1] = '\0';
+
+        // Sanitize via MsgFontSafe: maps the AP-server's UTF-8 (smart quotes,
+        // em-dash, Latin-1 accents, ...) to the codepoints MessageFont38
+        // actually ships. Result is still UTF-8 and ≤ source length in bytes.
+        char sanitized[kShopLabelTextCap];
+        const std::size_t san_len = smoap::util::sanitizeForMsgFont(
+            e.label, sanitized, sizeof(sanitized));
+
+        // UTF-8 → UTF-16 (BMP only; sanitize already collapsed astral
+        // codepoints to ASCII). The hook returns char16_t* so this is the
+        // wire-cap shape SMO expects from al::getSystemMessageString.
+        std::size_t pos = 0;
+        std::size_t u16 = 0;
+        while (pos < san_len && u16 + 1 < kShopLabelTextCap) {
+            const std::uint32_t cp = decodeOneUtf8(sanitized, san_len, &pos);
+            if (cp == 0) break;
+            // sanitizeForMsgFont's output covers BMP; surrogate-pair encoding
+            // isn't reachable in practice. Clamp anything astral to '?' to be
+            // defensive without bringing in surrogate-pair logic.
+            slot.utf16[u16++] = (cp <= 0xFFFF) ? static_cast<char16_t>(cp)
+                                               : static_cast<char16_t>('?');
+        }
+        slot.utf16[u16] = u'\0';
+        slot.utf16_len = static_cast<std::uint16_t>(u16);
+        ++written;
+    }
+
+    // Zero the slot just past the last written entry as a defensive guard so
+    // a stale longer table can't leak via shop_label_count being wrong (the
+    // reader uses shop_label_count, but a blank file_name still skips).
+    if (written < kShopLabelMax) {
+        shop_labels[written].file_name[0] = '\0';
+        shop_labels[written].key[0] = '\0';
+        shop_labels[written].utf16[0] = u'\0';
+        shop_labels[written].utf16_len = 0;
+    }
+    shop_label_count = static_cast<std::uint16_t>(written);
+
+    shop_label_seq.store(seq0 + 2, std::memory_order_release);  // odd -> even
+}
+
+const char16_t* ApState::lookupShopLabel(const char* file_name,
+                                          const char* key) const {
+    if (!file_name || !key) return nullptr;
+    // Seqlock retry loop bounded so a stuck writer doesn't hang the frame
+    // thread. The worker writes once per AP Connected / HELLO replay; under
+    // normal play the lookup hits stable state on the first attempt.
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        const auto s1 = shop_label_seq.load(std::memory_order_acquire);
+        if (s1 & 1u) continue;  // mid-write
+        const std::uint16_t n = shop_label_count;
+        const char16_t* hit = nullptr;
+        for (std::uint16_t i = 0; i < n && i < kShopLabelMax; ++i) {
+            const auto& slot = shop_labels[i];
+            if (slot.file_name[0] == '\0') continue;
+            if (std::strcmp(slot.file_name, file_name) != 0) continue;
+            if (std::strcmp(slot.key, key) != 0) continue;
+            hit = slot.utf16;
+            break;
+        }
+        const auto s2 = shop_label_seq.load(std::memory_order_acquire);
+        if (s1 == s2) return hit;
+        // Torn read — retry.
+    }
+    return nullptr;
 }
 
 }  // namespace smoap::ap

@@ -452,3 +452,31 @@ def test_talkatoo_pool_msg_disable_round_trip():
     # parseTalkatooPool resets defaults at the top of the function.
     assert parsed.get("kingdom", "") == ""
     assert parsed.get("moons", []) == []
+
+
+def test_shop_labels_msg_round_trip():
+    """ShopLabelsMsg: bridge ships substitute text for Crazy Cap moon slots
+    keyed by (file_name, key). Empty entries list clears the table."""
+    from client.protocol import ShopLabelsMsg
+    msg = ShopLabelsMsg(entries=[
+        {"file": "ShopItem", "key": "PowerMoon079", "label": "Got Cap Power Moon!"},
+        {"file": "ShopItem", "key": "PowerMoon158", "label": "Sent Cascade Power Moon to P2"},
+    ])
+    parsed = protocol.decode(protocol.encode(msg))
+    assert parsed == {
+        "t": "shop_labels",
+        "entries": [
+            {"file": "ShopItem", "key": "PowerMoon079", "label": "Got Cap Power Moon!"},
+            {"file": "ShopItem", "key": "PowerMoon158", "label": "Sent Cascade Power Moon to P2"},
+        ],
+    }
+
+
+def test_shop_labels_msg_empty_round_trip():
+    """Empty entries list is wire-different from "never set": it actively
+    clears the Switch's shop_labels storage."""
+    from client.protocol import ShopLabelsMsg
+    msg = ShopLabelsMsg(entries=[])
+    parsed = protocol.decode(protocol.encode(msg))
+    assert parsed["t"] == "shop_labels"
+    assert parsed["entries"] == []

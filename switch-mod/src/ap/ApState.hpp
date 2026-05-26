@@ -321,6 +321,58 @@ public:
                                         char (*out_moons)[kCheckFieldCap],
                                         std::size_t out_cap) const;
 
+    // ---- Shop moon labels ---------------------------------------------------
+    //
+    // ShopItemMessageHook patches two BLs inside `ShopLayoutInfo::updateItem
+    // PartsData` (offsets 0x2089C4 and 0x208A44 in SMO 1.0.0 main.nso) that
+    // would have called `al::getSystemMessageString(messageSystem, fileName,
+    // key)`. The patched callback consults this table by (file_name, key);
+    // on hit it returns a stowed UTF-16 string, on miss it falls through to
+    // the original SDK lookup so the rest of the shop UI (costumes/
+    // stickers/souvenirs) renders unchanged.
+    //
+    // Threading: worker thread writes via writeShopLabels (one
+    // shop_labels wire message → full overwrite). Frame thread reads via
+    // lookupShopLabel from the patched callback. Single-producer/
+    // single-consumer seqlock — even=stable, odd=mid-write — matching the
+    // talkatoo_pools pattern. The frame-thread reader returns nullptr on
+    // torn read so the hook falls through to vanilla getSystemMessageString
+    // rather than handing back garbage.
+    //
+    // Storage: each entry holds (file_name, key, utf16 buffer). The UTF-16
+    // buffer is pre-sanitized via util::sanitizeForMsgFont then UTF-8 →
+    // UTF-16 converted at write time so the hot path is a pointer return.
+    //
+    // Sizes: kShopLabelMax (32) × ~256 B per slot ≈ 8 KiB. Fixed buffers
+    // per the M6.1 allocator-safety contract.
+    struct ShopLabelSlot {
+        char file_name[kCheckFieldCap] = {};
+        char key[kCheckFieldCap] = {};
+        // utf16 storage — sanitizeForMsgFont(label) decoded into UTF-16 with
+        // a trailing 0. Length excludes the terminator.
+        char16_t utf16[kShopLabelTextCap] = {};
+        std::uint16_t utf16_len = 0;
+    };
+    ShopLabelSlot shop_labels[kShopLabelMax]{};
+    std::uint16_t shop_label_count = 0;
+    std::atomic<std::uint32_t> shop_label_seq{0};
+
+    // Worker-thread write — full-overwrite the shop label table.
+    // `count` is clamped to kShopLabelMax. Each (file_name, key, label_utf8)
+    // tuple is normalized: label_utf8 is sanitized via
+    // util::sanitizeForMsgFont then UTF-8 → UTF-16 converted. Empty file_name
+    // or empty key entries are skipped (they could never match a hook call).
+    // Idempotent: re-applying the same table is a no-op observable state.
+    void writeShopLabels(const ShopLabelEntry* entries, std::size_t count);
+
+    // Frame-thread read — linear scan for (file_name, key). Returns nullptr
+    // on miss / torn read; on hit, returns a pointer to the stowed UTF-16
+    // buffer (null-terminated). The pointer is stable for the lifetime of
+    // the table (next writeShopLabels overwrites in place — a worker re-write
+    // could change the returned bytes, but the seqlock retry bracket detects
+    // this and the caller will simply fall through to vanilla).
+    const char16_t* lookupShopLabel(const char* file_name, const char* key) const;
+
     // M7 deferred kill — CaptureStartHook's deny branch sets this instead of
     // calling the release inline; smoap::hooks::tickPendingUncapture() drains
     // it from drawMain after PlayerHackKeeper::isActiveHackStartDemo() returns

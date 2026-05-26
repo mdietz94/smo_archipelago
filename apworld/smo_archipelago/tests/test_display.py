@@ -8,6 +8,7 @@ from client.datapackage import ClassifiedItem
 from client.display import (
     MAX_MOON_LABEL_BYTES,
     format_moon_label,
+    format_shop_moon_label,
     truncate_utf8,
 )
 from client.protocol import ItemKind
@@ -122,3 +123,42 @@ def test_format_me_slot_none_treats_as_outgoing():
     # No own-slot known yet (early connect) — anything reads as outgoing.
     text = format_moon_label(item, recipient_slot="anyone", me_slot=None)
     assert text.startswith("Sent ")
+
+
+# --- format_shop_moon_label --------------------------------------------
+# The shop slot is read BEFORE purchase, so the tense drops the past-tense
+# "Got" / "Sent" framing from format_moon_label.
+
+
+def test_format_shop_self_strips_got():
+    item = _moon("Cap Kingdom Power Moon", "Cap", "Power Moon")
+    text = format_shop_moon_label(item, recipient_slot="Mario", me_slot="Mario")
+    assert text == "Cap Power Moon"
+
+
+def test_format_shop_other_uses_for():
+    item = _moon("Cap Kingdom Power Moon", "Cap", "Power Moon")
+    text = format_shop_moon_label(item, recipient_slot="P3", me_slot="Mario")
+    assert text == "Cap Power Moon for P3"
+
+
+def test_format_shop_capture_self():
+    # Hypothetical: a capture in a shop slot. Same body-shortening as
+    # format_moon_label, no tense decoration when routed to me.
+    item = ClassifiedItem(ItemKind.CAPTURE, "Goomba", cap="Goomba")
+    text = format_shop_moon_label(item, recipient_slot="me", me_slot="me")
+    assert text == "Goomba"
+
+
+def test_format_shop_truncates_when_too_long():
+    item = _moon("Darker Side Kingdom Power Moon", "Darker Side", "Power Moon")
+    text = format_shop_moon_label(item, recipient_slot="VeryLongPlayerNameHere", me_slot="me")
+    assert len(text.encode("utf-8")) <= MAX_MOON_LABEL_BYTES
+    assert text.endswith("-")  # got clipped
+
+
+def test_format_shop_me_slot_none_treats_as_outgoing():
+    item = _moon("Cap Kingdom Power Moon", "Cap", "Power Moon")
+    text = format_shop_moon_label(item, recipient_slot="anyone", me_slot=None)
+    # Pre-auth: no past-tense "Sent", but "for <slot>" still applies.
+    assert text == "Cap Power Moon for anyone"

@@ -37,6 +37,7 @@ from .protocol import (
     OutstandingMsg,
     PongMsg,
     ShineScoutsMsg,
+    ShopLabelsMsg,
     TalkatooPoolMsg,
     kingdom_ap_to_switch,
 )
@@ -383,6 +384,15 @@ class SwitchServer:
         # this, the Switch's ApState::talkatoo_pools[bit] would retain
         # stale entries that Talkatoo would keep re-suggesting.
         self._talkatoo_ever_shipped: set[str] = set()
+        # Shop label table. Built by SMOContext after AP Connected (via
+        # set_shop_labels) by looking up each "<Kingdom>: Shopping in X"
+        # location's scouted item through compose_moon_label_for_location.
+        # The Switch's ShopItemMessageHook substitutes by (file_name, key)
+        # so the bridge stores fully-formed entries. `_shop_labels_configured`
+        # disambiguates "never set" (HELLO before AP Connected) from "ready
+        # to ship" (empty entries means clear, configured=True means send it).
+        self._shop_labels_configured: bool = False
+        self._shop_label_entries: list[dict] = []
 
     def set_deathlink_enabled(self, enabled: bool) -> None:
         """Update the bridge-side DeathLink gate. Called by SMOContext after
@@ -635,6 +645,35 @@ class SwitchServer:
                 moons=list(moons),
             ))
         self._talkatoo_ever_shipped = current_kingdoms
+
+    def set_shop_labels(self, entries: list[dict]) -> None:
+        """Stash the per-shop label entries for shipping to the Switch.
+
+        Each entry is `{"file": <str>, "key": <str>, "label": <str>}`,
+        matching the wire shape the Switch's parseShopLabels expects.
+        Stored verbatim so HELLO replays can re-ship across Switch
+        reconnects. Caller is expected to follow up with
+        `push_shop_labels()` so an already-attached Switch picks up the
+        new table immediately.
+
+        Empty `entries` is allowed (and meaningful — sends a clear).
+        """
+        self._shop_label_entries = list(entries or [])
+        self._shop_labels_configured = True
+
+    async def push_shop_labels(self) -> None:
+        """Send the stashed shop labels to the active Switch.
+
+        No-op when `set_shop_labels` has never been called (HELLO arrived
+        before AP Connected — the context handler re-pushes once
+        slot_data + datapackage land). A configured-but-empty table is
+        wire-different from "never set": it actively CLEARS the Switch's
+        shop_labels storage and reverts to vanilla "Power Moon" / SMO's
+        own moon names.
+        """
+        if not self._shop_labels_configured:
+            return
+        await self._send(ShopLabelsMsg(entries=self._shop_label_entries))
 
     async def send_shine_scouts(self, palette: dict[int, int]) -> None:
         """Push (shine_uid -> palette) to the active Switch, chunked.
@@ -1011,6 +1050,13 @@ class SwitchServer:
         # (Switch HELLO before AP Connected — the context handler
         # re-pushes after slot_data lands).
         await self.push_talkatoo_pool()
+
+        # Shop moon labels: replace Crazy Cap's purple-coin moon slot
+        # display text with the AP-aware label for the corresponding
+        # "Shopping in X" check. No-op when SMOContext hasn't built the
+        # table yet (Switch HELLO before AP Connected — the context
+        # handler re-pushes after the datapackage + scout cache land).
+        await self.push_shop_labels()
 
         # Shine palette replay (per-uid). Routed through _send so it
         # targets the active conn — but during the post-HELLO sequence we
