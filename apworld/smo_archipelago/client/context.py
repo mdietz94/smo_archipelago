@@ -429,6 +429,20 @@ class SMOContext(CommonContext):
         super().on_package(cmd, args)
         asyncio.create_task(self._handle_ap_package(cmd, args))
 
+    def output(self, text: str) -> None:
+        """Mirror `CommandProcessor.output` on the context.
+
+        CommonContext does not define `output`, but production code in
+        this class (e.g. the wizard-ran-mid-session reload notice in
+        `_handle_ap_package('Connected')`) calls `self.output(...)` to
+        surface a user-visible message. Without this method that path
+        crashes with `AttributeError` the first time `reload_maps()`
+        returns True. Routed through the `Client` logger so the message
+        lands in the Archipelago tab — same surface Archipelago's own
+        `_cmd_*` outputs use.
+        """
+        logging.getLogger("Client").info(text)
+
     def on_print_json(self, args: dict) -> None:
         super().on_print_json(args)
         text = args.get("text") or _flatten_print_json(args.get("data", []))

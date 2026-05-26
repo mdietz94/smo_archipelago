@@ -34,9 +34,23 @@ from pathlib import Path
 
 import pytest
 
-# Make vendor/Archipelago importable before the importorskip below.
-_AP = Path(__file__).resolve().parents[3] / "vendor" / "Archipelago"
-if _AP.exists() and str(_AP) not in sys.path:
+# Worktrees don't carry an initialized vendor/Archipelago submodule, so fall
+# back to the main checkout above the worktree root (mirrors test_commands.py).
+def _find_archipelago() -> Path | None:
+    for parent in Path(__file__).resolve().parents:
+        cand = parent / "vendor" / "Archipelago"
+        if (cand / "CommonClient.py").exists():
+            return cand
+        worktrees = parent.parent
+        if worktrees.name == "worktrees":
+            main_cand = worktrees.parent.parent / "vendor" / "Archipelago"
+            if (main_cand / "CommonClient.py").exists():
+                return main_cand
+    return None
+
+
+_AP = _find_archipelago()
+if _AP is not None and str(_AP) not in sys.path:
     sys.path.insert(0, str(_AP))
 
 try:  # pragma: no cover
@@ -45,7 +59,7 @@ try:  # pragma: no cover
 except ImportError:
     pass
 
-CommonClient = pytest.importorskip(
+pytest.importorskip(
     "CommonClient",
     reason="Archipelago checkout not present; init the vendor/Archipelago submodule.",
 )
@@ -67,7 +81,8 @@ def _make_ctx() -> SMOContext:
     )
 
 
-def test_server_only_checked_locations_surfaces():
+@pytest.mark.asyncio
+async def test_server_only_checked_locations_surfaces():
     """The user-report scenario: client relaunched against an AP slot
     that already has checks. Connected packet populated `checked_locations`,
     local-session `locations_checked` is still empty. The provider must
@@ -79,7 +94,8 @@ def test_server_only_checked_locations_surfaces():
     assert ctx.already_checked_loc_ids() == {1001, 1002, 1003}
 
 
-def test_local_only_locations_checked_surfaces():
+@pytest.mark.asyncio
+async def test_local_only_locations_checked_surfaces():
     """Mid-session window between sending a LocationCheck and AP's
     RoomUpdate echoing it back. The provider must include the local set
     so the gate doesn't double-count a snapshot entry the user just
@@ -90,7 +106,8 @@ def test_local_only_locations_checked_surfaces():
     assert ctx.already_checked_loc_ids() == {2001, 2002}
 
 
-def test_union_covers_overlap_and_disjoint():
+@pytest.mark.asyncio
+async def test_union_covers_overlap_and_disjoint():
     """Both populated, with overlap. The provider must return the union
     so neither side's contribution gets dropped."""
     ctx = _make_ctx()
@@ -99,7 +116,8 @@ def test_union_covers_overlap_and_disjoint():
     assert ctx.already_checked_loc_ids() == {1001, 1002, 1003, 2001, 2002}
 
 
-def test_both_empty_returns_empty():
+@pytest.mark.asyncio
+async def test_both_empty_returns_empty():
     """Fresh slot, fresh session — no checks anywhere. Provider returns
     an empty set so the gate classifies every snapshot entry as new
     (correct: prompt the operator to /confirm_snapshot)."""
