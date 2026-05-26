@@ -1287,6 +1287,25 @@ class SMOContext(CommonContext):
             await self.report_goal()
         return loc_id
 
+    def already_checked_loc_ids(self) -> set[int]:
+        """Union of server-known and locally-sent AP location ids.
+
+        Backs the /confirm_snapshot gate (so a snapshot re-enumerating
+        prior-session checks dedupes against the AP server's authoritative
+        record) and the M6-C Cappy-bubble pre_checked set. Must be a union:
+          * `checked_locations` — server state delivered in the Connected
+            packet (`CommonClient.py` line 1041) and `RoomUpdate` (line
+            1075). Carries cross-session history. Reading only the local
+            set `locations_checked` (which starts empty every launch) made
+            the gate prompt to /confirm_snapshot on every reload of a save
+            the server already knew everything about.
+          * `locations_checked` — local state of checks shipped this
+            session. Covers the brief window where we've sent a
+            LocationChecks but the corresponding RoomUpdate hasn't echoed
+            back yet.
+        """
+        return self.checked_locations | self.locations_checked
+
     def resolve_entry_to_loc_id(self, entry: dict) -> int | None:
         """Pure mirror of `report_check`'s resolution path.
 

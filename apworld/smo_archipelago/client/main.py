@@ -267,10 +267,11 @@ async def main(args: argparse.Namespace) -> None:
         # what AP credited them with (normal cutscene-label substitution
         # missed its window while disconnected).
         build_reconcile_cappy_item=ctx.build_reconcile_cappy_item,
-        # M6 phase C reconcile — snapshot of currently-checked AP loc_ids,
-        # captured once before each drain to gate Cappy-bubble synthesis on
-        # "wasn't there already". Re-replays of known checks skip Cappy.
-        get_already_checked_loc_ids=lambda: set(ctx.locations_checked),
+        # M6 phase C reconcile + /confirm_snapshot gate — snapshot of
+        # currently-checked AP loc_ids, captured once before each drain.
+        # See SMOContext.already_checked_loc_ids for the union semantics
+        # (server state ∪ local-session state) and the bug history.
+        get_already_checked_loc_ids=ctx.already_checked_loc_ids,
         # /confirm_snapshot gate — pure resolution of a single snapshot
         # entry into its AP loc_id without I/O / state mutation. Lets the
         # gate count how many entries would credit a NEW AP location and
