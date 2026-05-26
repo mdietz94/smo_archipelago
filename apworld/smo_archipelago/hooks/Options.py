@@ -254,10 +254,11 @@ class RuinedMoonCount(Range):
     """Number of Ruined Kingdom Power Moons (and the Multi-Moon) in the AP item
     pool. Reducing this replaces the dropped Ruined moons with filler — the AP
     checks themselves stay; the player just receives fewer Ruined-flavored moons.
-    Floor is 0: Ruined moons are filler (no longer a Bowser entry requirement),
-    so the player can fully remove Ruined-flavored moons from the pool."""
+    Floor is the smallest count that still satisfies the Ruined kingdom gate
+    (3 effective moons to repair the Odyssey and reach Bowser's Kingdom): one
+    Multi-Moon alone clears it."""
     display_name = "Ruined Kingdom Moon Count"
-    range_start = 0
+    range_start = 1
     range_end = 4
     default = 4
 

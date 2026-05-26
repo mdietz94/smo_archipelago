@@ -94,6 +94,7 @@ constexpr HomeStageRow kHomeStageToKingdom[] = {
     {"SeaWorldHomeStage",        "Seaside"},
     {"LavaWorldHomeStage",       "Luncheon"},
     {"AttackWorldHomeStage",     "Ruined"},
+    {"BossRaidWorldHomeStage",   "Ruined"},
     {"SkyWorldHomeStage",        "Bowser"},
     {"MoonWorldHomeStage",       "Moon"},
     {"PeachWorldHomeStage",      "Mushroom"},

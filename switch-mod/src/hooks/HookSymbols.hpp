@@ -524,37 +524,41 @@ inline constexpr const char* kGameDataFileFindShine =
     "_ZNK12GameDataFile9findShineEii";
 
 // =============================================================================
-// OdysseyRescue — Lost Kingdom softlock prevention.
+// OdysseyRescue — Lost + Ruined Kingdom softlock prevention.
 // =============================================================================
 //
-// Lost Kingdom physically grounds the Odyssey on arrival and blocks
-// backtracking. In our randomizer the moons required to release it can
-// land anywhere in the pre-arrival reachable set, so a player who rushes
-// in may arrive with 0 Lost AP credits and no way back to grab the unswept
-// upstream checks → permanent softlock. Fix mirrors
-// Kgamer77/SuperMarioOdysseyArchipelago v1.2's updatePlayerInfo():
-// per-frame sweep on drawMain (throttled ~60 frames) that detects the
-// crashHome state and force-repairs via SMO's own named GameDataFunction::
-// entry points.
+// Both kingdoms physically ground the Odyssey on arrival and block
+// backtracking. In our randomizer the next-kingdom-required moons can land
+// anywhere in the pre-arrival reachable set, so a player who rushes in may
+// arrive with 0 AP credits and no way back to grab the unswept upstream
+// checks → permanent softlock. Fix mirrors Kgamer77/SuperMarioOdysseyArchipelago
+// v1.2's updatePlayerInfo(): per-frame sweep on drawMain (throttled ~60
+// frames) that detects the broken state and force-repairs via SMO's own
+// named GameDataFunction:: entry points.
 //
-// Ruined Kingdom is intentionally NOT patched. Ruined moons are filler
-// (no apworld gate on Bowser entry), so vanilla flow can take Mario from
-// Ruined to Bowser via the post-Lord-of-Lightning autopilot cinematic
-// without any randomizer-side intervention.
-//
-// All 5 manglings verified via aarch64-none-elf-g++ -c on forward-decls
-// matching MonsterDruide1/OdysseyDecomp src/System/GameDataFunction.h. The
-// unlockWorld mangling is byte-identical to the one our project had
-// pre-c85a27b cleanup ("remove AP-driven kingdom-unlock plumbing").
+// All 10 manglings verified via aarch64-none-elf-g++ -c on forward-decls
+// matching MonsterDruide1/OdysseyDecomp src/System/GameDataFunction.h, and
+// the unlockWorld / isUnlockedWorld names were already in the project
+// pre-c85a27b cleanup with the same manglings.
 
 inline constexpr const char* kGameDataFunctionIsCrashHome =
     "_ZN16GameDataFunction11isCrashHomeE22GameDataHolderAccessor";
 inline constexpr const char* kGameDataFunctionRepairHome =
     "_ZN16GameDataFunction10repairHomeE20GameDataHolderWriter";
+inline constexpr const char* kGameDataFunctionCrashHome =
+    "_ZN16GameDataFunction9crashHomeE20GameDataHolderWriter";
 inline constexpr const char* kGameDataFunctionUnlockWorld =
     "_ZN16GameDataFunction11unlockWorldE20GameDataHolderWriteri";
+inline constexpr const char* kGameDataFunctionIsBossAttackedHome =
+    "_ZN16GameDataFunction18isBossAttackedHomeE22GameDataHolderAccessor";
+inline constexpr const char* kGameDataFunctionRepairHomeByCrashedBoss =
+    "_ZN16GameDataFunction23repairHomeByCrashedBossE20GameDataHolderWriter";
+inline constexpr const char* kGameDataFunctionIsRepairHomeByCrashedBoss =
+    "_ZN16GameDataFunction25isRepairHomeByCrashedBossE22GameDataHolderAccessor";
 inline constexpr const char* kGameDataFunctionGetWorldIndexClash =
     "_ZN16GameDataFunction18getWorldIndexClashEv";
+inline constexpr const char* kGameDataFunctionGetWorldIndexSky =
+    "_ZN16GameDataFunction16getWorldIndexSkyEv";
 inline constexpr const char* kGameDataFunctionGetCurrentStageName =
     "_ZN16GameDataFunction19getCurrentStageNameE22GameDataHolderAccessor";
 

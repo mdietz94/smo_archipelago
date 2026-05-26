@@ -33,9 +33,7 @@ KINGDOM_MOON_GATES = {
     "Snow":    10,
     "Seaside": 10,
     "Luncheon": 18,
-    # Ruined intentionally absent: Ruined moons are filler (per items.json)
-    # and Bowser's entry has no per-kingdom moon gate in regions.json.
-    # Ruined exists for the Lord-of-Lightning boss fight only.
+    "Ruined":   3,
     "Bowser's": 8,
 }
 
@@ -56,10 +54,7 @@ KINGDOM_MOON_COUNT_OPTIONS = {
     "Snow":     "snow_moon_count",
     "Seaside":  "seaside_moon_count",
     "Luncheon": "luncheon_moon_count",
-    # Ruined intentionally absent (matches KINGDOM_MOON_GATES). The
-    # RuinedMoonCount option class is retained in hooks/Options.py for
-    # yaml back-compat but is no longer consumed by _trim_kingdom_moons_to_options;
-    # filler trimming via adjust_filler_items handles Ruined's pool now.
+    "Ruined":   "ruined_moon_count",
     "Bowser's": "bowsers_moon_count",
 }
 

@@ -26,13 +26,15 @@ const char* kingdomForBit(std::uint8_t bit);
 //
 // Boss (id 11, develop name "Attack") and Sky (id 12) ARE identity-mapped:
 // per OdysseyDecomp + the actual SMO 1.0.0 ShineList contents,
-// AttackWorldHomeStage holds the RUINED Kingdom shines (Lord of Lightning,
-// Roulette Tower, etc.) and SkyWorldHomeStage holds the BOWSER'S Kingdom
-// shines (Bowser's Castle, Jizo, Bowser Statue's Nose, etc.). Our
-// kKingdoms[] already orders "Ruined" at bit 11 and "Bowser" at bit 12,
-// matching SMO. An earlier version of this table mistakenly added a
-// Boss/Sky swap and produced the Bowser↔Ruined HUD/outstanding swap users
-// observed in late-game play.
+// AttackWorldHomeStage (alias BossRaidWorldHomeStage — different SMO
+// subsystems report the same kingdom under either name, so the home-stage
+// table in KingdomUnlock.cpp accepts both) holds the RUINED Kingdom shines
+// (Lord of Lightning, Roulette Tower, etc.) and SkyWorldHomeStage holds
+// the BOWSER'S Kingdom shines (Bowser's Castle, Jizo, Bowser Statue's
+// Nose, etc.). Our kKingdoms[] already orders "Ruined" at bit 11 and
+// "Bowser" at bit 12, matching SMO. An earlier version of this table
+// mistakenly added a Boss/Sky swap and produced the Bowser↔Ruined HUD/
+// outstanding swap users observed in late-game play.
 //
 // Other 13 ids are identity-mapped. Returns 0xff for out-of-range / unknown
 // (caller treats as "kingdom-less" and suppresses any debit). Don't reorder

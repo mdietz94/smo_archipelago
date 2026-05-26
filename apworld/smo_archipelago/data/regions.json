@@ -83,7 +83,7 @@
         ]
     },
     "Bowser's Kingdom": {
-        "requires": [],
+        "requires": "{KingdomMoons(Ruined,3)}",
         "connects_to": [
             "Moon Kingdom",
             "Pokino"

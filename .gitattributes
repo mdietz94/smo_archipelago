@@ -1,5 +1,5 @@
-# Git hooks must keep LF line endings even on Windows. With core.autocrlf=true
-# (the default on most Windows clones) `git checkout` would otherwise rewrite
-# them to CRLF, and the `#!/usr/bin/env sh` shebang chokes when bash reads
-# CR-terminated script lines.
+# Force LF for all text files in this repo, overriding core.autocrlf=true.
+# Without this, Windows git checkouts rewrite every file to CRLF, producing
+# spurious ^M in diffs and editor views.
+*            text=auto eol=lf
 .githooks/*  text eol=lf

@@ -108,27 +108,28 @@ _ZNK12GameDataFile15isOpenShineNameEii
 _ZN12GameDataFile18tryUnlockShineNameEii
 _ZNK12GameDataFile9findShineEii
 
-// OdysseyRescue — Lost Kingdom softlock prevention.
+// OdysseyRescue — Lost + Ruined Kingdom softlock prevention.
 //
-// In our randomizer the player can rush into Lost (wrecked-Odyssey state)
-// without having received enough Lost AP credits to release the Odyssey,
-// and Lost doesn't permit backtracking — permanent softlock. Mirrors
-// Kgamer77/SuperMarioOdysseyArchipelago v1.2's updatePlayerInfo() fix:
-// per-frame sweep that calls repairHome / unlockWorld whenever isCrashHome
-// holds inside ClashWorldHomeStage.
+// In our randomizer the player can rush into Lost (wrecked-Odyssey state) or
+// Ruined (boss-attacked state) without having received enough kingdom-specific
+// moon AP credits to release the Odyssey, and neither kingdom permits
+// backtracking — permanent softlock. Mirrors Kgamer77/SuperMarioOdysseyArchipelago
+// v1.2's updatePlayerInfo() fix: per-frame sweep that calls repairHome /
+// unlockWorld whenever isCrashHome or isBossAttackedHome holds.
 //
-// Ruined Kingdom is intentionally NOT patched. Ruined moons are filler in
-// our pool (no apworld gate on Bowser entry), so vanilla flow handles the
-// post-Lord-of-Lightning Bowser transition naturally.
-//
-// All 5 manglings produced via aarch64-none-elf-g++ on forward-decls
-// matching MonsterDruide1/OdysseyDecomp src/System/GameDataFunction.h.
-// The unlockWorld name was already in the project pre-c85a27b cleanup and
-// resurrected with its original mangling.
+// All 10 manglings produced via aarch64-none-elf-g++ on forward-decls matching
+// MonsterDruide1/OdysseyDecomp src/System/GameDataFunction.h. The unlockWorld
+// name was already in the project pre-c85a27b cleanup and resurrected with
+// its original mangling.
 _ZN16GameDataFunction11isCrashHomeE22GameDataHolderAccessor
 _ZN16GameDataFunction10repairHomeE20GameDataHolderWriter
+_ZN16GameDataFunction9crashHomeE20GameDataHolderWriter
 _ZN16GameDataFunction11unlockWorldE20GameDataHolderWriteri
+_ZN16GameDataFunction18isBossAttackedHomeE22GameDataHolderAccessor
+_ZN16GameDataFunction23repairHomeByCrashedBossE20GameDataHolderWriter
+_ZN16GameDataFunction25isRepairHomeByCrashedBossE22GameDataHolderAccessor
 _ZN16GameDataFunction18getWorldIndexClashEv
+_ZN16GameDataFunction16getWorldIndexSkyEv
 _ZN16GameDataFunction19getCurrentStageNameE22GameDataHolderAccessor
 
 // GrowSeedInstantHook: rs::getGrowFlowerTime(const al::LiveActor*,
