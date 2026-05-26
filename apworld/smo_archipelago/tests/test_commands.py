@@ -69,6 +69,8 @@ class _StubSwitch:
         self.push_deathlink_calls: int = 0
         self.talkatoo_pool_calls: list[tuple[bool, dict[str, list[str]]]] = []
         self.push_talkatoo_calls: int = 0
+        self.shop_label_calls: list[list[dict]] = []
+        self.push_shop_label_calls: int = 0
 
     async def send_item(self, item: ItemMsg) -> None:
         self.items.append(item)
@@ -106,6 +108,12 @@ class _StubSwitch:
 
     async def push_talkatoo_pool(self) -> None:
         self.push_talkatoo_calls += 1
+
+    def set_shop_labels(self, entries: list[dict]) -> None:
+        self.shop_label_calls.append([dict(e) for e in entries])
+
+    async def push_shop_labels(self) -> None:
+        self.push_shop_label_calls += 1
 
     async def drain_pending_snapshot(self) -> None:
         """M6 phase C reconcile path — Connected calls this. The real
