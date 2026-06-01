@@ -189,10 +189,55 @@ def ensure_sail_built() -> None:
         shutil.copy2(sail_exe, sail_noext)
 
 
+def _ensure_python3_on_path(env: dict) -> None:
+    """Ensure ``python3.exe`` is reachable in the cmake subprocess PATH.
+
+    LibHakkun's toolchain.cmake runs bare ``python3
+    sys/tools/setup_libcxx_prepackaged.py`` to unpack lib/std/*.a at
+    configure time.  On Windows, standard CPython installs ship
+    ``python.exe`` but NOT ``python3.exe``.  The Microsoft Store stub
+    that answers ``python3`` silently exits without writing anything, so
+    ``lib/std/`` is never populated and the cmake compiler-check link
+    fails with missing *.a.
+
+    ``ensure_libstd_downloaded()`` above already pre-runs the download
+    with ``sys.executable`` before cmake gets a crack at it, but this
+    shim is a second line of defence for any other ``python3`` calls
+    cmake may make (and for re-configure runs where the libs already
+    exist and ``ensure_libstd_downloaded`` returns early).
+
+    If ``python3.exe`` still isn't present in ``PYTHON_BIN``, we create
+    the shim in ``%LOCALAPPDATA%/SMOArchipelago/bin/`` (always writable)
+    and prepend that directory so it shadows any Store stub on the
+    inherited PATH.
+    """
+    if sys.platform != "win32":
+        return
+    if os.path.isfile(os.path.join(PYTHON_BIN, "python3.exe")):
+        return  # shim already in place — nothing to do
+
+    py_exe = os.path.join(PYTHON_BIN, "python.exe")
+    local_appdata = os.environ.get("LOCALAPPDATA", "")
+    if not local_appdata or not os.path.isfile(py_exe):
+        return
+    shim_dir = os.path.join(local_appdata, "SMOArchipelago", "bin")
+    shim = os.path.join(shim_dir, "python3.exe")
+    if not os.path.isfile(shim):
+        try:
+            os.makedirs(shim_dir, exist_ok=True)
+            shutil.copy2(py_exe, shim)
+        except OSError:
+            return  # cmake will surface a clear error about python3
+    path_val = env.get("PATH", "")
+    if shim_dir not in path_val.split(os.pathsep):
+        env["PATH"] = shim_dir + os.pathsep + path_val
+
+
 def configure_env() -> dict:
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([PYTHON_BIN, LLVM_BIN, CMAKE_BIN, NINJA_BIN, MINGW_BIN, env.get("PATH", "")])
     env["CMAKE_GENERATOR"] = "Ninja"
+    _ensure_python3_on_path(env)
     return env
 
 
