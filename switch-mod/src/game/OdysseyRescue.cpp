@@ -28,6 +28,7 @@ using UnlockWorldFn               = void        (*)(GameDataHolderWriter, int);
 using IsBossAttackedHomeFn        = bool        (*)(GameDataHolderAccessor);
 using RepairHomeByCrashedBossFn   = void        (*)(GameDataHolderWriter);
 using IsRepairHomeByCrashedBossFn = bool        (*)(GameDataHolderAccessor);
+using IsUnlockedWorldFn           = bool        (*)(GameDataHolderAccessor, int);
 using GetWorldIndexFn             = int         (*)();
 using GetCurrentStageNameFn       = const char* (*)(GameDataHolderAccessor);
 
@@ -39,6 +40,7 @@ struct ResolvedFns {
     IsBossAttackedHomeFn        isBossAttackedHome        = nullptr;
     RepairHomeByCrashedBossFn   repairHomeByCrashedBoss   = nullptr;
     IsRepairHomeByCrashedBossFn isRepairHomeByCrashedBoss = nullptr;
+    IsUnlockedWorldFn           isUnlockedWorld           = nullptr;
     GetWorldIndexFn             getWorldIndexClash        = nullptr;
     GetWorldIndexFn             getWorldIndexSky          = nullptr;
     GetCurrentStageNameFn       getCurrentStageName       = nullptr;
@@ -81,6 +83,8 @@ void installOdysseyRescueSymbols() {
     ok &= resolveOne(g_fns.isRepairHomeByCrashedBoss,
         smoap::sym::kGameDataFunctionIsRepairHomeByCrashedBoss,
         "isRepairHomeByCrashedBoss");
+    ok &= resolveOne(g_fns.isUnlockedWorld,
+        smoap::sym::kGameDataFunctionIsUnlockedWorld, "isUnlockedWorld");
     ok &= resolveOne(g_fns.getWorldIndexClash,
         smoap::sym::kGameDataFunctionGetWorldIndexClash, "getWorldIndexClash");
     ok &= resolveOne(g_fns.getWorldIndexSky,
@@ -150,31 +154,60 @@ void runOdysseySoftlockSweep() {
     }
 
     // --- Bowser's-Kingdom unlock on genuine Lord-of-Lightning defeat ---
-    // Restored 2026-06-02 from Kgamer77/SuperMarioOdysseyArchipelago v1.2,
-    // whose comment reads: "Edge case where game repairs odyssey in ruined but
-    // doesn't unlock bowser kingdom". The home-status cycling above (shared by
-    // Kgamer77's build and ours) can make SMO skip its OWN post-boss Bowser
-    // unlock; this compensates.
+    // Compensates for Kgamer77's documented "Edge case where game repairs
+    // odyssey in ruined but doesn't unlock bowser kingdom" — the home-status
+    // cycling above can make SMO skip its own post-boss Bowser unlock, leaving
+    // Bowser half-unlocked → broken arrival cinematic / frozen camera.
     //
-    // The gate is load-bearing: isRepairHomeByCrashedBoss is HomeStatus::
-    // RepairedHomeByCrashedBoss(7), set ONLY by the game's genuine boss-defeat
-    // sequence. Our force-repair cycle above leaves the status at CrashedHome(4)
-    // → RepairedHome(5) (never 7), so this never fires mid-fight — only once,
-    // on a real defeat. That is the crucial difference from the 8179e7b
-    // Moon-skip regression, which (a) ran the Lost block BEFORE this one,
-    // leaving the Odyssey stuck in CrashedHome, and (b) added an extra
-    // ruined_credits>=3 gate. Kgamer77 ships neither; with the correct
-    // Ruined-before-Lost order (above) the status==7 gate fires cleanly.
-    // MUST be playtested Ruined→Bowser to confirm no Moon-skip recurs.
-    // See [[project-odyssey-unlockworld-skips-bowser]].
-    if (g_fns.isRepairHomeByCrashedBoss(acc)) {
-        static int s_bossEdge_log = 0;
-        if ((s_bossEdge_log++ % 600) == 0) {
-            SMOAP_LOG_INFO(
-                "OdysseyRescue: isRepairHomeByCrashedBoss → unlockWorld(Sky) "
-                "(Bowser unlock on genuine boss defeat)");
+    // CRITICAL — why this can't reintroduce the 8179e7b Moon-skip:
+    //   * unlockWorld(Sky) → GameProgressData::unlockNextWorld(12), whose FIRST
+    //     statement is `if (isUnlockWorld(12)) return;` — IDEMPOTENT. It only
+    //     advances mUnlockWorldNum when Bowser is still locked.
+    //   * SMO's post-Ruined autopilot chooses its destination by SWITCHING on
+    //     mUnlockWorldNum (calcNextLockedWorldIdForWorldMap: case 11 → Sky).
+    //     unlockNormalWorld() is an UNCONDITIONAL ++ with no guard, so if BOTH
+    //     the game's defeat sequence AND we advance the counter it overshoots
+    //     11 → Bowser becomes Moon. That double-count is the Moon-skip.
+    // So we fire only when ALL hold:
+    //   (a) isRepairHomeByCrashedBoss — HomeStatus::RepairedHomeByCrashedBoss(7),
+    //       set only by a genuine defeat (our force-repair cycle lands on 4→5,
+    //       never 7, so this never fires mid-fight);
+    //   (b) Bowser is STILL locked (isUnlockedWorld(Sky) == false) — if the game
+    //       already unlocked it we no-op, so we can never be the second
+    //       increment; and
+    //   (c) (a)+(b) have held for kUnlockDwellPasses consecutive sweeps — gives
+    //       the defeat cutscene + the game's own unlock/autopilot time to run,
+    //       so we don't fire in the window BEFORE the game's unlock and get
+    //       double-counted by a trailing unlockNormalWorld().
+    // In the genuine edge case (game truly never unlocks Bowser) the autopilot
+    // never targeted Bowser anyway, so our late unlock is purely additive
+    // (Bowser appears on the map for manual flight) — nothing left to skip.
+    //
+    // NB: we deliberately do NOT write mUnlockWorldNum directly. The autopilot's
+    // exact expected count is not safely recoverable from the available decomp
+    // (the default switch arm is ambiguous), and a wrong raw write corrupts the
+    // save's world-progression permanently. Routing through the game's own
+    // idempotent unlockNextWorld is the safe equivalent of "set, don't blindly
+    // increment". See [[project-odyssey-unlockworld-skips-bowser]]. STILL needs
+    // a Ruined→Bowser playtest to confirm.
+    constexpr int kUnlockDwellPasses = 8;  // ~8–16s at the ~1/s (≤60fps) cadence
+    static int s_unlockDwell = 0;
+    static int s_bossEdge_log = 0;
+    const int sky = g_fns.getWorldIndexSky();
+    if (g_fns.isRepairHomeByCrashedBoss(acc) && !g_fns.isUnlockedWorld(acc, sky)) {
+        if (++s_unlockDwell >= kUnlockDwellPasses) {
+            if ((s_bossEdge_log++ % 60) == 0) {
+                SMOAP_LOG_INFO(
+                    "OdysseyRescue: repaired-by-crashed-boss + Bowser still "
+                    "locked after %d passes → unlockWorld(Sky) (game failed to "
+                    "unlock Bowser; late additive unlock)", s_unlockDwell);
+            }
+            g_fns.unlockWorld(wr, sky);
         }
-        g_fns.unlockWorld(wr, g_fns.getWorldIndexSky());
+    } else {
+        // Re-arm: either Bowser got unlocked (game did it → we must not touch
+        // the counter) or we left the repaired-by-crashed-boss state.
+        s_unlockDwell = 0;
     }
 
     // --- Lost Kingdom (also the Ruined crashed→flyable converter) ---

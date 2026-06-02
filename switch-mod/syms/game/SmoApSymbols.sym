@@ -118,12 +118,13 @@ _ZNK12GameDataFile9findShineEii
 // unlockWorld whenever isCrashHome or isBossAttackedHome holds.
 //
 // Bowser's-Kingdom force-unlock RESTORED 2026-06-02 (getWorldIndexSky +
-// isRepairHomeByCrashedBoss): Kgamer77 calls unlockWorld("Sky") gated on
-// isRepairHomeByCrashedBoss — the HomeStatus the game sets ONLY on a genuine
-// Lord-of-Lightning defeat — to compensate for the home-status cycling making
-// the game skip its own Bowser unlock. The 2026-05-29 removal over-corrected:
-// the earlier Moon-skip (8179e7b) came from Lost-before-Ruined ordering, not
-// the unlock call itself. See HookSymbols.hpp + OdysseyRescue.cpp.
+// isRepairHomeByCrashedBoss + isUnlockedWorld): unlockWorld("Sky") fixes
+// Kgamer77's edge case (game repairs Odyssey in Ruined but skips its Bowser
+// unlock). The Moon-skip is a mUnlockWorldNum OVERSHOOT — the autopilot
+// switches on that counter (case 11 → Sky) and unlockNormalWorld() is an
+// unconditional ++. unlockNextWorld is idempotent, so OdysseyRescue.cpp gates
+// the call (repaired-by-crashed-boss + Bowser-still-locked + dwell) so we are
+// never the second increment. See HookSymbols.hpp + OdysseyRescue.cpp.
 //
 // Manglings produced via aarch64-none-elf-g++ on forward-decls matching
 // MonsterDruide1/OdysseyDecomp src/System/GameDataFunction.h. The unlockWorld
@@ -137,6 +138,7 @@ _ZN16GameDataFunction18isBossAttackedHomeE22GameDataHolderAccessor
 _ZN16GameDataFunction23repairHomeByCrashedBossE20GameDataHolderWriter
 _ZN16GameDataFunction25isRepairHomeByCrashedBossE22GameDataHolderAccessor
 _ZN16GameDataFunction16getWorldIndexSkyEv
+_ZN16GameDataFunction15isUnlockedWorldE22GameDataHolderAccessori
 _ZN16GameDataFunction18getWorldIndexClashEv
 _ZN16GameDataFunction19getCurrentStageNameE22GameDataHolderAccessor
 

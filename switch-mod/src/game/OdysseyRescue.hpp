@@ -28,14 +28,18 @@
 //      the Odyssey sits grounded between throttled passes. (Kgamer77 already
 //      orders them this way; an interim revision of ours did not.)
 //   2. (alignment, restored 2026-06-02) We DO force-unlock Bowser's Kingdom
-//      ("Sky"), but only via Kgamer77's isRepairHomeByCrashedBoss gate — the
-//      HomeStatus the game sets ONLY on a genuine Lord-of-Lightning defeat.
-//      The home-status cycling in the Ruined block makes SMO skip its own
-//      post-boss Bowser unlock (Kgamer77's documented edge case), leaving
-//      Bowser half-unlocked → broken arrival cinematic / frozen camera. The
-//      gate never fires mid-fight (our cycle leaves status at 4/5, never 7),
-//      so it does not reintroduce the 8179e7b Moon-skip — which was driven by
-//      that build's Lost-before-Ruined ordering, not the unlock call itself.
+//      ("Sky") to fix Kgamer77's documented edge case (game repairs the
+//      Odyssey in Ruined but skips its own Bowser unlock → half-unlocked
+//      Bowser → broken arrival cinematic / frozen camera). The Moon-skip is a
+//      mUnlockWorldNum OVERSHOOT: the post-Ruined autopilot switches on that
+//      counter (case 11 → Bowser) and unlockNormalWorld() is an unconditional
+//      ++, so a double-count (game + us) bumps Bowser→Moon. We avoid being the
+//      second increment with a triple gate: isRepairHomeByCrashedBoss(7) AND
+//      Bowser-still-locked (isUnlockedWorld false — unlockNextWorld is
+//      idempotent so we no-op if the game already did it) AND a multi-pass
+//      dwell so the game's own unlock+autopilot settle first. We do NOT write
+//      mUnlockWorldNum directly — the exact expected count isn't safely
+//      recoverable from the decomp and a bad write corrupts save progression.
 
 #pragma once
 

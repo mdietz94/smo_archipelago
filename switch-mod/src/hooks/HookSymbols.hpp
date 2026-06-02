@@ -536,19 +536,17 @@ inline constexpr const char* kGameDataFileFindShine =
 // frames) that detects the broken state and force-repairs via SMO's own
 // named GameDataFunction:: entry points.
 //
-// NOTE on Bowser's-Kingdom force-unlock (restored 2026-06-02): Kgamer77's
-// reference calls unlockWorld(getWorldIndexSky()) gated on
-// isRepairHomeByCrashedBoss — i.e. ONLY after the game's genuine Lord-of-
-// Lightning defeat sets HomeStatus::RepairedHomeByCrashedBoss(7). Our own
-// force-repair cycle leaves HomeStatus at CrashedHome(4)/RepairedHome(5), so
-// that gate never fires during the fight; it fires once on real defeat.
-// Kgamer77's comment notes the home-status cycling makes the game SKIP its
-// own Bowser unlock on defeat, so this call compensates. An earlier port
-// (8179e7b) reintroduced the Moon-skip — but that build ALSO had the Lost
-// block running before the Ruined block, leaving the Odyssey stuck in
-// CrashedHome mid-fight; the correct Ruined-before-Lost order (current) plus
-// Kgamer77's exact status==7 gate is the combination that works for them.
-// See [[project-odyssey-unlockworld-skips-bowser]].
+// NOTE on Bowser's-Kingdom force-unlock (restored 2026-06-02): we call
+// unlockWorld(getWorldIndexSky()) to fix Kgamer77's documented edge case
+// (game repairs the Odyssey in Ruined but skips its own Bowser unlock). The
+// Moon-skip the 2026-05-29 cleanup feared is a mUnlockWorldNum OVERSHOOT:
+// calcNextLockedWorldIdForWorldMap switches on that counter (case 11 → Sky)
+// and unlockNormalWorld() is an unconditional ++, so game-plus-us double-
+// counting bumps Bowser→Moon. unlockNextWorld is idempotent (returns if the
+// world is already unlocked), so OdysseyRescue.cpp gates the call on
+// isRepairHomeByCrashedBoss(7) + Bowser-still-locked + a dwell to guarantee we
+// are never the second increment. isUnlockedWorld is the locked-check guard.
+// See [[project-odyssey-unlockworld-skips-bowser]] + OdysseyRescue.cpp.
 //
 // All manglings verified via aarch64-none-elf-g++ -c on forward-decls
 // matching MonsterDruide1/OdysseyDecomp src/System/GameDataFunction.h, and
@@ -571,6 +569,8 @@ inline constexpr const char* kGameDataFunctionIsRepairHomeByCrashedBoss =
     "_ZN16GameDataFunction25isRepairHomeByCrashedBossE22GameDataHolderAccessor";
 inline constexpr const char* kGameDataFunctionGetWorldIndexSky =
     "_ZN16GameDataFunction16getWorldIndexSkyEv";
+inline constexpr const char* kGameDataFunctionIsUnlockedWorld =
+    "_ZN16GameDataFunction15isUnlockedWorldE22GameDataHolderAccessori";
 inline constexpr const char* kGameDataFunctionGetWorldIndexClash =
     "_ZN16GameDataFunction18getWorldIndexClashEv";
 inline constexpr const char* kGameDataFunctionGetCurrentStageName =
