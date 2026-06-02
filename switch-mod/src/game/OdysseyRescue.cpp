@@ -9,6 +9,7 @@
 #include "../ap/ApState.hpp"
 #include "../hooks/HookSymbols.hpp"
 #include "../util/Log.hpp"
+#include "KingdomUnlock.hpp"  // kingdomBitFor — Ruined AP-credit gate
 
 namespace smoap::game {
 
@@ -175,13 +176,21 @@ void runOdysseySoftlockSweep() {
     //   (b) Bowser is STILL locked (isUnlockedWorld(Sky) == false) — if the game
     //       already unlocked it we no-op, so we can never be the second
     //       increment; and
-    //   (c) (a)+(b) have held for kUnlockDwellPasses consecutive sweeps — gives
-    //       the defeat cutscene + the game's own unlock/autopilot time to run,
-    //       so we don't fire in the window BEFORE the game's unlock and get
+    //   (c) the player has >= 3 Ruined AP-moon credits — mirrors the apworld's
+    //       regions.json {KingdomMoons(Ruined,3)} gate so our force-unlock can't
+    //       let players reach Bowser's (and thence Moon) ahead of logic; and
+    //   (d) (a)+(b)+(c) have held for kUnlockDwellPasses consecutive sweeps —
+    //       gives the defeat cutscene + the game's own unlock/autopilot time to
+    //       run, so we don't fire in the window BEFORE the game's unlock and get
     //       double-counted by a trailing unlockNormalWorld().
     // In the genuine edge case (game truly never unlocks Bowser) the autopilot
     // never targeted Bowser anyway, so our late unlock is purely additive
     // (Bowser appears on the map for manual flight) — nothing left to skip.
+    //
+    // CAVEAT: the (c) gate only restrains OUR force-unlock; it does NOT block
+    // SMO's own vanilla unlock if the player beats the Lord of Lightning with
+    // <3 Ruined credits. A hard in-game block would need a tryChangeNextStage
+    // gate (the "lie to the game" pattern), which has a softlock history.
     //
     // NB: we deliberately do NOT write mUnlockWorldNum directly. The autopilot's
     // exact expected count is not safely recoverable from the available decomp
@@ -191,22 +200,31 @@ void runOdysseySoftlockSweep() {
     // increment". See [[project-odyssey-unlockworld-skips-bowser]]. STILL needs
     // a Ruined→Bowser playtest to confirm.
     constexpr int kUnlockDwellPasses = 8;  // ~8–16s at the ~1/s (≤60fps) cadence
+    constexpr int kRuinedMoonGate    = 3;  // == regions.json KingdomMoons(Ruined,3)
     static int s_unlockDwell = 0;
     static int s_bossEdge_log = 0;
     const int sky = g_fns.getWorldIndexSky();
-    if (g_fns.isRepairHomeByCrashedBoss(acc) && !g_fns.isUnlockedWorld(acc, sky)) {
+    const auto ruined_bit = kingdomBitFor("Ruined");
+    const int ruined_credits = (ruined_bit < 17)
+        ? smoap::ap::ApState::instance()
+              .ap_moons_kingdom[ruined_bit].load(std::memory_order_relaxed)
+        : -1;
+    if (g_fns.isRepairHomeByCrashedBoss(acc) && !g_fns.isUnlockedWorld(acc, sky) &&
+        ruined_credits >= kRuinedMoonGate) {
         if (++s_unlockDwell >= kUnlockDwellPasses) {
             if ((s_bossEdge_log++ % 60) == 0) {
                 SMOAP_LOG_INFO(
-                    "OdysseyRescue: repaired-by-crashed-boss + Bowser still "
-                    "locked after %d passes → unlockWorld(Sky) (game failed to "
-                    "unlock Bowser; late additive unlock)", s_unlockDwell);
+                    "OdysseyRescue: repaired-by-crashed-boss + Bowser locked + "
+                    "ruined_credits=%d (>=%d) after %d passes → unlockWorld(Sky) "
+                    "(late additive unlock)",
+                    ruined_credits, kRuinedMoonGate, s_unlockDwell);
             }
             g_fns.unlockWorld(wr, sky);
         }
     } else {
-        // Re-arm: either Bowser got unlocked (game did it → we must not touch
-        // the counter) or we left the repaired-by-crashed-boss state.
+        // Re-arm: Bowser got unlocked (game did it → we must not touch the
+        // counter), we left the repaired-by-crashed-boss state, or the Ruined
+        // moon gate (>=3 credits) isn't met yet.
         s_unlockDwell = 0;
     }
 

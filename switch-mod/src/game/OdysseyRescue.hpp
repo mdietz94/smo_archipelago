@@ -34,12 +34,15 @@
 //      mUnlockWorldNum OVERSHOOT: the post-Ruined autopilot switches on that
 //      counter (case 11 → Bowser) and unlockNormalWorld() is an unconditional
 //      ++, so a double-count (game + us) bumps Bowser→Moon. We avoid being the
-//      second increment with a triple gate: isRepairHomeByCrashedBoss(7) AND
+//      second increment with a gate: isRepairHomeByCrashedBoss(7) AND
 //      Bowser-still-locked (isUnlockedWorld false — unlockNextWorld is
-//      idempotent so we no-op if the game already did it) AND a multi-pass
-//      dwell so the game's own unlock+autopilot settle first. We do NOT write
-//      mUnlockWorldNum directly — the exact expected count isn't safely
-//      recoverable from the decomp and a bad write corrupts save progression.
+//      idempotent so we no-op if the game already did it) AND >=3 Ruined
+//      AP-moon credits (mirrors regions.json KingdomMoons(Ruined,3) so we
+//      don't unlock ahead of logic) AND a multi-pass dwell so the game's own
+//      unlock+autopilot settle first. We do NOT write mUnlockWorldNum directly
+//      — the exact expected count isn't safely recoverable from the decomp and
+//      a bad write corrupts save progression. NB the moon gate restrains only
+//      our unlock, not SMO's vanilla post-boss unlock.
 
 #pragma once
 
