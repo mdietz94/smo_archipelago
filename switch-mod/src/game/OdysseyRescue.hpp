@@ -21,17 +21,21 @@
 // gate on local moon counts — the user wants free warp regardless of how
 // many local moons they've collected.
 //
-// Two deliberate departures from Kgamer77:
-//   1. The Ruined block runs BEFORE the Lost block. Ruined's repair path
-//      hands off through crashHome → the Lost else-branch's repairHome, and
-//      that conversion must complete within a single pass or the Odyssey sits
-//      grounded between throttled passes. (Kgamer77 already orders them this
-//      way; an interim revision of ours did not.)
-//   2. We do NOT force-unlock Bowser's Kingdom ("Sky"). Pre-unlocking it makes
-//      SMO's post-Lord-of-Lightning autopilot skip Bowser and warp to Moon.
-//      Forward progression to Bowser stays vanilla and is gated in AP logic by
-//      regions.json's {KingdomMoons(Ruined,3)}. The Ruined repair exists purely
-//      so the player can fly BACKWARD before the boss is beaten.
+// One deliberate departure from Kgamer77, and one alignment back to it:
+//   1. (departure) The Ruined block runs BEFORE the Lost block. Ruined's
+//      repair path hands off through crashHome → the Lost else-branch's
+//      repairHome, and that conversion must complete within a single pass or
+//      the Odyssey sits grounded between throttled passes. (Kgamer77 already
+//      orders them this way; an interim revision of ours did not.)
+//   2. (alignment, restored 2026-06-02) We DO force-unlock Bowser's Kingdom
+//      ("Sky"), but only via Kgamer77's isRepairHomeByCrashedBoss gate — the
+//      HomeStatus the game sets ONLY on a genuine Lord-of-Lightning defeat.
+//      The home-status cycling in the Ruined block makes SMO skip its own
+//      post-boss Bowser unlock (Kgamer77's documented edge case), leaving
+//      Bowser half-unlocked → broken arrival cinematic / frozen camera. The
+//      gate never fires mid-fight (our cycle leaves status at 4/5, never 7),
+//      so it does not reintroduce the 8179e7b Moon-skip — which was driven by
+//      that build's Lost-before-Ruined ordering, not the unlock call itself.
 
 #pragma once
 

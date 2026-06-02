@@ -27,6 +27,7 @@ using CrashHomeFn                 = void        (*)(GameDataHolderWriter);
 using UnlockWorldFn               = void        (*)(GameDataHolderWriter, int);
 using IsBossAttackedHomeFn        = bool        (*)(GameDataHolderAccessor);
 using RepairHomeByCrashedBossFn   = void        (*)(GameDataHolderWriter);
+using IsRepairHomeByCrashedBossFn = bool        (*)(GameDataHolderAccessor);
 using GetWorldIndexFn             = int         (*)();
 using GetCurrentStageNameFn       = const char* (*)(GameDataHolderAccessor);
 
@@ -37,7 +38,9 @@ struct ResolvedFns {
     UnlockWorldFn               unlockWorld               = nullptr;
     IsBossAttackedHomeFn        isBossAttackedHome        = nullptr;
     RepairHomeByCrashedBossFn   repairHomeByCrashedBoss   = nullptr;
+    IsRepairHomeByCrashedBossFn isRepairHomeByCrashedBoss = nullptr;
     GetWorldIndexFn             getWorldIndexClash        = nullptr;
+    GetWorldIndexFn             getWorldIndexSky          = nullptr;
     GetCurrentStageNameFn       getCurrentStageName       = nullptr;
 };
 
@@ -75,8 +78,13 @@ void installOdysseyRescueSymbols() {
     ok &= resolveOne(g_fns.repairHomeByCrashedBoss,
         smoap::sym::kGameDataFunctionRepairHomeByCrashedBoss,
         "repairHomeByCrashedBoss");
+    ok &= resolveOne(g_fns.isRepairHomeByCrashedBoss,
+        smoap::sym::kGameDataFunctionIsRepairHomeByCrashedBoss,
+        "isRepairHomeByCrashedBoss");
     ok &= resolveOne(g_fns.getWorldIndexClash,
         smoap::sym::kGameDataFunctionGetWorldIndexClash, "getWorldIndexClash");
+    ok &= resolveOne(g_fns.getWorldIndexSky,
+        smoap::sym::kGameDataFunctionGetWorldIndexSky, "getWorldIndexSky");
     ok &= resolveOne(g_fns.getCurrentStageName,
         smoap::sym::kGameDataFunctionGetCurrentStageName,
         "getCurrentStageName");
@@ -113,15 +121,10 @@ void runOdysseySoftlockSweep() {
     // Kgamer77/SuperMarioOdysseyArchipelago v1.2 updatePlayerInfo(), whose
     // Ruined block likewise precedes its Lost block.
     //
-    // We deliberately do NOT unlockWorld(Sky) here. "Sky" is SMO's internal
-    // name for Bowser's Kingdom; force-unlocking it while Mario is still in
-    // Ruined makes SMO's post-Lord-of-Lightning autopilot treat Bowser as
-    // already cleared and warp straight to the next still-locked world (Moon),
-    // skipping Bowser. Forward progression to Bowser is left to vanilla (the
-    // post-boss cinematic unlocks it on actual boss defeat) and is gated in AP
-    // logic by regions.json's {KingdomMoons(Ruined,3)}. Before the boss is
-    // beaten Bowser is not on the map, so the freed Odyssey can only fly
-    // BACKWARD — exactly the softlock escape we want.
+    // We do NOT unlockWorld(Sky) *inside* this block — that fires while Mario
+    // is mid-fight and bumps mUnlockWorldNum prematurely (the Moon-skip). The
+    // Bowser unlock instead lives in the separate edge-case block below, gated
+    // on isRepairHomeByCrashedBoss so it only fires on a genuine boss defeat.
     //
     // Ruined's home stage reports as either "AttackWorldHomeStage" or
     // "BossRaidWorldHomeStage" depending on subsystem — match both.
@@ -134,8 +137,7 @@ void runOdysseySoftlockSweep() {
             if ((s_ruined_log++ % 600) == 0) {
                 SMOAP_LOG_INFO(
                     "OdysseyRescue: Ruined bossAttackedHome (stage=%s) → "
-                    "repairByCrashedBoss + crashHome (backtrack enabled; "
-                    "Bowser unlock left to vanilla)",
+                    "repairByCrashedBoss + crashHome (backtrack enabled)",
                     stage ? stage : "<null>");
             }
             g_fns.repairHomeByCrashedBoss(wr);
@@ -145,6 +147,34 @@ void runOdysseySoftlockSweep() {
             // but repair so the player isn't stranded.
             g_fns.repairHome(wr);
         }
+    }
+
+    // --- Bowser's-Kingdom unlock on genuine Lord-of-Lightning defeat ---
+    // Restored 2026-06-02 from Kgamer77/SuperMarioOdysseyArchipelago v1.2,
+    // whose comment reads: "Edge case where game repairs odyssey in ruined but
+    // doesn't unlock bowser kingdom". The home-status cycling above (shared by
+    // Kgamer77's build and ours) can make SMO skip its OWN post-boss Bowser
+    // unlock; this compensates.
+    //
+    // The gate is load-bearing: isRepairHomeByCrashedBoss is HomeStatus::
+    // RepairedHomeByCrashedBoss(7), set ONLY by the game's genuine boss-defeat
+    // sequence. Our force-repair cycle above leaves the status at CrashedHome(4)
+    // → RepairedHome(5) (never 7), so this never fires mid-fight — only once,
+    // on a real defeat. That is the crucial difference from the 8179e7b
+    // Moon-skip regression, which (a) ran the Lost block BEFORE this one,
+    // leaving the Odyssey stuck in CrashedHome, and (b) added an extra
+    // ruined_credits>=3 gate. Kgamer77 ships neither; with the correct
+    // Ruined-before-Lost order (above) the status==7 gate fires cleanly.
+    // MUST be playtested Ruined→Bowser to confirm no Moon-skip recurs.
+    // See [[project-odyssey-unlockworld-skips-bowser]].
+    if (g_fns.isRepairHomeByCrashedBoss(acc)) {
+        static int s_bossEdge_log = 0;
+        if ((s_bossEdge_log++ % 600) == 0) {
+            SMOAP_LOG_INFO(
+                "OdysseyRescue: isRepairHomeByCrashedBoss → unlockWorld(Sky) "
+                "(Bowser unlock on genuine boss defeat)");
+        }
+        g_fns.unlockWorld(wr, g_fns.getWorldIndexSky());
     }
 
     // --- Lost Kingdom (also the Ruined crashed→flyable converter) ---
