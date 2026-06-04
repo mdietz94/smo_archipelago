@@ -1,6 +1,19 @@
 {
   "versions": [
     {
+      "package_version": "1.0.1",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v1.0.1/smo-poptracker-v1.0.1.zip",
+      "sha256": "a85b00487d176401fa4610a1fe8561b74a70b2adc22e985ec6d5afab938024dc",
+      "changelog": [
+        "Restore test_filler_only_locations.py to original",
+        "Ruined: don't filler-only the non-dragon checks",
+        "Ruined: pin Multi-Moon to dragon, drop odyssey-repair sweep",
+        "fix: ensure python3 shim lands in writable dir for cmake lib/std setup",
+        "apworld: remove generate_output - stops false patch file on archipelago.gg",
+        "PopTracker auto-update: add v1.0.0 to versions.json"
+      ]
+    },
+    {
       "package_version": "1.0.0",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v1.0.0/smo-poptracker-v1.0.0.zip",
       "sha256": "66eed4a6c30cc93fcaa6d0530d446a4c9b7de888c07319047e9873df559382bd",
