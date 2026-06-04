@@ -126,13 +126,13 @@ void runOdysseySoftlockSweep() {
     // Bowser unlock instead lives in the separate edge-case block below, gated
     // on isRepairHomeByCrashedBoss so it only fires on a genuine boss defeat.
     //
-    // Ruined's home stage reports as either "AttackWorldHomeStage" or
-    // "BossRaidWorldHomeStage" depending on subsystem — match both.
+    // Match only "BossRaidWorldHomeStage" — Kgamer77 v1.2 verbatim. (An
+    // interim revision also matched "AttackWorldHomeStage"; dropped 2026-06-03
+    // to copy Kgamer77 exactly.)
     if (g_fns.isBossAttackedHome(acc)) {
         const char* stage = g_fns.getCurrentStageName(acc);
-        const bool is_ruined = stage && (
-            std::strcmp(stage, "BossRaidWorldHomeStage") == 0 ||
-            std::strcmp(stage, "AttackWorldHomeStage") == 0);
+        const bool is_ruined =
+            stage && std::strcmp(stage, "BossRaidWorldHomeStage") == 0;
         if (is_ruined) {
             if ((s_ruined_log++ % 600) == 0) {
                 SMOAP_LOG_INFO(
