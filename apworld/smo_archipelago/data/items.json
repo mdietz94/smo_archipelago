@@ -164,7 +164,7 @@
             "Moon",
             "post-metro"
         ],
-        "progression": true
+        "filler": true
     },
     {
         "name": "Ruined Kingdom Multi-Moon",
@@ -173,7 +173,7 @@
             "Moon",
             "post-metro"
         ],
-        "useful": true
+        "filler": true
     },
     {
         "name": "Bowser's Kingdom Power Moon",

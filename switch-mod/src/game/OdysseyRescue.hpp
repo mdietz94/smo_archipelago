@@ -27,22 +27,17 @@
 //      repairHome, and that conversion must complete within a single pass or
 //      the Odyssey sits grounded between throttled passes. (Kgamer77 already
 //      orders them this way; an interim revision of ours did not.)
-//   2. (alignment, restored 2026-06-02) We DO force-unlock Bowser's Kingdom
-//      ("Sky") to fix Kgamer77's documented edge case (game repairs the
-//      Odyssey in Ruined but skips its own Bowser unlock → half-unlocked
-//      Bowser → broken arrival cinematic / frozen camera). The Moon-skip is a
-//      mUnlockWorldNum OVERSHOOT: the post-Ruined autopilot switches on that
-//      counter (case 11 → Bowser) and unlockNormalWorld() is an unconditional
-//      ++, so a double-count (game + us) bumps Bowser→Moon. We avoid being the
-//      second increment with a gate: isRepairHomeByCrashedBoss(7) AND
-//      Bowser-still-locked (isUnlockedWorld false — unlockNextWorld is
-//      idempotent so we no-op if the game already did it) AND >=3 Ruined
-//      AP-moon credits (mirrors regions.json KingdomMoons(Ruined,3) so we
-//      don't unlock ahead of logic) AND a multi-pass dwell so the game's own
-//      unlock+autopilot settle first. We do NOT write mUnlockWorldNum directly
-//      — the exact expected count isn't safely recoverable from the decomp and
-//      a bad write corrupts save progression. NB the moon gate restrains only
-//      our unlock, not SMO's vanilla post-boss unlock.
+//   2. (alignment, 2026-06-03) We DO force-unlock Bowser's Kingdom ("Sky") to
+//      fix Kgamer77's documented edge case (game repairs the Odyssey in Ruined
+//      but skips its own Bowser unlock → half-unlocked Bowser → broken arrival
+//      cinematic / frozen camera). Per the maintainer's call this matches
+//      Kgamer77 v1.2 VERBATIM: ungated apart from isRepairHomeByCrashedBoss(7).
+//      The feared Moon-skip is a mUnlockWorldNum overshoot (the post-Ruined
+//      autopilot switches on that counter; unlockNormalWorld() is an
+//      unconditional ++), but Kgamer77 ships this ungated and it works for
+//      them. The apworld's KingdomMoons(Ruined,3) gate was removed to match
+//      (Kgamer77 requires no Ruined moons for Bowser). If a Ruined→Bowser
+//      playtest skips to Moon, restore the guarded variant from git history.
 
 #pragma once
 

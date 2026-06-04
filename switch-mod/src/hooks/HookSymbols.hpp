@@ -536,17 +536,15 @@ inline constexpr const char* kGameDataFileFindShine =
 // frames) that detects the broken state and force-repairs via SMO's own
 // named GameDataFunction:: entry points.
 //
-// NOTE on Bowser's-Kingdom force-unlock (restored 2026-06-02): we call
-// unlockWorld(getWorldIndexSky()) to fix Kgamer77's documented edge case
-// (game repairs the Odyssey in Ruined but skips its own Bowser unlock). The
-// Moon-skip the 2026-05-29 cleanup feared is a mUnlockWorldNum OVERSHOOT:
-// calcNextLockedWorldIdForWorldMap switches on that counter (case 11 → Sky)
-// and unlockNormalWorld() is an unconditional ++, so game-plus-us double-
-// counting bumps Bowser→Moon. unlockNextWorld is idempotent (returns if the
-// world is already unlocked), so OdysseyRescue.cpp gates the call on
-// isRepairHomeByCrashedBoss(7) + Bowser-still-locked + a dwell to guarantee we
-// are never the second increment. isUnlockedWorld is the locked-check guard.
-// See [[project-odyssey-unlockworld-skips-bowser]] + OdysseyRescue.cpp.
+// NOTE on Bowser's-Kingdom force-unlock (Kgamer77-exact, 2026-06-03): we call
+// unlockWorld(getWorldIndexSky()) gated only on isRepairHomeByCrashedBoss,
+// matching Kgamer77/SuperMarioOdysseyArchipelago v1.2 verbatim (the
+// maintainer's call: copy their shipped build exactly rather than our guarded
+// variant). The feared Moon-skip is a mUnlockWorldNum overshoot
+// (calcNextLockedWorldIdForWorldMap switches on that counter, unlockNormalWorld
+// is an unconditional ++); Kgamer77 ships this ungated and it works for them.
+// If a Ruined→Bowser playtest skips, revert to the guarded variant in git
+// history. See [[project-odyssey-unlockworld-skips-bowser]] + OdysseyRescue.cpp.
 //
 // All manglings verified via aarch64-none-elf-g++ -c on forward-decls
 // matching MonsterDruide1/OdysseyDecomp src/System/GameDataFunction.h, and
@@ -569,8 +567,6 @@ inline constexpr const char* kGameDataFunctionIsRepairHomeByCrashedBoss =
     "_ZN16GameDataFunction25isRepairHomeByCrashedBossE22GameDataHolderAccessor";
 inline constexpr const char* kGameDataFunctionGetWorldIndexSky =
     "_ZN16GameDataFunction16getWorldIndexSkyEv";
-inline constexpr const char* kGameDataFunctionIsUnlockedWorld =
-    "_ZN16GameDataFunction15isUnlockedWorldE22GameDataHolderAccessori";
 inline constexpr const char* kGameDataFunctionGetWorldIndexClash =
     "_ZN16GameDataFunction18getWorldIndexClashEv";
 inline constexpr const char* kGameDataFunctionGetCurrentStageName =
