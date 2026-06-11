@@ -291,6 +291,15 @@ def after_fill_slot_data(slot_data: dict, world: World, multiworld: MultiWorld, 
     }
     slot_data["talkatoo_order"] = build_talkatoo_order(
         world, multiworld, player, progression_names)
+    # Companion to talkatoo_order: per-moon + per-region access requirements
+    # (resolved to |Item:count| boolean expressions). The bridge evaluates
+    # these against RECEIVED items at runtime so Talkatoo's window only ever
+    # names moons reachable now — closing the multiworld gap where a fixed
+    # order stalls on a moon gated behind an item from another player's world.
+    # See talkatoo_requirements.py for the full rationale.
+    from ..talkatoo_requirements import build_talkatoo_requirements
+    slot_data["talkatoo_requirements"] = build_talkatoo_requirements(
+        world, multiworld, player, progression_names, region_table, location_table)
     return slot_data
 
 # This is called right at the end, in case you want to write stuff to the spoiler log

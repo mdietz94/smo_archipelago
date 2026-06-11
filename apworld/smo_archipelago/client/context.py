@@ -18,6 +18,7 @@ from .config import ColorsConfig
 from .datapackage import DataPackage
 from .display import format_moon_label, format_shop_moon_label
 from .maps import CaptureMap, ShineMap
+from .reachability import TalkatooReachability, owned_counts_from_item_names
 from .protocol import (
     ItemKind,
     ItemMsg,
@@ -284,6 +285,13 @@ class SMOContext(CommonContext):
         # older apworld build that doesn't ship `talkatoo_order` still
         # works). Keyed by AP-form kingdom name ("Cascade", "Bowser's").
         self.talkatoo_order: dict[str, list[str]] = {}
+        # A1 (2026-06-10): per-moon + per-region access requirements from
+        # slot_data["talkatoo_requirements"]. Lets the cursor window filter
+        # by RUNTIME reachability (received items) so Talkatoo never stalls
+        # on a moon gated behind an item from another player's world. Empty
+        # model (older apworld build / talkatoo off) => no filtering, bridge
+        # behaves as pre-A1. See client/reachability.py.
+        self._talkatoo_reach = TalkatooReachability(None, None)
         self.display_enabled = display_enabled
         # M-color: AP-classification -> palette index for in-world moon
         # coloring. Defaults give each non-filler classification a unique
@@ -593,6 +601,7 @@ class SMOContext(CommonContext):
 
         initial_mirror_len = len(self.state.received_items)
         moon_received_this_batch = False
+        reach_relevant_this_batch = False
 
         for i, ni in enumerate(items):
             pos = ap_index + i
@@ -609,6 +618,11 @@ class SMOContext(CommonContext):
             )
             if ref.kind == ItemKind.MOON.value and ref.kingdom:
                 moon_received_this_batch = True
+            # A1: captures gate moon own-requires; kingdom moons gate
+            # region entry. Either kind newly received can unblock a
+            # Talkatoo window, so flag a re-derive below.
+            if ref.kind in (ItemKind.MOON.value, ItemKind.CAPTURE.value):
+                reach_relevant_this_batch = True
             if self.switch is not None:
                 await self.switch.send_item(ItemMsg(
                     kind=ref.kind,
@@ -626,6 +640,16 @@ class SMOContext(CommonContext):
             # No-op when no PaySnapshotMsg has arrived yet (Switch on
             # title screen).
             await self._push_outstanding_to_switch()
+
+        # A1: a newly received capture or kingdom moon can change which
+        # moons are reachable, so re-derive the Talkatoo window. RoomUpdate
+        # already covers the checked-locations axis; this covers the
+        # received-items axis (gated to relevant kinds + Phase 5 active so
+        # unrelated item floods don't churn the wire).
+        if (reach_relevant_this_batch and self.talkatoo_mode
+                and self.talkatoo_order and self.switch is not None
+                and self._talkatoo_reach.has_data):
+            await self._derive_and_push_talkatoo_pool()
 
     def _parse_received_item(self, ni):
         """Decode a NetworkItem (dict or namedtuple) into
@@ -920,6 +944,11 @@ class SMOContext(CommonContext):
                     str(k): [str(s) for s in (v or [])]
                     for k, v in raw_order.items()
                 }
+                # A1: per-moon/region requirements for runtime reachability
+                # filtering of the cursor window. Absent on older apworlds —
+                # from_slot_data then yields an empty model (no filtering).
+                self._talkatoo_reach = TalkatooReachability.from_slot_data(
+                    slot_data.get("talkatoo_requirements"))
                 await self._derive_and_push_talkatoo_pool()
                 # Shop moon label substitution. Depends on the datapackage
                 # being hot (loc_name_to_id) AND scout cache lookups
@@ -1049,26 +1078,47 @@ class SMOContext(CommonContext):
                 return i
         return len(order)
 
+    def _talkatoo_owned_counts(self) -> dict[str, int]:
+        """Received-item name tally for runtime reachability evaluation.
+
+        Keyed by exact AP item name (captures + per-kingdom moon items),
+        matching the ``|Item:count|`` atoms in the shipped requirements.
+        Rebuilt fresh each window derive — cheap (a few hundred items)
+        and always consistent with the canonical received history."""
+        return owned_counts_from_item_names(
+            evt.item.name for evt in self.state.received_items
+        )
+
     def _build_talkatoo_pool_phase5(self) -> dict[str, list[str]]:
         """Build the per-kingdom window-of-3 from `self.talkatoo_order`.
 
         Walks order from `cursor` (smallest-uncollected index) and takes
-        the next 3 entries that are NOT in checked_locations. Filtering
-        mid-window matters because the player can collect out-of-order:
-        Talkatoo names order[cursor+2] in some visit, player collects
-        it, cursor stays at cursor (front entry still uncollected) — but
-        the collected entry must drop out of the window or Talkatoo will
-        keep re-suggesting it on subsequent visits (observed regression
-        2026-05-21: re-named 'Chomp Through the Rocks' immediately after
-        collection because the slice [cursor:cursor+3] didn't filter).
+        the next 3 entries that are NOT in checked_locations AND are
+        reachable right now (A1). Filtering by collection matters because
+        the player can collect out-of-order: Talkatoo names order[cursor+2]
+        in some visit, player collects it, cursor stays at cursor (front
+        entry still uncollected) — but the collected entry must drop out
+        of the window or Talkatoo keeps re-suggesting it (observed
+        regression 2026-05-21: re-named 'Chomp Through the Rocks').
 
-        Sphere-safety still holds: cursor advancing past front-collected
-        entries is monotonic state growth, and skipping mid-window
-        collected entries means the player has at least as many items as
-        the validator's 'collected order[0..cursor-1]' baseline assumed.
+        A1 (2026-06-10): also skip entries that aren't reachable from the
+        player's RECEIVED items. The fixed order alone is NOT sphere-safe
+        in multiworld — collecting your own moons sends their items to
+        other players, so a moon gated behind a capture/kingdom-threshold
+        you haven't received yet stalls the cursor while reachable moons
+        sit past the window. Filtering by `is_moon_reachable` walks past
+        the blocked entries to the ones the player can actually collect.
+        When no requirements shipped (older apworld), `has_data` is False
+        and every moon passes — pre-A1 behavior. See client/reachability.py.
         """
         kingdoms: dict[str, list[str]] = {}
         checked = self.checked_locations or set()
+        filter_reach = self._talkatoo_reach.has_data
+        owned = self._talkatoo_owned_counts() if filter_reach else {}
+        # Amortize the region BFS once per derive across all kingdoms.
+        reachable_regions = (
+            self._talkatoo_reach.reachable_regions(owned) if filter_reach else None
+        )
         for kingdom, order in self.talkatoo_order.items():
             cursor = self._compute_talkatoo_cursor(kingdom)
             window: list[str] = []
@@ -1076,6 +1126,9 @@ class SMOContext(CommonContext):
                 loc_name = f"{kingdom}: {shine_id}"
                 loc_id = self.dp.location_name_to_id.get(loc_name)
                 if loc_id is not None and loc_id in checked:
+                    continue
+                if filter_reach and not self._talkatoo_reach.is_moon_reachable(
+                        loc_name, owned, reachable_regions):
                     continue
                 window.append(shine_id)
                 if len(window) >= self._TALKATOO_WINDOW:

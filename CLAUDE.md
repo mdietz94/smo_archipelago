@@ -111,6 +111,9 @@ C:\Users\maxwe\Documents\smo_archipelago\
       discovery.py               UDP bridge-discovery responder (the other side of ApDiscovery)
       protocol.py, state.py      Wire-format dataclasses + thread-safe state mirror
       datapackage.py, maps.py    AP id↔name + classifier + ShineMap / CaptureMap
+      reachability.py            Talkatoo% A1: pure runtime reachability eval of
+                                 slot_data["talkatoo_requirements"] vs received items
+                                 (window filter so Talkatoo only names reachable moons)
       scout_cache.py, display.py Channel A: LocationScouts pre-fetch + label formatting
       commands.py                Pure `parse_command` for the /-commands in context.py
       config.py, logging_setup.py  Legacy TOML overlay (kept for back-compat) + log config

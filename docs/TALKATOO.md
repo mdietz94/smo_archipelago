@@ -117,7 +117,9 @@ always advance the kingdom's scenario regardless of Talkatoo.
 [ bridge at runtime ]
   _build_talkatoo_pool_phase5() — derives per-kingdom cursor window
        │  Walks each kingdom's order from cursor=smallest-uncollected;
-       │  takes 3 uncollected entries; ships them per kingdom.
+       │  takes 3 entries that are uncollected AND reachable now (A1:
+       │  evaluates slot_data["talkatoo_requirements"] vs received items);
+       │  ships them per kingdom.
        ▼
 [ Switch at runtime ]
   TalkatooSpeechHook substitute hook — picks one entry per visit
@@ -188,12 +190,45 @@ For each kingdom:
 - **Cursor** = smallest index in the order whose location is NOT yet
   in `self.checked_locations`.
 - **Window** = walk the order from cursor, take the first 3 entries
-  that are NOT in `checked_locations`.
+  that are NOT in `checked_locations` **and are reachable right now**
+  (A1 — see below).
 
 The cursor advances when front entries get collected; mid-window
 collected entries are skipped on the next push. The walk-and-filter
 gives the player a stable 3-slot rotation that updates incrementally
 as moons collect.
+
+#### Runtime reachability filter (A1, 2026-06-10)
+
+The fixed `talkatoo_order` alone is **not** sphere-safe in multiworld.
+The validator builds it with a solo collect model — "collecting moon[i]
+grants the item placed at moon[i], which unlocks moon[i+1]." In a
+multiworld your moons' items are mostly destined for OTHER players, and
+your own gates (a `|T-Rex|` capture, a `KingdomMoons(Cascade,5)` entry
+threshold) are satisfied by items you RECEIVE on a schedule set by other
+players. So the cursor can stall on three moons that all need an item
+you haven't received, while reachable moons sit just past the window —
+an artificial block AP's fill never imposed. (Observed live 2026-06-10:
+T-Rex moons at the front of Cascade gating the rest of the kingdom while
+T-Rex lived in another player's world.)
+
+The fix: the apworld also ships
+`slot_data["talkatoo_requirements"]` — per-moon and per-region access
+requirements resolved to `|Item:count|` boolean expressions (every
+`{Func()}` baked out at gen time). The bridge evaluates them against the
+player's RECEIVED-item counts
+([`client/reachability.py`](../apworld/smo_archipelago/client/reachability.py))
+and skips any window entry that isn't reachable now — region BFS over the
+kingdom graph AND the moon's own requires. A moon is named only if its
+kingdom is enterable and its own gate is satisfied.
+
+The re-derive fires on TWO axes now: `RoomUpdate` (checked-locations
+changed) AND `ReceivedItems` (a capture or kingdom moon arrived — see
+`_process_received_items`). Back-compat: a seed from an apworld that
+predates A1 ships no `talkatoo_requirements`; the model is then empty
+(`has_data` False) and the window is unfiltered — exactly the pre-A1
+behavior. Gen + wire details:
+[`talkatoo_requirements.py`](../apworld/smo_archipelago/talkatoo_requirements.py).
 
 On AP `RoomUpdate`: if the delta contains any moon in any kingdom's
 order, recompute and re-ship. Other check types (captures, non-pool
@@ -260,16 +295,24 @@ Tested by: `test_progress_anywhere_invariant_holds_across_global_order`.
 
 ### 2. Runtime "progress anywhere"
 
-At any runtime state (the player has collected some subset of pool
-moons), at least one kingdom's first-uncollected moon is reachable
-from the player's current items.
+At any runtime state, Talkatoo's window is empty across ALL kingdoms
+ONLY when the slot genuinely has no reachable non-progression moon —
+i.e. exactly when the player should be waiting on AP for an item from
+another world. Whenever a reachable pool moon exists, some kingdom's
+window names it.
 
-Follows from #1: the validator's global topological order is one of
-many valid orders. Any reachable subset the player can collect is a
-prefix of SOME topological order, so the next reachable moon always
-exists.
+This is enforced at RUNTIME by the A1 reachability filter (the bridge
+evaluates `talkatoo_requirements` against received items), NOT by the
+fixed `talkatoo_order` alone. In a solo seed the validator's global
+topological order is already followable in sequence; in multiworld it is
+not (items at your own moons flow to other players — see "Runtime
+reachability filter" above), so the runtime filter is what makes
+"progress anywhere" hold. When no requirements shipped (pre-A1 apworld),
+this degrades to the weaker fixed-order guarantee.
 
-Tested by: `test_cross_kingdom_unlock_via_global_greedy`.
+Tested by: `test_cross_kingdom_unlock_via_global_greedy` (gen order),
+`test_talkatoo_reachability.py` + `test_commands.py::test_phase5_window_
+skips_moons_gated_by_unreceived_item` (runtime filter).
 
 ### 3. Cursor monotonicity
 

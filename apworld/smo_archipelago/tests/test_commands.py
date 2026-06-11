@@ -50,8 +50,8 @@ pytest.importorskip(
 from client.context import SMOContext, SMOClientCommandProcessor  # noqa: E402
 from client.datapackage import DataPackage  # noqa: E402
 from client.maps import CaptureMap, ShineMap  # noqa: E402
-from client.protocol import ItemMsg  # noqa: E402
-from client.state import BridgeState  # noqa: E402
+from client.protocol import ItemMsg, ItemRef  # noqa: E402
+from client.state import BridgeState, ItemEvent  # noqa: E402
 
 _APWORLD_DATA = Path(__file__).resolve().parent.parent / "data"
 
@@ -1059,3 +1059,113 @@ async def test_compose_moon_label_for_cross_game_recipient_resolves():
     from client.display import TRUNCATION_MARKER
     assert label.startswith("Sent "), label
     assert "Paint" in label or label.endswith(TRUNCATION_MARKER), label
+
+
+# --- A1 (2026-06-10): runtime reachability gate on the Talkatoo window ---
+
+def _recv(ctx, name, kind="capture"):
+    """Append a received item to ctx so `_talkatoo_owned_counts` sees it."""
+    cap = name if kind == "capture" else None
+    ctx.state.received_items.append(
+        ItemEvent(item=ItemRef(kind=kind, name=name, cap=cap)))
+
+
+async def _connect_talkatoo(ctx, order, requirements):
+    await ctx._handle_ap_package("Connected", {
+        "slot_data": {
+            "talkatoo_mode": 1,
+            "talkatoo_order": order,
+            "talkatoo_requirements": requirements,
+        },
+    })
+
+
+# Cascade is the start region; all three moons live in it. Two need T-Rex
+# (a capture that, in a real seed, can be placed in another player's world),
+# one is free. Mirrors data/locations.json:190,198 ({OptOne(T-Rex)}).
+_CASCADE_ORDER = {"Cascade": ["With a T-Rex A", "With a T-Rex B", "An Easy One"]}
+_CASCADE_REQ = {
+    "regions": {
+        "Cascade Kingdom": {"requires": "", "to": [], "start": True},
+    },
+    "moons": {
+        "Cascade: With a T-Rex A": {"region": "Cascade Kingdom", "requires": "|T-Rex:1|"},
+        "Cascade: With a T-Rex B": {"region": "Cascade Kingdom", "requires": "|T-Rex:1|"},
+        "Cascade: An Easy One": {"region": "Cascade Kingdom", "requires": ""},
+    },
+}
+
+
+@pytest.mark.asyncio
+async def test_phase5_window_skips_moons_gated_by_unreceived_item():
+    """The bug: a fixed order can put two T-Rex-gated moons at the front of
+    Cascade's window while the player has no T-Rex (it's in another game).
+    A1 walks past them to the reachable moon instead of stalling."""
+    ctx = SMOContext(
+        server_address=None, password=None, state=BridgeState(),
+        datapackage=DataPackage(apworld_data_dir=_APWORLD_DATA),
+        shine_map=ShineMap(), capture_map=CaptureMap(),
+    )
+    ctx.auth = "Mario"
+    sw = _StubSwitch()
+    ctx.switch = sw  # type: ignore[assignment]
+
+    await _connect_talkatoo(ctx, _CASCADE_ORDER, _CASCADE_REQ)
+
+    enabled, kingdoms = sw.talkatoo_pool_calls[-1]
+    assert enabled is True
+    # Only the reachable moon is named; the two T-Rex moons are skipped.
+    assert kingdoms == {"Cascade": ["An Easy One"]}
+
+
+@pytest.mark.asyncio
+async def test_received_capture_redrives_and_unblocks_window():
+    """Receiving the gating capture re-derives the window (the received-
+    items axis, complementing RoomUpdate's checked-locations axis) and the
+    previously-blocked moons appear."""
+    ctx = SMOContext(
+        server_address=None, password=None, state=BridgeState(),
+        datapackage=DataPackage(apworld_data_dir=_APWORLD_DATA),
+        shine_map=ShineMap(), capture_map=CaptureMap(),
+    )
+    ctx.auth = "Mario"
+    sw = _StubSwitch()
+    ctx.switch = sw  # type: ignore[assignment]
+
+    await _connect_talkatoo(ctx, _CASCADE_ORDER, _CASCADE_REQ)
+    assert sw.talkatoo_pool_calls[-1][1] == {"Cascade": ["An Easy One"]}
+    # Resolve the T-Rex item id so the ReceivedItems handler can name it.
+    # Set AFTER connect — the Connected handler loads the cached AP
+    # datapackage, which would otherwise clobber a synthetic id.
+    ctx.dp.item_id_to_name[7001] = "T-Rex"
+
+    await ctx._process_received_items({"index": 0, "items": [
+        {"item": 7001, "player": 2, "location": 55, "flags": 0},
+    ]})
+
+    # A fresh pool push happened, now naming all three (T-Rex unblocked).
+    enabled, kingdoms = sw.talkatoo_pool_calls[-1]
+    assert kingdoms == {"Cascade": ["With a T-Rex A", "With a T-Rex B", "An Easy One"]}
+
+
+@pytest.mark.asyncio
+async def test_phase5_no_requirements_field_disables_filtering():
+    """Back-compat: a seed from an apworld that predates A1 ships no
+    `talkatoo_requirements`. The window must behave exactly as before —
+    first 3 uncollected, no reachability filtering."""
+    ctx = SMOContext(
+        server_address=None, password=None, state=BridgeState(),
+        datapackage=DataPackage(apworld_data_dir=_APWORLD_DATA),
+        shine_map=ShineMap(), capture_map=CaptureMap(),
+    )
+    ctx.auth = "Mario"
+    sw = _StubSwitch()
+    ctx.switch = sw  # type: ignore[assignment]
+
+    await ctx._handle_ap_package("Connected", {
+        "slot_data": {"talkatoo_mode": 1, "talkatoo_order": _CASCADE_ORDER},
+    })
+
+    # No requirements -> no filter -> first 3 uncollected, T-Rex moons included.
+    assert sw.talkatoo_pool_calls[-1][1] == {
+        "Cascade": ["With a T-Rex A", "With a T-Rex B", "An Easy One"]}
