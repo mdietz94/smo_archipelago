@@ -1,6 +1,21 @@
 {
   "versions": [
     {
+      "package_version": "1.1.0",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v1.1.0/smo-poptracker-v1.1.0.zip",
+      "sha256": "08e2853a5045e2c9328728efa40a00825655dfdf9247a93e2c1bea51beadf1a6",
+      "changelog": [
+        "remove placeholder skip functions and update location requirements",
+        "fix: correct requirements for two more inverted pyramid moons",
+        "Talkatoo%: gate the cursor window by runtime reachability (A1)",
+        "fix: require SandPeace for Sand: Hidden Room in the Inverted Pyramid",
+        "fix: require SandPeace for Sand: Showdown on the Inverted Pyramid",
+        "fix: require Bullet Bill + Knucklotec's Fist for Sand: On the Statue's Tail",
+        "ci: bump actions/checkout from 6.0.2 to 6.0.3",
+        "PopTracker auto-update: add v1.0.1 to versions.json"
+      ]
+    },
+    {
       "package_version": "1.0.1",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v1.0.1/smo-poptracker-v1.0.1.zip",
       "sha256": "a85b00487d176401fa4610a1fe8561b74a70b2adc22e985ec6d5afab938024dc",
