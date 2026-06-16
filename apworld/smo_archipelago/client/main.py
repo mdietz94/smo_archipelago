@@ -76,6 +76,24 @@ def _load_settings():
         return _Defaults()
 
 
+def _settings_str(smo_settings, attr: str) -> str:
+    """Read a settings attribute as a string, tolerating validation errors.
+
+    Reading a `settings.UserFilePath` attribute triggers the host's path
+    validation. On some Archipelago forks (notably MultiworldGG) an empty
+    or relative path is resolved against the install root and the access
+    raises FileNotFoundError when that root doesn't exist on disk (e.g.
+    `C:\\Program Files\\MultiworldGG\\`). `getattr`'s default only catches
+    AttributeError, so such an error would otherwise crash the whole client
+    bootstrap. Treat any failure as "unset" — the bundled client/data/
+    default then wins."""
+    try:
+        return str(getattr(smo_settings, attr, "")) or ""
+    except Exception as exc:  # noqa: BLE001 — host validation can raise anything
+        log.warning("could not read SMOSettings.%s (%s); using default", attr, exc)
+        return ""
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = get_base_parser(description="Spicy Meatball Overdrive — SMO Archipelago Client")
     p.prog = "SMOClient"
@@ -112,7 +130,7 @@ async def main(args: argparse.Namespace) -> None:
     # wins instead of trying to read a json file out of a directory.
     for attr, cfg_field in (("shine_map_path", "shine_map_path"),
                             ("capture_map_path", "capture_map_path")):
-        raw = str(getattr(smo_settings, attr, "")) or ""
+        raw = _settings_str(smo_settings, attr)
         if raw and Path(raw).is_file():
             setattr(cfg.bridge, cfg_field, raw)
     if bool(smo_settings.deathlink_default):
