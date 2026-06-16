@@ -1,6 +1,15 @@
 {
   "versions": [
     {
+      "package_version": "1.1.1",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v1.1.1/smo-poptracker-v1.1.1.zip",
+      "sha256": "9de3172852cb4de3efc71bc17becc418c98e53c6ae05a5af6373098c9bc98408",
+      "changelog": [
+        "Harden detect_lan_ip so discovery never advertises loopback",
+        "PopTracker auto-update: add v1.1.0 to versions.json"
+      ]
+    },
+    {
       "package_version": "1.1.0",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v1.1.0/smo-poptracker-v1.1.0.zip",
       "sha256": "08e2853a5045e2c9328728efa40a00825655dfdf9247a93e2c1bea51beadf1a6",
