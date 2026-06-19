@@ -539,16 +539,21 @@ inline constexpr const char* kGameDataFileFindShine =
 // Ruined Kingdom is NOT swept (the boss-attack repair/backtrack path was
 // removed 2026-06-04). Ruined's Odyssey grounding is released by beating the
 // dragon, and AP fill pins the Ruined Multi-Moon to the dragon's vanilla
-// location, so beating it always frees the Odyssey. The old backtrack path
-// pre-unlocked "Sky" (Bowser internally) and risked a mUnlockWorldNum overshoot
-// that skipped Bowser → Moon. With it gone, getWorldIndexSky /
-// isBossAttackedHome / repairHomeByCrashedBoss / crashHome are no longer
-// resolved — only the 5 manglings the Lost repair path uses remain.
+// location, so beating it always frees the Odyssey.
+//
+// Bowser's Kingdom IS swept (added 2026-06-19) via a different state. Bowser's
+// never sets the home-status enum, so isCrashHome is false there; instead the
+// Odyssey is grounded by isBossAttackedHomeNext(accessor, worldId) — true while
+// mUnlockWorldNum is at Boss(Ruined)/Boss+1(Sky) and the player is in
+// Sky(Bowser's). The sweep clears it by advancing the unlock to Moon, but ONLY
+// when the player lacks Pokio (captureBlocked("Pokio")) so the normal
+// Bowser→Moon autopilot — whose mUnlockWorldNum overshoot is the documented
+// footgun — is untouched for anyone who can beat Bowser legitimately.
 //
 // All manglings verified via aarch64-none-elf-g++ -c on forward-decls
-// matching MonsterDruide1/OdysseyDecomp src/System/GameDataFunction.h, and
-// the unlockWorld name was already in the project pre-c85a27b cleanup with
-// the same mangling.
+// matching MonsterDruide1/OdysseyDecomp src/System/GameDataFunction.h plus a
+// c++filt round-trip, and the unlockWorld name was already in the project
+// pre-c85a27b cleanup with the same mangling.
 
 inline constexpr const char* kGameDataFunctionIsCrashHome =
     "_ZN16GameDataFunction11isCrashHomeE22GameDataHolderAccessor";
@@ -560,6 +565,12 @@ inline constexpr const char* kGameDataFunctionGetWorldIndexClash =
     "_ZN16GameDataFunction18getWorldIndexClashEv";
 inline constexpr const char* kGameDataFunctionGetCurrentStageName =
     "_ZN16GameDataFunction19getCurrentStageNameE22GameDataHolderAccessor";
+inline constexpr const char* kGameDataFunctionGetWorldIndexSky =
+    "_ZN16GameDataFunction16getWorldIndexSkyEv";
+inline constexpr const char* kGameDataFunctionGetWorldIndexMoon =
+    "_ZN16GameDataFunction17getWorldIndexMoonEv";
+inline constexpr const char* kGameDataFunctionIsBossAttackedHomeNext =
+    "_ZN16GameDataFunction22isBossAttackedHomeNextE22GameDataHolderAccessori";
 
 // =============================================================================
 // Instant seed growth — bypass the wait on seed-flower moons.

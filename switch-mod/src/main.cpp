@@ -201,9 +201,10 @@ HkTrampoline<void, const HakoniwaSequence*> drawMainHook =
         smoap::ap::ApState::instance().flushPendingCaptureGrants();
         smoap::hooks::tickPendingUncapture();
 
-        // Lost Kingdom softlock sweep — see game/OdysseyRescue.hpp. Throttled
-        // to once per 60 frames (~1s @ 60fps). Pattern + cadence mirror
-        // Kgamer77/SuperMarioOdysseyArchipelago v1.2.
+        // Lost + Bowser's Kingdom softlock sweep — see game/OdysseyRescue.hpp.
+        // Throttled to once per 60 frames (~1s @ 60fps). Lost pattern + cadence
+        // mirror Kgamer77/SuperMarioOdysseyArchipelago v1.2; the Bowser's branch
+        // (isBossAttackedHomeNext + no-Pokio gate) is ours.
         {
             static int s_softlockTick = 0;
             if (++s_softlockTick >= 60) {
@@ -247,7 +248,7 @@ extern "C" void hkMain() {
     SMOAP_LOG_INFO("resolving M6-phase-D getPayShineNum lookup");
     smoap::game::installPayShineSnapshotSymbol();
 
-    SMOAP_LOG_INFO("resolving OdysseyRescue symbols (Lost softlock fix)");
+    SMOAP_LOG_INFO("resolving OdysseyRescue symbols (Lost + Bowser's softlock fix)");
     smoap::game::installOdysseyRescueSymbols();
 
     // All hooks re-enabled now that the worker->Cappy cross-thread crash is

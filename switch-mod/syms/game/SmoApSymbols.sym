@@ -120,20 +120,33 @@ _ZNK12GameDataFile9findShineEii
 // Ruined Kingdom is NOT handled here (boss-attack repair/backtrack path
 // removed 2026-06-04): beating the dragon releases the Odyssey in vanilla, and
 // AP fill pins the Ruined Multi-Moon to the dragon's vanilla location, so it
-// always frees. The old path pre-unlocked "Sky" (Bowser internally) and risked
-// a mUnlockWorldNum overshoot that skipped Bowser → Moon. With it gone,
-// crashHome / isBossAttackedHome / repairHomeByCrashedBoss are no longer
-// resolved — only the 5 manglings the Lost repair path uses remain.
+// always frees.
+//
+// Bowser's Kingdom IS handled (added 2026-06-19), but via a different state.
+// Bowser's never sets the home-status enum (CrashedHome/BossAttackedHome) —
+// after Ruined the status is RepairedHomeByCrashedBoss. Instead the Odyssey is
+// grounded by GameDataHolder::isBossAttackedHomeNext(worldId), which is true
+// while mUnlockWorldNum is at Boss(Ruined)/Boss+1(Sky) and the player is in
+// Sky(Bowser's). A capturesanity player who flies in without Pokio can't beat
+// the RoboBrood to advance and can't fly out → softlock. The Bowser's branch
+// clears the gate by advancing the unlock to Moon, but ONLY when the player
+// actually lacks Pokio (captureBlocked("Pokio")), so the normal Bowser→Moon
+// autopilot — whose mUnlockWorldNum overshoot is the documented footgun that
+// got the old Ruined backtrack path removed — is left untouched for everyone
+// who can beat Bowser legitimately.
 //
 // All manglings produced via aarch64-none-elf-g++ on forward-decls matching
-// MonsterDruide1/OdysseyDecomp src/System/GameDataFunction.h. The unlockWorld
-// name was already in the project pre-c85a27b cleanup and resurrected with
-// its original mangling.
+// MonsterDruide1/OdysseyDecomp src/System/GameDataFunction.h, and verified by
+// round-trip through c++filt. The unlockWorld name was already in the project
+// pre-c85a27b cleanup and resurrected with its original mangling.
 _ZN16GameDataFunction11isCrashHomeE22GameDataHolderAccessor
 _ZN16GameDataFunction10repairHomeE20GameDataHolderWriter
 _ZN16GameDataFunction11unlockWorldE20GameDataHolderWriteri
 _ZN16GameDataFunction18getWorldIndexClashEv
 _ZN16GameDataFunction19getCurrentStageNameE22GameDataHolderAccessor
+_ZN16GameDataFunction16getWorldIndexSkyEv
+_ZN16GameDataFunction17getWorldIndexMoonEv
+_ZN16GameDataFunction22isBossAttackedHomeNextE22GameDataHolderAccessori
 
 // GrowSeedInstantHook: rs::getGrowFlowerTime(const al::LiveActor*,
 // const al::PlacementId*). The public rs:: wrapper around
