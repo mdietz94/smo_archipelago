@@ -35,13 +35,23 @@
 // Departure is instead gated by GameDataHolder::isBossAttackedHomeNext(worldId)
 // (per MonsterDruide1/OdysseyDecomp): true while mUnlockWorldNum is at
 // Boss(Ruined)/Boss+1(Sky) and the player is physically in Sky(Bowser's). It
-// only clears when beating Bowser advances the unlock to Moon. A capturesanity
-// player who flies in without the Pokio capture can't beat the RoboBrood (Pokio
-// is the only route up the castle) and can't fly out → permanent softlock.
+// only clears when the unlock advances past Sky. A capturesanity player who
+// flies in without the Pokio capture can't beat the RoboBrood (Pokio is the
+// only route up the castle) to advance, and can't fly out → permanent softlock.
 //
-// The Bowser's branch advances the unlock to Moon (the sole lever that clears
-// isBossAttackedHomeNext) so the player can fly back out and find Pokio, but
-// fires ONLY when captureBlocked("Pokio") is true — i.e. a genuinely-stuck
+// Why Kgamer77/SuperMarioOdysseyArchipelago does NOT hit this (verified by
+// reading his fork): his AP server drives kingdom unlocks via UnlockWorld
+// packets → GameDataFunction::unlockWorld(), which advances mUnlockWorldNum and
+// thereby clears isBossAttackedHomeNext as a side effect — decoupling kingdom
+// access from beating Bowser. Our mod removed that whole AP-driven unlock path
+// on 2026-05-18 (the ItemKind::Kingdom wire kind + unlockWorld symbol; see
+// milestones.md "kingdom unlock via unlockWorld fallback was dropped"), which
+// is exactly why the gap exists for us and not for him.
+//
+// The Bowser's branch advances the unlock to Moon — the same unlockWorld() lever
+// Kgamer77's server-driven path uses, the sole lever that clears
+// isBossAttackedHomeNext — so the player can fly back out and find Pokio. It
+// fires ONLY when captureBlocked("Pokio") is true, i.e. a genuinely-stuck
 // capturesanity player. For everyone who can beat Bowser legitimately
 // (Pokio-owners, and all non-capturesanity seeds where captures are
 // synthetically unlocked at HELLO) the gate is left fully intact, so the
