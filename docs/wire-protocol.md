@@ -139,13 +139,15 @@ is a no-op.
 // capture, which grounds the Odyssey until the RoboBrood is beaten) can fly
 // back to earlier kingdoms. `dest` is a short selector the Switch maps through
 // a fixed allowlist ("cascade" -> WaterfallWorldHomeStage, "cap" ->
-// CapWorldHomeStage; anything else -> Cascade). The Switch executes it via
-// tryChangeNextStageWithWorldWarpHole (the regular world-map kingdom-travel
-// path — lands at the kingdom's normal arrival and latches mIsStageChanging so
-// the transition actually fires; DemoWorldWarp does NOT latch and silently
-// no-ops from in-stage). It's a PURE stage change that never unlocks a kingdom,
-// so it cannot be used to skip forward past a boss gate. Single-bit pending
-// queue drained on the frame thread.
+// CapWorldHomeStage; anything else -> Cascade). The Switch executes it
+// (game/StageWarp.cpp) via tryChangeNextStageWithDemoWorldWarp to write the
+// LITERAL destination stage, then latches GameDataHolder::setStageChanging() so
+// the sequence actually performs the transition. (WorldWarpHole was rejected: it
+// remaps the destination through SMO's painting-pairing table — Cascade input
+// landed at Seaside — and nothing pairs to Cascade. DemoWorldWarp alone was
+// rejected: it doesn't latch, so it silently no-ops from in-stage.) It's a PURE
+// stage change that never unlocks a kingdom, so it cannot skip forward past a
+// boss gate. Single-bit pending queue drained on the frame thread.
 {"t":"warp","dest":"cascade"}
 
 // M6 phase A.5: Channel A — pane-text override for the next moon-get

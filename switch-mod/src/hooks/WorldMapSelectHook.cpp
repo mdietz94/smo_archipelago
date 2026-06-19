@@ -110,51 +110,6 @@ HkTrampoline<bool, GameDataHolderWriter, const char*> tryChangeWarpHoleHook =
 
 }  // namespace
 
-// Drain a pending PC /warp request (ApState::inbound_warp_pending) and teleport
-// Mario to the requested hub home stage. Called every frame from drawMain.
-//
-// Uses tryChangeWarpHoleHook.orig() — the painting/portal warp — NOT
-// DemoWorldWarp. DemoWorldWarp (the world-map selection cinematic) leaves
-// GameDataHolder::mIsStageChanging == false, so when called from in-stage the
-// sequence never picks the change up and nothing happens (observed in the
-// 2026-06-19 Ryujinx log: both warp log lines fired but Mario didn't move).
-// WorldWarpHole instead sets mIsStageChanging = true and returns success, which
-// is what actually drives the transition from anywhere. Calling .orig() bypasses
-// our own gate hook; the WorldWarpHole hook is visited-only (no redirect), so
-// there's nothing to bypass beyond the visited-bit bookkeeping.
-//
-// This is still a pure stage change: it does NOT touch mUnlockWorldNum, so it
-// never opens forward access (e.g. it can't unlock Moon to escape Bowser's).
-// The player lands at a hub kingdom where the Odyssey works normally and can
-// fly back to any *already-unlocked* kingdom to collect what they're missing,
-// then return and clear the gate the intended way (beat the boss).
-//
-// The destination string was validated to a Switch-side allowlist when the
-// "warp" message was decoded (ApClient), so warp_dest_stage is always a safe
-// hub home stage here.
-void tickPendingWarp() {
-    auto& st = smoap::ap::ApState::instance();
-    if (!st.inbound_warp_pending.load(std::memory_order_acquire)) return;
-    void* gdh = st.game_data_holder_cache.load(std::memory_order_relaxed);
-    if (!gdh) return;  // scene not ready yet — leave the flag set, retry next frame
-    st.inbound_warp_pending.store(false, std::memory_order_release);
-
-    // Snapshot the stage name onto the stack (socket worker wrote it before
-    // setting the flag we just observed, so it's stable).
-    char stage[sizeof(st.warp_dest_stage)];
-    std::size_t i = 0;
-    for (; i + 1 < sizeof(stage) && st.warp_dest_stage[i] != '\0'; ++i) {
-        stage[i] = st.warp_dest_stage[i];
-    }
-    stage[i] = '\0';
-    if (stage[0] == '\0') return;
-
-    GameDataHolderWriter writer{gdh};
-    const bool ok = tryChangeWarpHoleHook.orig(writer, stage);
-    SMOAP_LOG_INFO("[warp] teleporting to '%s' (PC /warp) -> %s", stage,
-                   ok ? "accepted" : "REJECTED (stage change already in flight)");
-}
-
 void installWorldMapSelectHook() {
     SMOAP_LOG_INFO("installing M7 Path A Layer 1 (calcNextLocked, 2 overloads)");
     calcNextLockedLayoutHook.installAtSym<
