@@ -43,6 +43,19 @@ These re-activate only if the pin ever rolls back to a tree that predates them.
      missing required argument 'format' (pos 1)`) because Argument
      Clinic moved the format requirement into __new__. Composition is
      durable across every CPython version. Worth upstreaming.
+
+  10. (Windows-port) sys/tools/setup_libcxx_prepackaged.py: harden the
+     `curl` invocation that fetches the prepackaged aarch64 stdlib tarball.
+     Upstream runs `curl -O -L <url>` with no `--fail` and no `check=True`.
+     On Windows, curl's Schannel TLS backend aborts the download with
+     `CRYPT_E_NO_REVOCATION_CHECK (0x80092012)` when the cert's CRL/OCSP
+     revocation endpoint is unreachable; the missing tarball then crashes
+     the next `tarfile.open()` with a cryptic FileNotFoundError that buries
+     the real (network/TLS) cause. The patch adds `--ssl-no-revoke` (the
+     standard Schannel revocation-check fix; a no-op that Linux/macOS curl
+     backends accept and ignore), `--fail`, a small retry, and `check=True`
+     so a download failure surfaces as a clear CalledProcessError. Worth
+     upstreaming.
 """
 
 import os
@@ -295,6 +308,35 @@ def main() -> int:
             _NSO_OLD,
             _NSO_NEW,
             sentinel="SMO_HAKKUN_PATCH_9",
+        ),
+    )
+
+    # ------------------------------------------------------------------
+    # Patch 10: harden the prepackaged-stdlib curl download for Windows.
+    # ------------------------------------------------------------------
+    # Upstream runs `curl -O -L <url>` with no `--fail` and no check=True.
+    # On Windows, curl's Schannel backend aborts with
+    # CRYPT_E_NO_REVOCATION_CHECK (0x80092012) when the cert's CRL/OCSP
+    # endpoint can't be reached, so the .tar.xz never lands and the next
+    # `tarfile.open()` dies with a cryptic FileNotFoundError that hides the
+    # real TLS/network cause. `--ssl-no-revoke` is the standard fix for that
+    # exact Schannel error; non-Schannel curl backends (Linux/macOS) accept
+    # and ignore it, so the patch is safe cross-platform. `--fail` + a small
+    # retry + check=True turn any remaining failure into a clear,
+    # fail-fast CalledProcessError instead of a misleading missing-file crash.
+    report(
+        "setup_libcxx_prepackaged.py curl --ssl-no-revoke + --fail",
+        patch_file(
+            os.path.join(HAKKUN, "tools", "setup_libcxx_prepackaged.py"),
+            "    subprocess.run(['curl', '-O', '-L', prepackaged_source])",
+            "    # SMO_HAKKUN_PATCH_10: harden the stdlib download for Windows\n"
+            "    # (Schannel CRYPT_E_NO_REVOCATION_CHECK) and fail fast & loud.\n"
+            "    subprocess.run(\n"
+            "        ['curl', '--ssl-no-revoke', '--fail', '--location',\n"
+            "         '--retry', '3', '--retry-delay', '2', '-O', prepackaged_source],\n"
+            "        check=True,\n"
+            "    )",
+            sentinel="SMO_HAKKUN_PATCH_10",
         ),
     )
 

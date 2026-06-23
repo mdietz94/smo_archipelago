@@ -111,10 +111,12 @@ def ensure_libstd_downloaded() -> None:
 
     Run the same script ourselves with the real Python interpreter
     (`sys.executable` — same one the wizard's _python_invoker resolves)
-    BEFORE cmake gets a crack at it. The script's `subprocess.run(['curl',
-    ...])` doesn't `check=True` either, so we verify the .a files actually
-    landed afterward and surface a clear error if not (curl missing,
-    network blocked, etc.).
+    BEFORE cmake gets a crack at it. patch_hakkun.py (run just before us in
+    main()) hardens the script's `curl` step — Patch 10 adds `--ssl-no-revoke`
+    (Windows Schannel CRYPT_E_NO_REVOCATION_CHECK fix), `--fail`, and
+    `check=True`. We still verify the .a files actually landed afterward as
+    belt-and-braces (curl missing, an unpatched stale tree, etc.) and surface
+    a clear error if not.
     """
     lib_std = os.path.join(SWITCH_MOD, "lib", "std")
     required = (
