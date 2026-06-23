@@ -44,18 +44,23 @@ These re-activate only if the pin ever rolls back to a tree that predates them.
      Clinic moved the format requirement into __new__. Composition is
      durable across every CPython version. Worth upstreaming.
 
-  10. (Windows-port) sys/tools/setup_libcxx_prepackaged.py: harden the
-     `curl` invocation that fetches the prepackaged aarch64 stdlib tarball.
-     Upstream runs `curl -O -L <url>` with no `--fail` and no `check=True`.
-     On Windows, curl's Schannel TLS backend aborts the download with
-     `CRYPT_E_NO_REVOCATION_CHECK (0x80092012)` when the cert's CRL/OCSP
-     revocation endpoint is unreachable; the missing tarball then crashes
-     the next `tarfile.open()` with a cryptic FileNotFoundError that buries
-     the real (network/TLS) cause. The patch adds `--ssl-no-revoke` (the
-     standard Schannel revocation-check fix; a no-op that Linux/macOS curl
-     backends accept and ignore), `--fail`, a small retry, and `check=True`
-     so a download failure surfaces as a clear CalledProcessError. Worth
-     upstreaming.
+  10. (Windows-port) sys/tools/setup_libcxx_prepackaged.py: make the
+     `curl` fetch of the prepackaged aarch64 stdlib tarball robust and
+     fail-loud. Upstream runs `curl -O -L <url>` with no `--fail` and no
+     `check`, so a failed download leaves the tarball absent and the next
+     `tarfile.open()` crashes with a cryptic FileNotFoundError. On Windows,
+     curl's Schannel backend HARD-fails with
+     `CRYPT_E_NO_REVOCATION_CHECK (0x80092012)` when it cannot REACH the
+     cert's CRL/OCSP responder — note that means "could not check
+     revocation", not "cert is revoked", and usually points at a
+     TLS-intercepting corporate proxy/AV or a network blocking OCSP. The
+     patch (a) tries a fully strict download first (revocation enforced),
+     and (b) only if that fails retries once with `--ssl-no-revoke`,
+     printing a loud explanation + likely cause. The relaxed retry still
+     verifies chain/hostname/expiry against the Windows trust store; it
+     only skips the revocation freshness check for this one fixed GitHub
+     URL — the same soft-fail posture OpenSSL/browsers take by default.
+     Worth upstreaming.
 """
 
 import os
@@ -312,30 +317,44 @@ def main() -> int:
     )
 
     # ------------------------------------------------------------------
-    # Patch 10: harden the prepackaged-stdlib curl download for Windows.
+    # Patch 10: robust, fail-loud prepackaged-stdlib download for Windows.
     # ------------------------------------------------------------------
-    # Upstream runs `curl -O -L <url>` with no `--fail` and no check=True.
-    # On Windows, curl's Schannel backend aborts with
-    # CRYPT_E_NO_REVOCATION_CHECK (0x80092012) when the cert's CRL/OCSP
-    # endpoint can't be reached, so the .tar.xz never lands and the next
-    # `tarfile.open()` dies with a cryptic FileNotFoundError that hides the
-    # real TLS/network cause. `--ssl-no-revoke` is the standard fix for that
-    # exact Schannel error; non-Schannel curl backends (Linux/macOS) accept
-    # and ignore it, so the patch is safe cross-platform. `--fail` + a small
-    # retry + check=True turn any remaining failure into a clear,
-    # fail-fast CalledProcessError instead of a misleading missing-file crash.
+    # Upstream runs `curl -O -L <url>` with no `--fail` and no check, so a
+    # failed download leaves the .tar.xz absent and the next tarfile.open()
+    # crashes with a cryptic FileNotFoundError. On Windows, curl's Schannel
+    # backend HARD-fails with CRYPT_E_NO_REVOCATION_CHECK (0x80092012) when
+    # it cannot REACH the cert's CRL/OCSP responder — that means "could not
+    # check revocation", not "cert is revoked", and usually points at a
+    # TLS-intercepting corporate proxy/AV or a network blocking OCSP.
+    #
+    # We try a fully strict download first (revocation enforced) and only
+    # fall back to --ssl-no-revoke if that fails, saying loudly that we did
+    # and why. The relaxed retry still verifies chain/hostname/expiry; it
+    # only skips the revocation freshness check for this one fixed GitHub
+    # URL — the soft-fail posture OpenSSL/browsers take by default. Healthy
+    # networks keep full revocation checking; only affected users degrade.
     report(
-        "setup_libcxx_prepackaged.py curl --ssl-no-revoke + --fail",
+        "setup_libcxx_prepackaged.py curl strict-then-no-revoke fallback",
         patch_file(
             os.path.join(HAKKUN, "tools", "setup_libcxx_prepackaged.py"),
             "    subprocess.run(['curl', '-O', '-L', prepackaged_source])",
-            "    # SMO_HAKKUN_PATCH_10: harden the stdlib download for Windows\n"
-            "    # (Schannel CRYPT_E_NO_REVOCATION_CHECK) and fail fast & loud.\n"
-            "    subprocess.run(\n"
-            "        ['curl', '--ssl-no-revoke', '--fail', '--location',\n"
-            "         '--retry', '3', '--retry-delay', '2', '-O', prepackaged_source],\n"
-            "        check=True,\n"
-            "    )",
+            "    # SMO_HAKKUN_PATCH_10: robust, fail-loud download. Try strict\n"
+            "    # first (revocation enforced); only on failure retry once with\n"
+            "    # --ssl-no-revoke (Windows Schannel CRYPT_E_NO_REVOCATION_CHECK).\n"
+            "    _curl = ['curl', '--fail', '--location', '--retry', '3',\n"
+            "             '--retry-delay', '2', '-O']\n"
+            "    if subprocess.run(_curl + [prepackaged_source]).returncode != 0:\n"
+            "        print(\n"
+            "            '[setup_libcxx] strict download failed. On Windows this is\\n'\n"
+            "            'usually CRYPT_E_NO_REVOCATION_CHECK: curl (Schannel) could\\n'\n"
+            "            'not REACH the certificate revocation responder (not that the\\n'\n"
+            "            'cert is revoked). Likely a TLS-intercepting corporate\\n'\n"
+            "            'proxy/AV or a network blocking OCSP. Retrying once with\\n'\n"
+            "            '--ssl-no-revoke, which still verifies chain/hostname/expiry\\n'\n"
+            "            'but skips the revocation freshness check for this URL.',\n"
+            "            file=sys.stderr,\n"
+            "        )\n"
+            "        subprocess.run(_curl + ['--ssl-no-revoke', prepackaged_source], check=True)",
             sentinel="SMO_HAKKUN_PATCH_10",
         ),
     )
