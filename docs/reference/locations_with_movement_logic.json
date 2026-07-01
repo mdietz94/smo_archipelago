@@ -187,7 +187,7 @@
             "Cascade Peace"
         ],
         "region": "Cascade Kingdom",
-        "requires": ""
+        "requires": "{ScaleAWall()}"
     },
     {
         "name": "Cascade: Good Morning, Captain Toad!",
@@ -220,6 +220,7 @@
         "category": [
             "Cascade Kingdom",
             "Cascade Peace"
+            
         ],
         "region": "Cascade Kingdom",
         "requires": []
@@ -417,7 +418,7 @@
             "Sand Kingdom"
         ],
         "region": "Sand Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Ground Pound)}"
     },
     {
         "name": "Sand: Top of a Dune",
@@ -425,7 +426,7 @@
             "Sand Kingdom"
         ],
         "region": "Sand Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Ground Pound)}"
     },
     {
         "name": "Sand: Lost in the Luggage",
@@ -433,7 +434,7 @@
             "Sand Kingdom"
         ],
         "region": "Sand Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Ground Pound)}"
     },
     {
         "name": "Sand: Bullet Bill Breakthrough",
@@ -475,7 +476,7 @@
             "Sand Peace"
         ],
         "region": "Sand Kingdom",
-        "requires": "{SandPeace()}"
+        "requires": "{SandPeace()} and {OptOne(Ground Pound)}"
     },
     {
         "name": "Sand: The Treasure of Jaxi Ruins",
@@ -491,7 +492,7 @@
             "Sand Kingdom"
         ],
         "region": "Sand Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Hold/Throw)}"
     },
     {
         "name": "Sand: Desert Gardening: Ruins Seed",
@@ -499,7 +500,7 @@
             "Sand Kingdom"
         ],
         "region": "Sand Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Hold/Throw)}"
     },
     {
         "name": "Sand: Desert Gardening: Seed on the Cliff",
@@ -507,7 +508,7 @@
             "Sand Kingdom"
         ],
         "region": "Sand Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Hold/Throw)}"
     },
     {
         "name": "Sand: Sand Kingdom Timer Challenge 1",
@@ -543,7 +544,7 @@
             "Sand Peace"
         ],
         "region": "Sand Kingdom",
-        "requires": "{SandPeace()}"
+        "requires": "{SandPeace()} and {OptOne(Ground Pound)}"
     },
     {
         "name": "Sand: Taking Notes: Jump on the Palm",
@@ -585,7 +586,7 @@
             "Sand Kingdom"
         ],
         "region": "Sand Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Jaxi)}"
     },
     {
         "name": "Sand: You're Quite a Catch, Captain Toad!",
@@ -603,7 +604,7 @@
             "Sand Peace"
         ],
         "region": "Sand Kingdom",
-        "requires": "{SandPeace()}"
+        "requires": "{SandPeace()} and {OptOne(Jaxi)}"
     },
     {
         "name": "Sand: Welcome Back, Jaxi!",
@@ -612,7 +613,7 @@
             "Sand Peace"
         ],
         "region": "Sand Kingdom",
-        "requires": "{SandPeace()}"
+        "requires": "{SandPeace()} and {OptOne(Jaxi)}"
     },
     {
         "name": "Sand: Wandering Cactus",
@@ -703,7 +704,7 @@
             "Sand Kingdom"
         ],
         "region": "Sand Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Wall Jump)}"
     },
     {
         "name": "Sand: Sphynx's Treasure Vault",
@@ -720,7 +721,7 @@
             "Sand Kingdom"
         ],
         "region": "Sand Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Ground Pound)}"
     },
     {
         "name": "Sand: Dancing with New Friends",
@@ -861,7 +862,7 @@
             "Ground Pound"
         ],
         "region": "Lake Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Ground Pound)}"
     },
     {
         "name": "Lake: From the Broken Pillar",
@@ -869,7 +870,7 @@
             "Lake Kingdom"
         ],
         "region": "Lake Kingdom",
-        "requires": "{LakeDifficult()}"
+        "requires": "{CheepCheepOrGroundPound()} and {LakeDifficult()}"
     },
     {
         "name": "Lake: Treasure in the Spiky Waterway",
@@ -877,7 +878,7 @@
             "Lake Kingdom"
         ],
         "region": "Lake Kingdom",
-        "requires": "{LakeDifficult()}"
+        "requires": "{SwimOrCheepCheep()} and {LakeDifficult()}"
     },
     {
         "name": "Lake: Lake Gardening: Spiky Passage Seed",
@@ -895,7 +896,7 @@
             "Lake Peace"
         ],
         "region": "Lake Kingdom",
-        "requires": "{LakeDifficult()}"
+        "requires": "{LakeDifficult()} and {OptOne(Ground Pound)}"
     },
     {
         "name": "Lake: Lake Kingdom Timer Challenge 2",
@@ -904,7 +905,7 @@
             "Lake Peace"
         ],
         "region": "Lake Kingdom",
-        "requires": "{LakeDifficult()}"
+        "requires": "{LakeDifficult()} and {ScaleAWallNoTripleJump()}"
     },
     {
         "name": "Lake: Moon Shards in the Lake",
@@ -912,7 +913,7 @@
             "Lake Kingdom"
         ],
         "region": "Lake Kingdom",
-        "requires": "{LakeDifficult()}"
+        "requires": "{SwimOrCheepCheep()} and {LakeDifficult()}"
     },
     {
         "name": "Lake: Taking Notes: Dive and Swim",
@@ -920,7 +921,7 @@
             "Lake Kingdom"
         ],
         "region": "Lake Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Swim)}"
     },
     {
         "name": "Lake: Taking Notes: In the Cliffside",
@@ -962,7 +963,7 @@
             "Lake Kingdom"
         ],
         "region": "Lake Kingdom",
-        "requires": "{LakeDifficult()} or {DifficultMode()}"
+        "requires": "{CheepCheepOrGroundPound()} and ({LakeDifficult()} OR {DifficultMode()})"
     },
     {
         "name": "Lake: Shopping in Lake Lamode",
@@ -1041,7 +1042,7 @@
             "Hint Art"
         ],
         "region": "Lake Kingdom",
-        "requires": "{LakeDifficult()}"
+        "requires": "{LakeDifficult()} and {OptOne(Ground Pound)}"
     },
     {
         "name": "Wooded: Road to Sky Garden",
@@ -1117,7 +1118,7 @@
             "Wooded Kingdom"
         ],
         "region": "Wooded Kingdom",
-        "requires": "{WoodedDifficult()}"
+        "requires": "{WoodedDifficult()} and {OptOne(GroundPound)}"
     },
     {
         "name": "Wooded: Atop the Tall Tree",
@@ -1273,7 +1274,7 @@
             "Deep Woods"
         ],
         "region": "Wooded Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Hold/Throw)}"
     },
     {
         "name": "Wooded: Glowing in the Deep Woods",
@@ -1282,7 +1283,7 @@
             "Deep Woods"
         ],
         "region": "Wooded Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Hold/Throw)}"
     },
     {
         "name": "Wooded: Past the Peculiar Pipes",
@@ -1291,7 +1292,7 @@
             "Deep Woods"
         ],
         "region": "Wooded Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Hold/Throw)}"
     },
     {
         "name": "Wooded: By the Babbling Brook in Deep Woods",
@@ -1300,7 +1301,7 @@
             "Deep Woods"
         ],
         "region": "Wooded Kingdom",
-        "requires": "{OptAll(|T-Rex| or |Coin Coffer|)}"
+        "requires": "{OptAll(|T-Rex| or |Coin Coffer|)} and {OptOne(Hold/Throw)}"
     },
     {
         "name": "Wooded: The Hard Rock in Deep Woods",
@@ -1309,7 +1310,7 @@
             "Deep Woods"
         ],
         "region": "Wooded Kingdom",
-        "requires": "{OptAll(|T-Rex| or |Coin Coffer|)}"
+        "requires": "{OptAll(|T-Rex| or |Coin Coffer|)} and {OptOne(Hold/Throw)}"
     },
     {
         "name": "Wooded: A Treasure Made from Coins",
@@ -1318,7 +1319,7 @@
             "Deep Woods"
         ],
         "region": "Wooded Kingdom",
-        "requires": "{OptOne(Coin Coffer)}"
+        "requires": "{OptOne(Hold/Throw)} and {OptOne(Coin Coffer)}"
     },
     {
         "name": "Wooded: Beneath the Roots of the Moving Tree",
@@ -1327,7 +1328,7 @@
             "Deep Woods"
         ],
         "region": "Wooded Kingdom",
-        "requires": "{OptOne(Tree)}"
+        "requires": "{OptOne(Hold/Throw)} and {OptOne(Tree)}"
     },
     {
         "name": "Wooded: Deep Woods Treasure Trap",
@@ -1336,7 +1337,7 @@
             "Deep Woods"
         ],
         "region": "Wooded Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Hold/Throw)}"
     },
     {
         "name": "Wooded: Exploring for Treasure",
@@ -1345,7 +1346,7 @@
             "Deep Woods"
         ],
         "region": "Wooded Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Hold/Throw)}"
     },
     {
         "name": "Wooded: Wooded Kingdom Timer Challenge 1",
@@ -1408,7 +1409,7 @@
             "Long Course"
         ],
         "region": "Wooded Kingdom",
-        "requires": "{WoodedDifficult()}"
+        "requires": "{WoodedDifficult()} and ({OptOne(Wall Jump)})"
     },
     {
         "name": "Wooded: Flower Road Reach",
@@ -1472,7 +1473,7 @@
             "Hint Art"
         ],
         "region": "Wooded Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Ground Pound)}"
     },
     {
         "name": "Cloud: Picture Match: Basically a Goomba",
@@ -1546,7 +1547,7 @@
             "Wall Jump"
         ],
         "region": "Lost Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Wall Jump)}"
     },
     {
         "name": "Lost: On the Mountain Road",
@@ -1579,7 +1580,7 @@
             "Wall Jump"
         ],
         "region": "Lost Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Wall Jump)}"
     },
     {
         "name": "Lost: Caught Hopping in the Jungle!",
@@ -1596,7 +1597,7 @@
             "Wall Jump"
         ],
         "region": "Lost Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Wall Jump)}"
     },
     {
         "name": "Lost: Moon Shards in the Jungle",
@@ -1632,7 +1633,7 @@
             "Wall Jump"
         ],
         "region": "Lost Kingdom",
-        "requires": "{OptOne(Glydon)}"
+        "requires": "({OptOne(Wall Jump)}) and {OptOne(Glydon)}"
     },
     {
         "name": "Lost: The Caged Gold",
@@ -1658,7 +1659,7 @@
             "Wall Jump"
         ],
         "region": "Lost Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Wall Jump)}"
     },
     {
         "name": "Metro: New Donk City's Pest Problem",
@@ -1746,7 +1747,7 @@
             "Metro Kingdom"
         ],
         "region": "Night Metro",
-        "requires": ""
+        "requires": "{ShermOrLongJump()}"
     },
     {
         "name": "Metro: Glittering Above the Pool",
@@ -1803,7 +1804,7 @@
             "Metro Peace"
         ],
         "region": "Metro Kingdom",
-        "requires": "{MetroPeace()}"
+        "requires": "{WallJumpOrPole()} and {MetroPeace()}"
     },
     {
         "name": "Metro: How Do They Take Out the Trash?",
@@ -1829,7 +1830,7 @@
             "Metro Peace"
         ],
         "region": "Metro Kingdom",
-        "requires": "{MetroPeace()}"
+        "requires": "{MetroPeace()} and ({OptOne(Motor scooter)})"
     },
     {
         "name": "Metro: City Gardening: Building Planter",
@@ -1837,7 +1838,7 @@
             "Metro Kingdom"
         ],
         "region": "Metro Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Hold/Throw)}"
     },
     {
         "name": "Metro: City Gardening: Plaza Planter",
@@ -1845,7 +1846,7 @@
             "Metro Kingdom"
         ],
         "region": "Metro Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Hold/Throw)}"
     },
     {
         "name": "Metro: City Gardening: Rooftop Planter",
@@ -1853,7 +1854,7 @@
             "Metro Kingdom"
         ],
         "region": "Metro Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Hold/Throw)} and {WallJumpOrPole()}"
     },
     {
         "name": "Metro: How You Doin', Captain Toad?",
@@ -1870,7 +1871,7 @@
             "Metro Peace"
         ],
         "region": "Metro Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Motor scooter)}"
     },
     {
         "name": "Metro: Bench Friends",
@@ -1946,7 +1947,7 @@
             "Metro Kingdom"
         ],
         "region": "Night Metro",
-        "requires": ""
+        "requires": "{OptOne(Wall Jump)}"
     },
     {
         "name": "Metro: Sewer Treasure",
@@ -2027,7 +2028,7 @@
             "Metro Kingdom"
         ],
         "region": "Metro Kingdom",
-        "requires": "{OptOne(Manhole)}"
+        "requires": "{OptOne(Manhole)} and {ScaleAWall()}"
     },
     {
         "name": "Metro: Hanging from a High-Rise",
@@ -2043,7 +2044,7 @@
             "Metro Kingdom"
         ],
         "region": "Metro Kingdom",
-        "requires": "{OptOne(Mini Rocket)}"
+        "requires": "{OptOne(Mini Rocket)} and {OptOne(Wall Jump)}"
     },
     {
         "name": "Metro: Bullet Billding",
@@ -2067,7 +2068,7 @@
             "Metro Kingdom"
         ],
         "region": "Metro Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Motor scooter)}"
     },
     {
         "name": "Metro: Big Jump: Escape!",
@@ -2075,7 +2076,7 @@
             "Metro Kingdom"
         ],
         "region": "Metro Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Motor scooter)}"
     },
     {
         "name": "Metro: Secret Path to New Donk City!",
@@ -2162,7 +2163,7 @@
             "post-metro"
         ],
         "region": "Snow Kingdom",
-        "requires": ""
+        "requires": "{ScaleAWall()}"
     },
     {
         "name": "Snow: Behind Snowy Mountain",
@@ -2189,7 +2190,7 @@
             "post-metro"
         ],
         "region": "Snow Kingdom",
-        "requires": "{DifficultMode()}"
+        "requires": "{DifficultMode()} OR {TyfooOrScaleATallWall()}"
     },
     {
         "name": "Snow: Caught Hopping in the Snow!",
@@ -2237,7 +2238,7 @@
             "post-metro"
         ],
         "region": "Snow Kingdom",
-        "requires": "{SnowPeace()}"
+        "requires": "{SnowPeace()} and {OptOne(Swim)}"
     },
     {
         "name": "Snow: Moon Shards in the Snow",
@@ -2356,7 +2357,7 @@
             "post-metro"
         ],
         "region": "Snow Kingdom",
-        "requires": "{SnowPeace()}"
+        "requires": "{SnowPeace()} and {OptOne(Swim)}"
     },
     {
         "name": "Snow: Freezing Water Near the Ceiling",
@@ -2366,7 +2367,7 @@
             "post-metro"
         ],
         "region": "Snow Kingdom",
-        "requires": "{SnowPeace()}"
+        "requires": "{SnowPeace()} and {OptOne(Swim)}"
     },
     {
         "name": "Snow: Blowing and Sliding",
@@ -2501,7 +2502,7 @@
             "post-metro"
         ],
         "region": "Seaside Kingdom",
-        "requires": ""
+        "requires": "{SwimOrCheepCheep()}"
     },
     {
         "name": "Seaside: Ocean-Bottom Maze: Hidden Room",
@@ -2510,7 +2511,7 @@
             "post-metro"
         ],
         "region": "Seaside Kingdom",
-        "requires": ""
+        "requires": "{SwimOrCheepCheep()}"
     },
     {
         "name": "Seaside: Underwater Highway Tunnel",
@@ -2555,7 +2556,7 @@
             "post-metro"
         ],
         "region": "Seaside Kingdom",
-        "requires": ""
+        "requires": "{SwimOrCheepCheep()}"
     },
     {
         "name": "Seaside: Bonjour, Dorrie!",
@@ -2574,7 +2575,7 @@
             "post-metro"
         ],
         "region": "Seaside Kingdom",
-        "requires": ""
+        "requires": "{SwimOrCheepCheep()}"
     },
     {
         "name": "Seaside: What the Waves Left Behind",
@@ -2619,7 +2620,7 @@
             "post-metro"
         ],
         "region": "Seaside Kingdom",
-        "requires": ""
+        "requires": "{SwimOrCheepCheep()}"
     },
     {
         "name": "Seaside: Treasure Trap Hidden in the Inlet",
@@ -2628,7 +2629,7 @@
             "post-metro"
         ],
         "region": "Seaside Kingdom",
-        "requires": ""
+        "requires": "{SwimOrCheepCheep()}"
     },
     {
         "name": "Seaside: Sea Gardening: Inlet Seed",
@@ -2637,7 +2638,7 @@
             "post-metro"
         ],
         "region": "Seaside Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Swim)}"
     },
     {
         "name": "Seaside: Sea Gardening: Canyon Seed",
@@ -2664,7 +2665,7 @@
             "post-metro"
         ],
         "region": "Seaside Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Swim)}"
     },
     {
         "name": "Seaside: Seaside Kingdom Timer Challenge 1",
@@ -2702,7 +2703,7 @@
             "post-metro"
         ],
         "region": "Seaside Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Swim)}"
     },
     {
         "name": "Seaside: Taking Notes: Ocean Surface Dash",
@@ -2749,7 +2750,7 @@
             "Minigame"
         ],
         "region": "Seaside Kingdom",
-        "requires": ""
+        "requires": "{SwimOrCheepCheep()}"
     },
     {
         "name": "Seaside: Shopping in Bubblaine",
@@ -2758,7 +2759,7 @@
             "post-metro"
         ],
         "region": "Seaside Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Swim)}"
     },
     {
         "name": "Seaside: Beach Volleyball: Champ",
@@ -2798,7 +2799,7 @@
             "post-metro"
         ],
         "region": "Seaside Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Swim)}"
     },
     {
         "name": "Seaside: A Rumble on the Seaside Floor",
@@ -2979,7 +2980,7 @@
             "Luncheon Kingdom"
         ],
         "region": "Luncheon Kingdom",
-        "requires": ""
+        "requires": "{ScaleAWall()}"
     },
     {
         "name": "Luncheon: Atop a Column in a Row",
@@ -3033,7 +3034,7 @@
             "Luncheon Kingdom"
         ],
         "region": "Luncheon Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Hold/Throw)}"
     },
     {
         "name": "Luncheon: Golden Turnip Recipe 2",
@@ -3042,7 +3043,7 @@
             "Luncheon Kingdom"
         ],
         "region": "Luncheon Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Hold/Throw)}"
     },
     {
         "name": "Luncheon: Golden Turnip Recipe 3",
@@ -3051,7 +3052,7 @@
             "Luncheon Kingdom"
         ],
         "region": "Luncheon Kingdom",
-        "requires": "{OptOne(Hammer Bro)}"
+        "requires": "{OptOne(Hold/Throw)} and {OptOne(Hammer Bro)}"
     },
     {
         "name": "Luncheon: Luncheon Kingdom Timer Challenge 1",
@@ -3061,7 +3062,7 @@
             "Wall Jump"
         ],
         "region": "Luncheon Kingdom",
-        "requires": ""
+        "requires": "{OptOne(Wall Jump)}"
     },
     {
         "name": "Luncheon: Luncheon Kingdom Timer Challenge 2",
@@ -3079,7 +3080,7 @@
             "Luncheon Kingdom"
         ],
         "region": "Luncheon Kingdom",
-        "requires": "{LuncheonPeace()}"
+        "requires": "{LuncheonPeace()} and {JumpHigh()}"
     },
     {
         "name": "Luncheon: Beneath the Rolling Vegetables",
@@ -3351,7 +3352,7 @@
             "Hint Art"
         ],
         "region": "Luncheon Kingdom",
-        "requires": "{Meat()}"
+        "requires": "{Meat()} and {SwimOrCheepCheep()}"
     },
     {
         "name": "Mushroom: Secret Path to Peach's Castle!",
@@ -3469,7 +3470,7 @@
             "Bowser's Kingdom"
         ],
         "region": "Bowser's Kingdom",
-        "requires": "{OptOne(Pokio)}"
+        "requires": "{ScaleAWall()} and {OptOne(Pokio)}"
     },
     {
         "name": "Bowser's: Sunken Treasure in the Moat",
@@ -3478,7 +3479,7 @@
             "Bowser's Kingdom"
         ],
         "region": "Bowser's Kingdom",
-        "requires": "{OptOne(Pokio)}"
+        "requires": "{OptOne(Swim)} and {OptOne(Pokio)}"
     },
     {
         "name": "Bowser's: Past the Moving Wall",
@@ -3498,7 +3499,7 @@
             "Bowser's Peace"
         ],
         "region": "Bowser's Kingdom",
-        "requires": "{BowserPeace()}"
+        "requires": "{BowserPeace()} and {NiceFrame()}"
     },
     {
         "name": "Bowser's: Knocking Down the Nice Frame",
@@ -3508,7 +3509,7 @@
             "Bowser's Peace"
         ],
         "region": "Bowser's Kingdom",
-        "requires": "{BowserPeace()}"
+        "requires": "{BowserPeace()} and {NiceFrame()}"
     },
     {
         "name": "Bowser's: Caught on the Iron Fence",
@@ -3737,7 +3738,7 @@
             "Precision Capture"
         ],
         "region": "Bowser's Kingdom",
-        "requires": "{BowserPeace()} and {OptOne(Jizo)}"
+        "requires": "{BowserPeace()} and {OptOne(Jizo)} and {OptOne(Wall Jump)}"
     },
     {
         "name": "Bowser's: Jizo and the Hidden Room",
@@ -3748,7 +3749,7 @@
             "Precision Capture"
         ],
         "region": "Bowser's Kingdom",
-        "requires": "{BowserPeace()} and {OptOne(Jizo)}"
+        "requires": "{BowserPeace()} and {OptOne(Jizo)} and {OptOne(Wall Jump)}"
     },
     {
         "name": "Bowser's: Dashing Above the Clouds",
@@ -3795,7 +3796,7 @@
             "Moon Kingdom"
         ],
         "region": "Moon Kingdom",
-        "requires": "{DifficultMode()} or ({OptOne(Parabones)} and {OptOne(Banzai Bill)})"
+        "requires": "{DifficultMode()} OR ({OptOne(Parabones)} and {OptOne(Banzai Bill)} and ({OptOne(Wall Jump)}))"
     },
     {
         "name": "Moon: Rolling Rock on the Moon",
@@ -3897,7 +3898,7 @@
             "Wall Jump"
         ],
         "region": "Moon Kingdom",
-        "requires": "{OptOne(Parabones)} and {OptOne(Banzai Bill)}"
+        "requires": "{OptOne(Parabones)} and {OptOne(Banzai Bill)} and ({OptOne(Wall Jump)})"
     },
     {
         "name": "Arrive in the Mushroom Kingdom",
@@ -4058,7 +4059,7 @@
             "Capture"
         ],
         "region": "Wooded Kingdom",
-        "requires": "|Coin Coffer|"
+        "requires": "({WoodedPeace()} or {OptOne(Hold/Throw)}) AND |Coin Coffer|"
     },
     {
         "name": "Capture: Tree",
@@ -4066,7 +4067,7 @@
             "Capture"
         ],
         "region": "Wooded Kingdom",
-        "requires": "|Tree|"
+        "requires": "({OptOne(Hold/Throw)}) AND |Tree|"
     },
     {
         "name": "Capture: Boulder",
@@ -4074,7 +4075,7 @@
             "Capture"
         ],
         "region": "Wooded Kingdom",
-        "requires": "|Boulder|"
+        "requires": "({OptOne(Hold/Throw)}) AND |Boulder|"
     },
     {
         "name": "Capture: Picture Match Part",
