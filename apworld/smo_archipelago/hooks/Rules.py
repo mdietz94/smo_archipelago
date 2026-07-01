@@ -131,12 +131,16 @@ def DifficultMode(world: World, multiworld: MultiWorld, state: CollectionState, 
 def LakeDifficult(world: World, multiworld: MultiWorld, state: CollectionState, player: int):
     """can the player make the 'difficult' triple jump at the start of lake or do lake peace
     (separate def cause it would be repetitive in locations.json)"""
-    return "{LakePeace()} OR {DifficultMode()}"
+    if DifficultMode(world, multiworld, state, player):
+        return True
+    return LakePeace(world, multiworld, state, player)
 
 def WoodedDifficult(world: World, multiworld: MultiWorld, state: CollectionState, player: int):
     """can the player make the 'difficult' long jump at the first uproot section or have uproot
     (separate def cause it would be repetitive in locations.json)"""
-    return "{DifficultMode()} OR {OptOne(Uproot)}"
+    if DifficultMode(world, multiworld, state, player):
+        return True
+    return OptOne(world, multiworld, state, player, "Uproot")
 
 def KingdomMoons(world: World, multiworld: MultiWorld, state: CollectionState, player: int, kingdom: str, n) -> str:
     """N effective Power Moons FROM A SPECIFIC KINGDOM.
