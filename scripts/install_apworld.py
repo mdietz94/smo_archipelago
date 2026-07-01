@@ -1,4 +1,4 @@
-"""Zip apworld/smo_archipelago/ into vendor/Archipelago/custom_worlds/meatballsDiffPatch.apworld.
+"""Zip apworld/smo_archipelago/ into vendor/Archipelago/custom_worlds/meatballs.apworld.
 
 An `.apworld` file is just a zip with the world package at its root. Archipelago
 0.5+ auto-discovers `.apworld` files in `<checkout>/custom_worlds/` at startup,
@@ -6,11 +6,11 @@ so this is the supported way to ship a custom world without polluting
 `vendor/Archipelago/worlds/` (which would also get clobbered by `git submodule
 update`).
 
-The zip is named `meatballsDiffPatch.apworld` (so Archipelago imports the world
-as `worlds.meatballsDiffPatch`) while the source folder on disk stays
+The zip is named `meatballs.apworld` (so Archipelago imports the world as
+`worlds.meatballs`) while the source folder on disk stays
 `apworld/smo_archipelago/` — the in-repo name was kept to avoid churning
 every dev-workflow path reference, but the deployed/distributed identifier
-is `meatballsDiffPatch`. The 2026-05-20 rename from `smo.apworld` → `meatballs.apworld`
+is `meatballs`. The 2026-05-20 rename from `smo.apworld` → `meatballs.apworld`
 moved us off the `worlds.smo` slot that an existing upstream apworld already
 claims (it uses the `.apsmo` namespace), so installing both side-by-side no
 longer trips Archipelago's duplicate-game-name check.
@@ -42,13 +42,12 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 SRC = REPO / "apworld" / "smo_archipelago"
 DST_DIR = REPO / "vendor" / "Archipelago" / "custom_worlds"
-APWORLD_STEM = "meatballsDiffPatch"
-DST = DST_DIR / f"{APWORLD_STEM}.apworld"
+DST = DST_DIR / "meatballs.apworld"
 # Stale predecessors; left in place they would clash on the AP game name
 # (or, in the case of smo.apworld, on the `worlds.smo` module slot the
 # upstream apworld already owns).
 LEGACY_DSTS = (
-    DST_DIR / "meatballs.apworld",
+    DST_DIR / "meatballsDiffPatch.apworld",
     DST_DIR / "smo.apworld",
     DST_DIR / "smo_archipelago.apworld",
 )
@@ -256,28 +255,28 @@ def main(argv: list[str] | None = None) -> int:
 
     with zipfile.ZipFile(DST, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for p in apworld_files:
-            # Inside the zip, paths must match the zip stem so Archipelago
-            # imports it as `worlds.<stem>` (line 196 of
+            # Inside the zip, paths must be `meatballs/...` so Archipelago
+            # imports it as `worlds.meatballs` (line 196 of
             # vendor/Archipelago/worlds/__init__.py does
             # `importer.find_spec(f"worlds.{Path(apworld.path).stem}")` —
             # the spec derivation pins the inner folder name to the zip stem).
-            _add_to_zip(zf, p, Path(APWORLD_STEM) / p.relative_to(SRC))
+            _add_to_zip(zf, p, Path("meatballs") / p.relative_to(SRC))
 
-        # Bundled mod sources land under <stem>/_setup/switch_mod/ so the
+        # Bundled mod sources land under meatballs/_setup/switch_mod/ so the
         # wizard can locate them via __file__ relative paths regardless
         # of whether the apworld was installed as a loose source tree or
         # a zip.
         for p in bundled_mod_files:
             _add_to_zip(
                 zf, p,
-                Path(APWORLD_STEM) / "_setup" / "switch_mod" / p.relative_to(REPO / "switch-mod"),
+                Path("meatballs") / "_setup" / "switch_mod" / p.relative_to(REPO / "switch-mod"),
             )
 
-        # Bundled scripts land under <stem>/_setup/scripts/ — same rationale.
+        # Bundled scripts land under meatballs/_setup/scripts/ — same rationale.
         for p in bundled_script_files:
             _add_to_zip(
                 zf, p,
-                Path(APWORLD_STEM) / "_setup" / "scripts" / p.name,
+                Path("meatballs") / "_setup" / "scripts" / p.name,
             )
 
     for legacy in LEGACY_DSTS:
