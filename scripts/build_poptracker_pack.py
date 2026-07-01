@@ -70,6 +70,16 @@ def allocate_location_ids(locations: list[dict], start: int) -> list[tuple[int, 
 
 # ---------- naming
 
+# Names of items that actually exist in the item pool (items.json). Populated
+# at the start of build(). Used to mirror the apworld's OptOne/OptAll clamp
+# semantics: a `requires` reference to a name that is NOT a pool item (e.g. base
+# moves like "Ground Pound"/"Wall Jump"/"Swim", or excluded captures like "Jaxi")
+# clamps to |Name:0| in the apworld -> trivially true. Without this set the
+# translation would emit a reference to a nonexistent tracker code, which is
+# permanently false and wrongly holds those locations out of logic whenever
+# capturesanity is ON.
+POOL_ITEM_NAMES: set[str] = set()
+
 _SAFE_CODE_RE = re.compile(r"[^a-z0-9]+")
 
 
@@ -244,7 +254,14 @@ class _Parser:
                 depth += 1
             elif t[0] == "RPAREN":
                 depth -= 1
-            # accumulate the source form
+            # accumulate the source form. The tokenizer drops whitespace, so a
+            # multi-word bare arg like `Bullet Bill` or `Ground Pound` arrives as
+            # two adjacent IDENT tokens — re-insert the separating space or they
+            # fuse into `BulletBill`/`GroundPound` (wrong item code, and the
+            # pool-membership check below would never match). Piped args
+            # (|Bowser Statue|) keep their spaces via the ITEM token already.
+            if t[0] == "IDENT" and cur and not cur.endswith((" ", "(", ",", "|")):
+                cur += " "
             cur += _emit_token(t)
             self.i += 1
         self.take("RBRACE")
@@ -336,6 +353,10 @@ def to_dnf(ast: tuple) -> list[list[str]]:
 def _item_rule(name: str, count: int) -> str | None:
     """A reference to an apworld item (always |Name| or |Name:N|).
     n=1 → just the code; n>1 → $has_count helper."""
+    # A reference to a name that never enters the pool (base move / excluded
+    # capture) clamps to |Name:0| in the apworld → trivially true. Mirror that.
+    if POOL_ITEM_NAMES and name not in POOL_ITEM_NAMES:
+        return None
     c = code_for(name)
     if count <= 0:
         return None  # |Name:0| is trivially true → empty clause
@@ -353,10 +374,18 @@ def _func_to_dnf(name: str, args: list[str]) -> list[list[str]]:
     """
     # Wrappers that degrade to true when capturesanity is off.
     if name == "OptOne":
-        # args: ["Item Name"] (no pipes). When capturesanity off → true; on → has(item)
+        # args: ["Item Name"] (pipes/count optional). When capturesanity off →
+        # true; on → has(item). But a name that never enters the pool (base move
+        # like "Ground Pound"/"Wall Jump"/"Swim", or an excluded capture like
+        # "Jaxi") clamps to |Name:0| in the apworld → trivially true regardless
+        # of capturesanity. Emitting has(<nonexistent code>) here would be
+        # permanently false and wrongly hold the location out of logic.
         if not args:
             return [[]]
-        item_code = code_for(args[0])
+        item_name = args[0].strip().strip("|@$").split(":")[0]
+        if POOL_ITEM_NAMES and item_name not in POOL_ITEM_NAMES:
+            return [[]]
+        item_code = code_for(item_name)
         return [["$capturesanity_off"], [item_code]]
     if name == "OptAll":
         # args: ["|X| and |Y|"]. Parse the inner expression and OR with capturesanity_off.
@@ -951,6 +980,12 @@ def build(root: Path, version: str, out_dir: Path) -> dict[str, Any]:
     regions = json.loads((data_dir / "regions.json").read_text(encoding="utf-8"))
     categories = json.loads((data_dir / "categories.json").read_text(encoding="utf-8"))
 
+    # Seed the pool-item set before any requires string is translated (both
+    # build_region_prereqs() below and location emission consult it via
+    # _item_rule/_func_to_dnf). See POOL_ITEM_NAMES comment for why.
+    POOL_ITEM_NAMES.clear()
+    POOL_ITEM_NAMES.update(i["name"] for i in items)
+
     # Mirrors the inlined `game_table` in apworld/smo_archipelago/Data.py.
     # Update both if either changes — the AP id allocation in starting_index()
     # is seeded from these and must agree with the apworld at runtime.
@@ -1111,6 +1146,21 @@ def self_test() -> int:
     # OptOne expansion
     dnf = to_dnf(parse_requires("{OptOne(T-Rex)}"))
     check("dnf optone", dnf == [["$capturesanity_off"], ["t_rex"]], str(dnf))
+
+    # OptOne over a name that never enters the pool (base move / excluded
+    # capture) → trivially true, NOT has(<nonexistent>). Guard is active only
+    # when POOL_ITEM_NAMES is populated, so seed it for these cases.
+    POOL_ITEM_NAMES.clear()
+    POOL_ITEM_NAMES.update({"T-Rex", "Pokio"})
+    dnf = to_dnf(parse_requires("{OptOne(Ground Pound)}"))
+    check("dnf optone non-pool → true", dnf == [[]], str(dnf))
+    dnf = to_dnf(parse_requires("{OptOne(T-Rex)}"))
+    check("dnf optone pool item unchanged",
+          dnf == [["$capturesanity_off"], ["t_rex"]], str(dnf))
+    # bare reference to a non-pool name is also trivially true
+    dnf = to_dnf(parse_requires("|Ground Pound|"))
+    check("dnf bare non-pool → true", dnf == [[]], str(dnf))
+    POOL_ITEM_NAMES.clear()
 
     # OptAll expansion
     dnf = to_dnf(parse_requires("{OptAll(|X| and |Y|)}"))
