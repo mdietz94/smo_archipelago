@@ -13,6 +13,8 @@ def SandPeace(world: World, multiworld: MultiWorld, state: CollectionState, play
 
 def LakePeace(world: World, multiworld: MultiWorld, state: CollectionState, player: int):
     """can the player do lake peace"""
+    if is_option_enabled(multiworld, player, "capturesanity"):
+        return "|Zipper|"
     return True
 
 def SwimOrCheepCheep(world: World, multiworld: MultiWorld, state: CollectionState, player: int):
@@ -30,7 +32,7 @@ def CheepCheepOrGroundPound(world: World, multiworld: MultiWorld, state: Collect
 def WoodedPeace(world: World, multiworld: MultiWorld, state: CollectionState, player: int):
     """can the player get world peace in wooded kingdom"""
     if is_option_enabled(multiworld, player, "capturesanity"):
-        return "|Uproot|"
+        return "|Uproot| and |Sherm|"
     return True
 
 def ShermOrLongJump(world: World, multiworld: MultiWorld, state: CollectionState, player: int):
@@ -121,6 +123,20 @@ def BowserPeace(world: World, multiworld: MultiWorld, state: CollectionState, pl
     if is_option_enabled(multiworld, player, "capturesanity"):
         return "|Pokio|"
     return True
+
+def DifficultMode(world: World, multiworld: MultiWorld, state: CollectionState, player: int):
+    """can the player do 'difficult' things"""
+    return is_option_enabled(multiworld, player, "difficult_mode")
+
+def LakeDifficult(world: World, multiworld: MultiWorld, state: CollectionState, player: int):
+    """can the player make the 'difficult' triple jump at the start of lake or do lake peace
+    (separate def cause it would be repetitive in locations.json)"""
+    return "{LakePeace()} OR {DifficultMode()}"
+
+def WoodedDifficult(world: World, multiworld: MultiWorld, state: CollectionState, player: int):
+    """can the player make the 'difficult' long jump at the first uproot section or have uproot
+    (separate def cause it would be repetitive in locations.json)"""
+    return "{DifficultMode()} OR {OptOne(Uproot)}"
 
 def KingdomMoons(world: World, multiworld: MultiWorld, state: CollectionState, player: int, kingdom: str, n) -> str:
     """N effective Power Moons FROM A SPECIFIC KINGDOM.
