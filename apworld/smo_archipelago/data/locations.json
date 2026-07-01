@@ -963,7 +963,7 @@
             "Lake Kingdom"
         ],
         "region": "Lake Kingdom",
-        "requires": "{CheepCheepOrGroundPound()} and ({LakeDifficult()} OR DifficultMode()})"
+        "requires": "{CheepCheepOrGroundPound()} and ({LakeDifficult()} OR {DifficultMode()})"
     },
     {
         "name": "Lake: Shopping in Lake Lamode",

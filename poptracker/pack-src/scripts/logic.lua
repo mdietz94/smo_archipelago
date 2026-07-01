@@ -29,6 +29,7 @@ OPTIONS = OPTIONS or {
   include_precision_capture_moons = true,
   goal                          = 0,      -- first victory variant
   talkatoo_mode                 = false,
+  difficult_mode                = false,  -- Toggle off
 }
 
 -- ---------- core lookups
@@ -216,6 +217,18 @@ end
 function lighthouse()
   if capturesanity_off() then return true end
   return has_one("gushen") or has_one("cheep_cheep")
+end
+
+function difficult_mode()
+  return is_opt("difficult_mode")
+end
+
+function lake_difficult()
+  return lake_peace() or difficult_mode()
+end
+
+function wooded_difficult()
+  return difficult_mode() or capturesanity_off() or has_one("uproot")
 end
 
 -- Trivial helpers (currently always true in Rules.py; tightening these
