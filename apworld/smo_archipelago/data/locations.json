@@ -129,8 +129,7 @@
     {
         "name": "Cascade: Behind the Waterfall",
         "category": [
-            "Cascade Kingdom",
-            "Cascade Peace"
+            "Cascade Kingdom"
         ],
         "region": "Cascade Kingdom",
         "requires": []
@@ -138,8 +137,7 @@
     {
         "name": "Cascade: On Top of the Rubble",
         "category": [
-            "Cascade Kingdom",
-            "Cascade Peace"
+            "Cascade Kingdom"
         ],
         "region": "Cascade Kingdom",
         "requires": []
@@ -147,8 +145,7 @@
     {
         "name": "Cascade: Treasure of the Waterfall Basin",
         "category": [
-            "Cascade Kingdom",
-            "Cascade Peace"
+            "Cascade Kingdom"
         ],
         "region": "Cascade Kingdom",
         "requires": []
@@ -156,8 +153,7 @@
     {
         "name": "Cascade: Above a High Cliff",
         "category": [
-            "Cascade Kingdom",
-            "Cascade Peace"
+            "Cascade Kingdom"
         ],
         "region": "Cascade Kingdom",
         "requires": []
@@ -165,8 +161,7 @@
     {
         "name": "Cascade: Across the Floating Isles",
         "category": [
-            "Cascade Kingdom",
-            "Cascade Peace"
+            "Cascade Kingdom"
         ],
         "region": "Cascade Kingdom",
         "requires": []
@@ -174,8 +169,7 @@
     {
         "name": "Cascade: Cascade Kingdom Timer Challenge 1",
         "category": [
-            "Cascade Kingdom",
-            "Cascade Peace"
+            "Cascade Kingdom"
         ],
         "region": "Cascade Kingdom",
         "requires": []
@@ -183,8 +177,7 @@
     {
         "name": "Cascade: Cascade Kingdom Timer Challenge 2",
         "category": [
-            "Cascade Kingdom",
-            "Cascade Peace"
+            "Cascade Kingdom"
         ],
         "region": "Cascade Kingdom",
         "requires": "{ScaleAWall()}"
@@ -192,8 +185,7 @@
     {
         "name": "Cascade: Good Morning, Captain Toad!",
         "category": [
-            "Cascade Kingdom",
-            "Cascade Peace"
+            "Cascade Kingdom"
         ],
         "region": "Cascade Kingdom",
         "requires": []
@@ -201,8 +193,7 @@
     {
         "name": "Cascade: Dinosaur Nest: Big Cleanup!",
         "category": [
-            "Cascade Kingdom",
-            "Cascade Peace"
+            "Cascade Kingdom"
         ],
         "region": "Cascade Kingdom",
         "requires": []
@@ -218,8 +209,7 @@
     {
         "name": "Cascade: Nice Shot with the Chain Chomp!",
         "category": [
-            "Cascade Kingdom",
-            "Cascade Peace"
+            "Cascade Kingdom"
             
         ],
         "region": "Cascade Kingdom",
@@ -228,8 +218,7 @@
     {
         "name": "Cascade: Very Nice Shot with the Chain Chomp!",
         "category": [
-            "Cascade Kingdom",
-            "Cascade Peace"
+            "Cascade Kingdom"
         ],
         "region": "Cascade Kingdom",
         "requires": []
@@ -237,8 +226,7 @@
     {
         "name": "Cascade: Past the Chasm Lifts",
         "category": [
-            "Cascade Kingdom",
-            "Cascade Peace"
+            "Cascade Kingdom"
         ],
         "region": "Cascade Kingdom",
         "requires": []
@@ -246,8 +234,7 @@
     {
         "name": "Cascade: Hidden Chasm Passage",
         "category": [
-            "Cascade Kingdom",
-            "Cascade Peace"
+            "Cascade Kingdom"
         ],
         "region": "Cascade Kingdom",
         "requires": []
