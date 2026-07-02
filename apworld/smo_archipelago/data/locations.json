@@ -548,7 +548,7 @@
             "Sand Kingdom"
         ],
         "region": "Sand Kingdom",
-        "requires": "{SandPeace()}"
+        "requires": []
     },
     {
         "name": "Sand: Fishing in the Oasis",
@@ -648,7 +648,8 @@
     {
         "name": "Sand: Walking the Desert!",
         "category": [
-            "Sand Kingdom"
+            "Sand Kingdom",
+            "Sand Peace"
         ],
         "region": "Sand Kingdom",
         "requires": "{SandPeace()}"
