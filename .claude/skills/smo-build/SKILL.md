@@ -45,7 +45,7 @@ If the user has multiple NICs (Wi-Fi + Ethernet, VPN adapter, Hyper-V virtual sw
 
 That single command:
 
-1. Runs `scripts/patch_hakkun.py` to apply the 10 Windows-port patches to the pinned LibHakkun submodule (idempotent; reports "already applied" on re-runs).
+1. Runs `scripts/patch_hakkun.py` to apply the local patches to the pinned LibHakkun submodule — Windows-port fixes plus upstream-drift fixes such as patch 10, which repoints the prepackaged-stdlib download at Codeberg after LibHakkun moved its releases off GitHub (idempotent; reports "already applied" on re-runs).
 2. Builds `sail.exe` (the host-side symbol-DB resolver) via `scripts/setup_sail_winpath.py` if it doesn't already exist (one-time per machine; uses msys2 mingw64 g++ since aarch64-clang can't link a host binary).
 3. Configures + builds `switch-mod/` via Windows-native CMake + LLVM 19 + Ninja, producing `switch-mod/build/sd/atmosphere/contents/0100000000010000/exefs/subsdk9`.
 
