@@ -202,7 +202,11 @@ class SmoManager(GameManager):
         # diagnostics appear together — exactly what you want while
         # debugging a hardware-only behaviour.
     ]
-    base_title = "Archipelago SMO Client"
+    # Mirrors the Launcher button label (`__init__.CLIENT_DISPLAY_NAME`)
+    # so a user who searched "meatballs" in the Launcher sees the same
+    # word on the window they end up in. Not imported from there — the
+    # client package deliberately never imports the world module.
+    base_title = "Archipelago Meatballs Client"
 
     def __init__(self, ctx: "SMOContext"):
         super().__init__(ctx)

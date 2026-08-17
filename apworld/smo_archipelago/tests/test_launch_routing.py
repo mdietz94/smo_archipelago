@@ -1,5 +1,5 @@
-"""Tests for `__init__.launch_smo_client` — the Launcher's "SMO Client"
-button + the `.meatballsap` file-association entry point.
+"""Tests for `__init__.launch_smo_client` — the Launcher's
+"Meatballs Client" button + the `.meatballsap` file-association entry point.
 
 Routing rule: always launch SMOClient. The setup wizard is opened
 separately via `/setup` inside SMOClient and never auto-fires from this
@@ -74,6 +74,47 @@ def test_launch_subprocess_not_imported(smo_mod) -> None:
     )
 
 
+def test_launcher_component_name_is_meatballs_searchable(smo_mod) -> None:
+    """The Launcher button must be findable by typing "meatballs".
+
+    Users routinely have this apworld and the other public SMO apworld
+    installed side by side; when both register a button called "SMO
+    Client" the only way to tell them apart is trial and error. Leading
+    with the shipped zip stem fixes that — and, because
+    `add_client_to_launcher`'s idempotency guard matches on
+    `display_name`, it also stops the other apworld's registration from
+    making ours no-op out entirely."""
+    from worlds.LauncherComponents import components  # type: ignore[import-not-found]
+
+    ours = [
+        c for c in components
+        if c.display_name == smo_mod.CLIENT_DISPLAY_NAME
+    ]
+    assert len(ours) == 1, "exactly one Meatballs client Component expected"
+    assert "meatballs" in smo_mod.CLIENT_DISPLAY_NAME.lower()
+    # And it must no longer collide with the other apworld's button — a
+    # name containing "SMO Client" would defeat the point.
+    assert "SMO Client" not in smo_mod.CLIENT_DISPLAY_NAME
+    assert ours[0].func is smo_mod.launch_smo_client
+
+
+def test_launcher_registration_is_idempotent(smo_mod) -> None:
+    """AP's apworld autodiscover can import the module more than once
+    across reloads; re-registering would show duplicate buttons."""
+    from worlds.LauncherComponents import components  # type: ignore[import-not-found]
+
+    before = sum(
+        1 for c in components
+        if c.display_name == smo_mod.CLIENT_DISPLAY_NAME
+    )
+    smo_mod.add_client_to_launcher()
+    after = sum(
+        1 for c in components
+        if c.display_name == smo_mod.CLIENT_DISPLAY_NAME
+    )
+    assert before == after == 1
+
+
 @pytest.fixture
 def spy(smo_mod) -> list:
     """Replace `launch_or_subprocess` with a recorder. The bare
@@ -114,7 +155,7 @@ def test_smoap_click_routes_to_smoclient(spy, tmp_path, smo_mod) -> None:
 
 
 def test_button_click_with_no_args_routes_to_smoclient(spy, smo_mod) -> None:
-    """Plain "SMO Client" Launcher button click (no .meatballsap argument)
+    """Plain "Meatballs Client" Launcher button click (no .meatballsap arg)
     still routes straight to SMOClient. SMOClient handles a missing slot
     via the GUI Connect bar."""
     smo_mod.launch_smo_client()

@@ -1,6 +1,6 @@
 """SMOContext — CommonContext subclass owning the AP-side websocket connection
 and the SwitchServer (asyncio TCP server the Switch mod connects to over LAN).
-Launched via the Archipelago Launcher's "SMO Client" button.
+Launched via the Archipelago Launcher's "Meatballs Client" button.
 """
 
 from __future__ import annotations

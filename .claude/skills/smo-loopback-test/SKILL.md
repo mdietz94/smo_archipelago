@@ -55,8 +55,8 @@ If working in a `.claude/worktrees/<name>/` worktree AND the user launches SMOCl
 ```
 
 ```pwsh
-# Pane B: launch SMO Client — connects to localhost
-.\.venv\Scripts\python vendor\Archipelago\Launcher.py "SMO Client" `
+# Pane B: launch the Meatballs Client — connects to localhost
+.\.venv\Scripts\python vendor\Archipelago\Launcher.py "Meatballs Client" `
     --connect localhost:38281 --name Mario
 ```
 

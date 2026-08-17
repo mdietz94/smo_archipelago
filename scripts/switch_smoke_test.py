@@ -1,7 +1,7 @@
 """Fake Switch — drives the SMOClient's SwitchServer end-to-end over loopback.
 
 Usage (assumes SMOClient is already running on localhost:17777, launched
-either via the Archipelago Launcher's "SMO Client" button or directly):
+either via the Archipelago Launcher's "Meatballs Client" button or directly):
     python scripts/switch_smoke_test.py [--device-id NAME]
 
 Sequence:

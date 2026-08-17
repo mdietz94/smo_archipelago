@@ -1,10 +1,10 @@
 """SMOClient entry point.
 
-Invoked by the Archipelago Launcher's "SMO Client" button via the
-Component registration in `apworld/smo_archipelago/__init__.py`. Also
+Invoked by the Archipelago Launcher's "Meatballs Client" button via
+the Component registration in `apworld/smo_archipelago/__init__.py`. Also
 runnable standalone from inside the Archipelago checkout:
 
-    python vendor/Archipelago/Launcher.py "SMO Client" \\
+    python vendor/Archipelago/Launcher.py "Meatballs Client" \\
         --connect localhost:38281 --name Mario
 
 Three pieces share the event loop:
