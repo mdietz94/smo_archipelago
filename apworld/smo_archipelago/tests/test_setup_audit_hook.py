@@ -111,6 +111,56 @@ def test_real_subprocess_emits_event(tmp_path: Path):
     ), f"no matching record in {records}"
 
 
+@pytest.mark.parametrize(
+    "argv",
+    [
+        [r"C:\Tools\thing.exe", "--flag", "value"],
+        # The case that used to break: a spaced path gets quoted by
+        # list2cmdline, and the old shlex(posix=False) split handed the
+        # quotes straight through into the log record.
+        [r"C:\Program Files\Python313\python.exe", "-c", "pass"],
+        [r"C:\dir with space\tool.exe", "--msg", "hello world"],
+        # Trailing backslash before the closing quote gets doubled by
+        # list2cmdline; the parser has to halve it back.
+        [r"C:\Program Files\bin\ ", "x"],
+        [r"C:\t.exe", 'say "hi"', ""],
+    ],
+)
+def test_argv_round_trips_windows_cmdline(argv):
+    """``Popen`` on Windows joins list-args with ``list2cmdline`` before
+    firing the audit event, so the hook's splitter must be that
+    function's exact inverse — quotes and backslash escapes removed."""
+    joined = subprocess.list2cmdline(argv)
+    assert audit._split_windows_cmdline(joined) == argv
+
+
+def test_strict_allows_python_under_spaced_path(tmp_path: Path, monkeypatch):
+    """Regression: an executable whose directory contains a space
+    reaches the hook as a quoted token. If the quotes survive the split,
+    ``_resolve_executable`` returns None and strict mode rejects a
+    perfectly allowlisted tool."""
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    monkeypatch.delenv("APPDATA", raising=False)
+    spaced = tmp_path / "Program Files" / "tool.exe"
+    spaced.parent.mkdir(parents=True)
+    spaced.write_text("")
+    audit.add_allowed_prefix(spaced.parent)
+    log = tmp_path / "exec-trace.log"
+    install_audit_hook(log_path=log, strict=True)
+    # Mimic the Windows event shape: executable=None, args=joined string.
+    sys.audit(
+        "subprocess.Popen",
+        None,
+        subprocess.list2cmdline([str(spaced), "--version"]),
+        None,
+        None,
+    )
+    rec = _read_log(log)[-1]
+    assert rec["argv"] == [str(spaced), "--version"]
+    assert rec["executable_resolved"] == str(spaced)
+    assert rec["allowlist_ok"] is True
+
+
 def test_strict_blocks_unknown_executable(tmp_path: Path, monkeypatch):
     """An executable outside every allowed prefix must raise
     AuditViolation, which aborts the spawn before any process is
