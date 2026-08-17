@@ -18,7 +18,7 @@ Earlier revisions of this project shipped a standalone `python -m smo_ap_bridge`
 The Archipelago wire format (websocket + per-message-deflate + TLS) is too heavy to ship on Switch directly. `CommonContext` solves it in a few hundred lines. By subclassing CommonContext we get:
 
 - AP websocket, reconnect, deflate, TLS — all inherited.
-- A standard place to register the Launcher button (`Component("SMO Client", ...)` in `apworld/smo_archipelago/__init__.py`).
+- A standard place to register the Launcher button (`Component("Meatballs Client", ...)` in `apworld/smo_archipelago/__init__.py`).
 - A standard Kivy GUI (`GameManager` subclass) with logging tabs, command bar, and our custom Tracker + Connections tabs.
 
 The Switch still only needs to speak a small line-delimited JSON protocol over a single TCP socket on the LAN — see [wire-protocol.md](wire-protocol.md). The wire protocol did NOT change in the merge.

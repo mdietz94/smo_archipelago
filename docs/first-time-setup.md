@@ -2,7 +2,7 @@
 
 This page describes everything a brand-new SMO Archipelago player needs to
 do once on their machine. After this, joining a multiworld is the same as
-with any other Archipelago client: open **SMO Client** from the Archipelago
+with any other Archipelago client: open **Meatballs Client** from the Archipelago
 Launcher and connect to the AP server.
 
 > **Platform:** Windows only today. Linux and macOS aren't blocked by
@@ -76,7 +76,7 @@ to it, exactly like every other AP client.
 2. **Drop it into Archipelago's `custom_worlds/`** directory. On Windows the
    path is typically `%LOCALAPPDATA%\Archipelago\custom_worlds\` or
    wherever you installed Archipelago.
-3. **Open the Archipelago Launcher and click "SMO Client"** in the Clients
+3. **Open the Archipelago Launcher and click "Meatballs Client"** in the Clients
    list. The SMO Client window opens.
 4. **Type `/setup` in the SMO Client command bar.** The setup wizard opens
    in a fresh window. This is also how you re-run the wizard later
