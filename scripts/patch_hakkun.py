@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Apply Windows-port patches to the pinned LibHakkun submodule.
+"""Apply local patches to the pinned LibHakkun submodule.
+
+Mostly Windows-port fixes (the original motivation), plus a few
+platform-independent ones for upstream drift the pin can't dodge —
+see patches 9 and 10.
 
 The spike at third_party/hakkun-spike (gitignored) discovered six source-level
 patches needed to build LibHakkun + sail on Windows + msys2. Each patch is
@@ -43,6 +47,17 @@ These re-activate only if the pin ever rolls back to a tree that predates them.
      missing required argument 'format' (pos 1)`) because Argument
      Clinic moved the format requirement into __new__. Composition is
      durable across every CPython version. Worth upstreaming.
+
+ 10. (blocking) sys/tools/setup_libcxx_prepackaged.py release-host move:
+     LibHakkun moved its releases off GitHub to Codeberg and removed the
+     old GitHub ones, so the baked-in
+     `github.com/fruityloops1/LibHakkun/releases/download/stdlib-19.1.0-3/`
+     URL now 404s and no from-scratch build (dev checkout, setup wizard,
+     release CI) can fetch the prepackaged aarch64 stdlib. 10a repoints at
+     `codeberg.org/fruityloops1/LibHakkun/releases/download/stdlib-19.1.0/`
+     (same two tarballs; the Codeberg tag drops the `-3` suffix). 10b makes
+     the curl step fail loudly instead of saving an HTTP error body under
+     the tarball's name. Worth upstreaming.
 """
 
 import os
@@ -295,6 +310,72 @@ def main() -> int:
             _NSO_OLD,
             _NSO_NEW,
             sentinel="SMO_HAKKUN_PATCH_9",
+        ),
+    )
+
+    # ------------------------------------------------------------------
+    # Patch 10: setup_libcxx_prepackaged.py — GitHub → Codeberg releases.
+    # ------------------------------------------------------------------
+    # LibHakkun moved its release hosting to Codeberg and deleted the
+    # GitHub releases (reported 2026-08-11). The download URL baked into
+    # sys/tools/setup_libcxx_prepackaged.py,
+    #
+    #   https://github.com/fruityloops1/LibHakkun/releases/download/
+    #       stdlib-19.1.0-3/stdlib-19.1.0_clang_19.1.7.tar.xz
+    #
+    # now 404s. That script is how lib/std/*.a (musl libc + LLVM libc++ +
+    # libunwind + compiler-rt for aarch64) gets on disk, so an unpatched
+    # tree cannot build at all: every from-scratch build path hits it —
+    # a dev checkout, the setup wizard on an end-user machine, and the
+    # release CI switch-mod job.
+    #
+    # Codeberg hosts both tarballs (aarch64 and aarch32) under the tag
+    # `stdlib-19.1.0` — same filenames, no `-3` suffix on the tag:
+    #
+    #   https://codeberg.org/fruityloops1/LibHakkun/releases/download/
+    #       stdlib-19.1.0/stdlib-19.1.0_clang_19.1.7.tar.xz
+    #
+    # Patched as two independent replacements so that if upstream fixes
+    # (or re-shuffles) one of the two lines, the other still applies.
+    report(
+        "setup_libcxx_prepackaged.py Codeberg release URL",
+        patch_file(
+            os.path.join(HAKKUN, "tools", "setup_libcxx_prepackaged.py"),
+            'prepackaged_source = "https://github.com/fruityloops1/LibHakkun/releases/download/stdlib-19.1.0-3/" + prepackaged_source_tar_name',
+            "# SMO_HAKKUN_PATCH_10A: LibHakkun moved its releases to Codeberg and\n"
+            "# removed them from GitHub, so the old GitHub URL 404s. Codeberg\n"
+            "# serves the same two tarballs under the tag `stdlib-19.1.0` (the\n"
+            "# `-3` suffix is GitHub-only).\n"
+            'prepackaged_source = "https://codeberg.org/fruityloops1/LibHakkun/releases/download/stdlib-19.1.0/" + prepackaged_source_tar_name',
+            sentinel="SMO_HAKKUN_PATCH_10A",
+        ),
+    )
+
+    # Upstream's curl call passes neither `-f` nor `check=True`. On an HTTP
+    # error curl happily writes the error body to `stdlib-*.tar.xz` and
+    # exits 0, so the failure surfaces two steps later as an opaque
+    # `tarfile.ReadError` — or, if the tar step is skipped, as a link
+    # failure against absent lib/std/*.a. `-f` makes curl exit non-zero on
+    # 4xx/5xx; the explicit check turns that into a message that names the
+    # URL and points at this script, so the next host move is a one-line
+    # fix rather than an investigation.
+    report(
+        "setup_libcxx_prepackaged.py curl error checking",
+        patch_file(
+            os.path.join(HAKKUN, "tools", "setup_libcxx_prepackaged.py"),
+            "    subprocess.run(['curl', '-O', '-L', prepackaged_source])",
+            "    # SMO_HAKKUN_PATCH_10B: fail loudly. Without -f, curl saves HTTP\n"
+            "    # error bodies under the tarball's name and exits 0, turning a\n"
+            "    # dead download URL into a confusing tarfile.ReadError.\n"
+            "    result = subprocess.run(\n"
+            "        ['curl', '-f', '-S', '-O', '-L', '--retry', '3', prepackaged_source])\n"
+            "    if result.returncode != 0 or not os.path.exists(prepackaged_source_tar_name):\n"
+            "        raise SystemExit(\n"
+            "            f'Failed to download the prepackaged stdlib from '\n"
+            "            f'{prepackaged_source} (curl exit {result.returncode}).\\n'\n"
+            "            f'If LibHakkun moved its release hosting again, update the '\n"
+            "            f'URL in scripts/patch_hakkun.py (patch 10a).')",
+            sentinel="SMO_HAKKUN_PATCH_10B",
         ),
     )
 

@@ -65,7 +65,7 @@ cd C:\Users\maxwe\Documents\smo_archipelago
 python scripts\build_switchmod.py
 ```
 
-The wrapper script applies the 10 Windows-port patches to the pinned LibHakkun submodule (idempotent), builds `sail.exe` if needed, and runs the LLVM + ninja build.
+The wrapper script applies the local patches to the pinned LibHakkun submodule (idempotent) — Windows-port fixes plus upstream-drift fixes, including the patch that repoints the prepackaged-stdlib download at Codeberg after LibHakkun moved its releases off GitHub — builds `sail.exe` if needed, and runs the LLVM + ninja build.
 
 Output: `switch-mod/build/sd/atmosphere/contents/0100000000010000/exefs/subsdk9` (and `main.npdm` next to it). Pass `-DBRIDGE_HOST=...` etc. through the wrapper to override the bridge target at configure time.
 

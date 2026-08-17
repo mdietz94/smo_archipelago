@@ -158,6 +158,37 @@ If you get a missing-compiler error: re-check that `winget install
 LLVM.LLVM --version 19.1.7` and `winget install MSYS2.MSYS2` (plus
 `pacman -S mingw-w64-x86_64-gcc` inside the msys2 shell) both completed.
 
+### Build fails downloading the "pre-packaged stdlib" (404)
+
+LibHakkun moved its releases from GitHub to Codeberg in August 2026 and
+removed the GitHub ones, which broke the download URL baked into
+`setup_libcxx_prepackaged.py`. Symptoms are a 404 during the build step, or
+a `tarfile.ReadError` / a link failure complaining about missing `.a` files
+under `switch-mod/lib/std/`.
+
+**Fix: update to the latest release.** The current apworld repoints that URL
+at Codeberg automatically (`scripts/patch_hakkun.py`, patch 10) before the
+download runs.
+
+If you'd rather patch in place, edit
+`%APPDATA%\SMOArchipelago\bundled\switch_mod\sys\tools\setup_libcxx_prepackaged.py`
+and replace
+
+```
+https://github.com/fruityloops1/LibHakkun/releases/download/stdlib-19.1.0-3/
+```
+
+with
+
+```
+https://codeberg.org/fruityloops1/LibHakkun/releases/download/stdlib-19.1.0/
+```
+
+(the Codeberg tag drops the `-3` suffix; both tarball filenames are
+unchanged). Note that a hand-edit is undone the next time you upgrade the
+apworld, since the bundled tree is re-extracted from the new zip — which is
+fine, because the new zip already carries the fix.
+
 ### Switch boots SMO but the mod doesn't load
 
 Under Ryujinx, check `%APPDATA%\Ryujinx\Logs\Ryujinx_*.log` — the mod's
