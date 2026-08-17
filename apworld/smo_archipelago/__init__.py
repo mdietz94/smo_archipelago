@@ -500,14 +500,19 @@ class SMOWorld(World):
 
 from ._setup.launcher_errors import visible_errors as _visible_errors
 
+# Launcher button label. Single source of truth so the Component
+# registration and its idempotency guard can't drift apart. See
+# `add_client_to_launcher` for why the name leads with "Meatballs".
+CLIENT_DISPLAY_NAME = "Meatballs Client"
 
-@_visible_errors("SMO Client launcher")
+
+@_visible_errors("Meatballs Client launcher")
 def launch_smo_client(*args):
     """Archipelago Launcher entry point for the SMO Client (real Switch).
 
     Triggered by double-clicking a `.meatballsap` file (the Component's
     `SuffixIdentifier('.meatballsap')` registers the extension globally) or by
-    clicking the "SMO Client" button directly. Always launches SMOClient;
+    clicking the "Meatballs Client" button directly. Always launches SMOClient;
     when a `.meatballsap` is provided its slot_name / server_address / password
     are expanded into CLI overrides so the Connect bar lands pre-filled.
 
@@ -581,15 +586,30 @@ def _run_setup_wizard_no_smoap() -> None:
 
 
 def add_client_to_launcher() -> None:
-    """Register the "SMO Client" Component with the Archipelago Launcher.
+    """Register the "Meatballs Client" Component with the Archipelago
+    Launcher.
+
+    The display name deliberately leads with "Meatballs" (the shipped
+    apworld's zip stem) rather than the bare "SMO Client" it used through
+    v0.1.x. Two reasons:
+
+      1. Searchability. Users who have both this apworld and the other
+         public SMO apworld installed see two adjacent entries; typing
+         "meatball" now disambiguates without trial and error.
+      2. Collision safety. The idempotency guard below matches on
+         `display_name`. When the other SMO apworld registers its own
+         "SMO Client" first, a guard keyed on that string would make us
+         bail out and never register at all — the Launcher would show
+         exactly one button, wired to the wrong client. Matching on a
+         name only we use removes that failure mode.
 
     Idempotent: re-importing this module (e.g. AP's apworld autodiscover
     can call us more than once across reloads) won't create duplicates."""
     for c in components:
-        if c.display_name == "SMO Client":
+        if c.display_name == CLIENT_DISPLAY_NAME:
             return
     components.append(Component(
-        "SMO Client",
+        CLIENT_DISPLAY_NAME,
         func=launch_smo_client,
         component_type=Type.CLIENT,
         file_identifier=SuffixIdentifier('.meatballsap'),

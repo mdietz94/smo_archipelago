@@ -40,7 +40,7 @@ This repository is open-source and built on a careful line: **functional identif
 
 ## Architecture
 
-Two tiers: Switch/SMO subsdk9 mod ←TCP/JSON LAN→ PC client (Python, inside apworld) ←websocket→ AP server. The PC client lives at `apworld/smo_archipelago/client/` and ships in the .apworld zip — one process, one Kivy window, discovered by Archipelago's Launcher via `Component("SMO Client", ...)` in `__init__.py`. Full diagram and threading: [docs/architecture.md](docs/architecture.md). Wire format: [docs/wire-protocol.md](docs/wire-protocol.md).
+Two tiers: Switch/SMO subsdk9 mod ←TCP/JSON LAN→ PC client (Python, inside apworld) ←websocket→ AP server. The PC client lives at `apworld/smo_archipelago/client/` and ships in the .apworld zip — one process, one Kivy window, discovered by Archipelago's Launcher via `Component("Meatballs Client", ...)` in `__init__.py`. Full diagram and threading: [docs/architecture.md](docs/architecture.md). Wire format: [docs/wire-protocol.md](docs/wire-protocol.md).
 
 ## Load-bearing invariants
 
@@ -90,7 +90,7 @@ C:\Users\maxwe\Documents\smo_archipelago\
                                  switch-mod/lib/OdysseyHeaders, switch-mod/lib/imgui)
   .claude/skills/                Project skills (smo-build, smo-loopback-test, ...)
   apworld/smo_archipelago/       The apworld + Python client
-    __init__.py                  World class + SMOSettings + "SMO Client" Component reg
+    __init__.py                  World class + SMOSettings + Launcher Component reg
     data/                        categories.json / items.json / locations.json
                                  / meta.json / regions.json (game-level config
                                  lives in Data.py, not a JSON file)
