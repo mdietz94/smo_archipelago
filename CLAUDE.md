@@ -30,7 +30,7 @@ This repository is open-source and built on a careful line: **functional identif
 - Any moon-name list, capture list, or stage list of more than ~5 entries pasted into a doc, comment, or commit message as illustrative content — bulk transcription is the same exposure as the file.
 
 **Generally OK (already in the repo, established by upstream forks):**
-- `apworld/smo_archipelago/data/locations.json` and `items.json` — the community-curated location and capture names (478 locations + 67 item entries — 42 Captures + 25 Moon items + 27 post-metro items — as of 2026-05-22). Forked from the public [empathy-mp3/SMO-manual-AP](https://github.com/empathy-mp3/SMO-manual-AP) upstream. Edits are fine; bulk additions from a romfs dump are not — alignment with Nintendo's MSBT should happen one mismatch at a time, not as a wholesale copy.
+- `apworld/smo_archipelago/data/locations.json` and `items.json` — the community-curated location and capture names (477 locations + 66 item entries — 41 Captures + 25 Moon items + 27 post-metro items — as of 2026-08-17). Forked from the public [empathy-mp3/SMO-manual-AP](https://github.com/empathy-mp3/SMO-manual-AP) upstream. Edits are fine; bulk additions from a romfs dump are not — alignment with Nintendo's MSBT should happen one mismatch at a time, not as a wholesale copy.
 - Functional identifiers like `WaterfallWorldHomeStage`, `obj214`, `ScenarioName_<ObjId>`, `ShineList`, kingdom internal names (`CapWorld`/`SkyWorld`/etc.). These appear in every public SMO modding project (lunakit, MoonFlow, OdysseyDecomp) and are functional, not expressive.
 - The one M5.7 anchor entry (`"Our First Power Moon"`) appears in CLAUDE.md, the test suite, and docs as a known ground-truth datapoint. One name as a verifiable test fixture is fine; a list of names is not.
 
@@ -40,7 +40,7 @@ This repository is open-source and built on a careful line: **functional identif
 
 ## Architecture
 
-Two tiers: Switch/SMO subsdk9 mod ←TCP/JSON LAN→ PC client (Python, inside apworld) ←websocket→ AP server. The PC client lives at `apworld/smo_archipelago/client/` and ships in the .apworld zip — one process, one Kivy window, discovered by Archipelago's Launcher via `Component("SMO Client", ...)` in `__init__.py`. Full diagram and threading: [docs/architecture.md](docs/architecture.md). Wire format: [docs/wire-protocol.md](docs/wire-protocol.md).
+Two tiers: Switch/SMO subsdk9 mod ←TCP/JSON LAN→ PC client (Python, inside apworld) ←websocket→ AP server. The PC client lives at `apworld/smo_archipelago/client/` and ships in the .apworld zip — one process, one Kivy window, discovered by Archipelago's Launcher via `Component("Meatballs Client", ...)` in `__init__.py`. Full diagram and threading: [docs/architecture.md](docs/architecture.md). Wire format: [docs/wire-protocol.md](docs/wire-protocol.md).
 
 ## Load-bearing invariants
 
@@ -90,7 +90,7 @@ C:\Users\maxwe\Documents\smo_archipelago\
                                  switch-mod/lib/OdysseyHeaders, switch-mod/lib/imgui)
   .claude/skills/                Project skills (smo-build, smo-loopback-test, ...)
   apworld/smo_archipelago/       The apworld + Python client
-    __init__.py                  World class + SMOSettings + "SMO Client" Component reg
+    __init__.py                  World class + SMOSettings + Launcher Component reg
     data/                        categories.json / items.json / locations.json
                                  / meta.json / regions.json (game-level config
                                  lives in Data.py, not a JSON file)
@@ -153,7 +153,7 @@ C:\Users\maxwe\Documents\smo_archipelago\
                                  against bsd:u (separate from SMO's nn::socket); ApDiscovery
                                  runs the UDP probe chain — loopback (Ryujinx, 250ms) then
                                  unicast sweep across BRIDGE_HOST's /24 (real-Switch, 1s).
-      ap/capture_table.h         AUTO-GENERATED (42 cap names) — run sync_capture_table.py
+      ap/capture_table.h         AUTO-GENERATED (41 cap names) — run sync_capture_table.py
                                  (GITIGNORED — joins items.json with extracted capture_map.json)
       ap/shine_table.h           AUTO-GENERATED (~435 moons) — run sync_shine_table.py
                                  (GITIGNORED — joins locations.json with extracted shine_map.json;

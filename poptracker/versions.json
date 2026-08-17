@@ -1,6 +1,15 @@
 {
   "versions": [
     {
+      "package_version": "1.4.2",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v1.4.2/smo-poptracker-v1.4.2.zip",
+      "sha256": "2d02bd84415e3095053bc7b470a8103c6abca7bfeaf9e7e84d655686c926fb91",
+      "changelog": [
+        "PopTracker auto-update: add v1.4.0 to versions.json",
+        "fix to some wooded logic"
+      ]
+    },
+    {
       "package_version": "1.4.0",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v1.4.0/smo-poptracker-v1.4.0.zip",
       "sha256": "af1e728b6954920107dbdb6c5300c54b35489db7c14dd09bd8a874a44ed923dc",

@@ -42,7 +42,7 @@ it.
 
 ### Quickest path
 
-1. Open SMO Client from the Archipelago Launcher (click "SMO Client" in
+1. Open SMO Client from the Archipelago Launcher (click "Meatballs Client" in
    the Clients list).
 2. Type `/setup` in the command bar.
 3. The wizard opens in a fresh window. Walk forward — you can usually

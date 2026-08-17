@@ -26,7 +26,7 @@ See [`docs/first-time-setup.md`](docs/first-time-setup.md) for the full prereq t
 
 1. **Download `meatballs.apworld`** from the [Releases page](../../releases).
 2. **Drop it into your Archipelago install's `custom_worlds/`** directory.
-3. **Open the Archipelago Launcher and click "SMO Client"** in the Clients list.
+3. **Open the Archipelago Launcher and click "Meatballs Client"** in the Clients list.
 4. **Run `/setup`** in the SMO Client command bar. The setup wizard walks you through prereq checks → SMO NSP pick → moon/capture extraction → Switch-mod compile → deploy to SD card (or Ryujinx). You only need to do this **once per machine** (or again after upgrading to a new SMO Archipelago release). Your PC's LAN IP is auto-detected and baked in as a fallback; runtime UDP discovery handles routine IP changes automatically.
 5. **Boot SMO.** The mod loads on game start and dials your PC every couple seconds until SMO Client is listening.
 6. **Join a multiworld.** Type the host/port and your slot name into the Connect bar in SMO Client and click *Connect* — exactly like any other Archipelago client.

@@ -2,7 +2,7 @@
 
 This page describes everything a brand-new SMO Archipelago player needs to
 do once on their machine. After this, joining a multiworld is the same as
-with any other Archipelago client: open **SMO Client** from the Archipelago
+with any other Archipelago client: open **Meatballs Client** from the Archipelago
 Launcher and connect to the AP server.
 
 > **Platform:** Windows only today. Linux and macOS aren't blocked by
@@ -76,7 +76,7 @@ to it, exactly like every other AP client.
 2. **Drop it into Archipelago's `custom_worlds/`** directory. On Windows the
    path is typically `%LOCALAPPDATA%\Archipelago\custom_worlds\` or
    wherever you installed Archipelago.
-3. **Open the Archipelago Launcher and click "SMO Client"** in the Clients
+3. **Open the Archipelago Launcher and click "Meatballs Client"** in the Clients
    list. The SMO Client window opens.
 4. **Type `/setup` in the SMO Client command bar.** The setup wizard opens
    in a fresh window. This is also how you re-run the wizard later
@@ -157,6 +157,37 @@ invocation and also builds `sail.exe` on first run via msys2 mingw64 g++.
 If you get a missing-compiler error: re-check that `winget install
 LLVM.LLVM --version 19.1.7` and `winget install MSYS2.MSYS2` (plus
 `pacman -S mingw-w64-x86_64-gcc` inside the msys2 shell) both completed.
+
+### Build fails downloading the "pre-packaged stdlib" (404)
+
+LibHakkun moved its releases from GitHub to Codeberg in August 2026 and
+removed the GitHub ones, which broke the download URL baked into
+`setup_libcxx_prepackaged.py`. Symptoms are a 404 during the build step, or
+a `tarfile.ReadError` / a link failure complaining about missing `.a` files
+under `switch-mod/lib/std/`.
+
+**Fix: update to the latest release.** The current apworld repoints that URL
+at Codeberg automatically (`scripts/patch_hakkun.py`, patch 10) before the
+download runs.
+
+If you'd rather patch in place, edit
+`%APPDATA%\SMOArchipelago\bundled\switch_mod\sys\tools\setup_libcxx_prepackaged.py`
+and replace
+
+```
+https://github.com/fruityloops1/LibHakkun/releases/download/stdlib-19.1.0-3/
+```
+
+with
+
+```
+https://codeberg.org/fruityloops1/LibHakkun/releases/download/stdlib-19.1.0/
+```
+
+(the Codeberg tag drops the `-3` suffix; both tarball filenames are
+unchanged). Note that a hand-edit is undone the next time you upgrade the
+apworld, since the bundled tree is re-extracted from the new zip — which is
+fine, because the new zip already carries the fix.
 
 ### Switch boots SMO but the mod doesn't load
 

@@ -235,10 +235,7 @@ def _resolve_executable(executable, args) -> Path | None:
             elif isinstance(a0, str):
                 target = a0
         elif isinstance(args, str) and args:
-            try:
-                parts = shlex.split(args, posix=(os.name != "nt"))
-            except ValueError:
-                parts = args.split()
+            parts = _split_cmdline(args)
             if parts:
                 target = parts[0]
         elif isinstance(args, (bytes, bytearray)):
@@ -246,10 +243,7 @@ def _resolve_executable(executable, args) -> Path | None:
                 decoded = bytes(args).decode("utf-8", "replace")
             except Exception:
                 decoded = ""
-            try:
-                parts = shlex.split(decoded, posix=(os.name != "nt"))
-            except ValueError:
-                parts = decoded.split()
+            parts = _split_cmdline(decoded)
             if parts:
                 target = parts[0]
 
@@ -267,6 +261,77 @@ def _resolve_executable(executable, args) -> Path | None:
         return p.resolve()
     except OSError:
         return p
+
+
+def _split_windows_cmdline(s: str) -> list[str]:
+    """Inverse of ``subprocess.list2cmdline`` — parse a Windows command
+    line back into argv using the CommandLineToArgvW backslash/quote
+    rules.
+
+    ``shlex`` is the wrong parser for this string: ``posix=True`` eats
+    the backslashes out of ``C:\\Tools\\thing.exe``, and ``posix=False``
+    leaves the surrounding quotes on every argument that contained a
+    space — which is how an interpreter under ``C:\\Program Files`` used
+    to reach the log as ``'"C:\\Program Files\\...\\python.exe"'`` and
+    then fail to resolve against the strict-mode allowlist.
+
+    ``list2cmdline`` quotes uniformly (it does not use argv[0]'s special
+    no-escapes rule), so parsing every element the same way is the exact
+    inverse.
+    """
+    out: list[str] = []
+    cur: list[str] = []
+    started = False   # distinguishes an empty arg ("") from no arg at all
+    in_quotes = False
+    nslash = 0
+
+    for ch in s:
+        if ch == "\\":
+            nslash += 1
+            continue
+        if ch == '"':
+            # 2n backslashes + quote -> n backslashes, toggle quoting.
+            # 2n+1 backslashes + quote -> n backslashes, literal quote.
+            cur.append("\\" * (nslash // 2))
+            if nslash % 2:
+                cur.append('"')
+            else:
+                in_quotes = not in_quotes
+            nslash = 0
+            started = True
+            continue
+        if nslash:
+            cur.append("\\" * nslash)
+            nslash = 0
+            started = True
+        if ch in (" ", "\t") and not in_quotes:
+            if started:
+                out.append("".join(cur))
+                cur = []
+                started = False
+            continue
+        cur.append(ch)
+        started = True
+
+    if nslash:
+        cur.append("\\" * nslash)
+        started = True
+    if started:
+        out.append("".join(cur))
+    return out
+
+
+def _split_cmdline(s: str) -> list[str]:
+    """Split a command-line string into argv with the host platform's
+    rules. Windows gets the ``list2cmdline`` inverse above; POSIX gets
+    ``shlex``, with a whitespace split as the last resort for input that
+    doesn't tokenize (unbalanced quotes)."""
+    if os.name == "nt":
+        return _split_windows_cmdline(s)
+    try:
+        return shlex.split(s)
+    except ValueError:
+        return s.split()
 
 
 def _is_under(child: Path, parent: Path) -> bool:
@@ -290,22 +355,18 @@ def _is_under(child: Path, parent: Path) -> bool:
 def _argv_to_list(args) -> list[str]:
     """Normalize the audit event's ``args`` (list, tuple, str, or bytes)
     into a list of stringified argv elements. On Windows ``args`` is the
-    already-joined command line string; we shlex-split it so the log
-    record looks the same shape regardless of platform."""
+    already-joined command line string (``Popen`` runs it through
+    ``list2cmdline`` before firing the audit event), so we split it back
+    apart with :func:`_split_cmdline` — the log record then has the same
+    shape, and the same unquoted paths, regardless of platform."""
     if isinstance(args, str):
-        try:
-            return shlex.split(args, posix=(os.name != "nt"))
-        except ValueError:
-            return args.split()
+        return _split_cmdline(args)
     if isinstance(args, (bytes, bytearray)):
         try:
             s = bytes(args).decode("utf-8", "replace")
         except Exception:
             return [repr(args)]
-        try:
-            return shlex.split(s, posix=(os.name != "nt"))
-        except ValueError:
-            return s.split()
+        return _split_cmdline(s)
     if not isinstance(args, (list, tuple)):
         return [repr(args)]
     out: list[str] = []
