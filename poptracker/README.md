@@ -39,7 +39,7 @@ collected so far.
   tracked as composite items the access-rule helper reads via
   `has_kingdom_moons(kingdom, n)` — the same accounting the in-game
   HUD uses for kingdom-progression gating.
-- **All 42 captures** are toggle items updated automatically by the AP
+- **All 41 captures** are toggle items updated automatically by the AP
   autotracker.
 - **All 20 logic-affecting YAML options + goal selection** sync
   automatically from `slot_data` on connect into a Lua `OPTIONS` table

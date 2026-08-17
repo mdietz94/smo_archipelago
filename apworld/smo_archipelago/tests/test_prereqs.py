@@ -373,6 +373,7 @@ def test_llvm19_portable_install_wrong_version_surfaces_actionable_error(
 
 def test_winlibs_missing(isolated_portable_roots, monkeypatch, fake_run) -> None:
     """No g++ at any of the probe paths → not ok with auto-install note."""
+    monkeypatch.setattr("sys.platform", "win32")
     # Point all probes at locations that don't exist.
     monkeypatch.setattr(
         prereqs, "_winlibs_probe_paths",
@@ -394,6 +395,7 @@ def test_winlibs_portable_install_wins(
     """When the portable WinLibs install is present, it's resolved
     even if a system msys2 is also available (predictable: wizard
     always uses what IT installed)."""
+    monkeypatch.setattr("sys.platform", "win32")
     portable = tmp_path / "winlibs" / "bin" / "g++.exe"
     system = tmp_path / "msys2" / "mingw64" / "bin" / "g++.exe"
     for p in (portable, system):
@@ -424,6 +426,7 @@ def test_winlibs_falls_through_to_msys2(
     """A user with msys2 mingw64 g++ at the standard path
     (`C:\\msys64\\mingw64\\bin\\g++.exe`) should NOT need to re-download
     WinLibs — the existing install is accepted. Coexistence guarantee."""
+    monkeypatch.setattr("sys.platform", "win32")
     msys2 = tmp_path / "msys2" / "mingw64" / "bin" / "g++.exe"
     msys2.parent.mkdir(parents=True)
     msys2.write_text("")
@@ -448,6 +451,7 @@ def test_winlibs_existing_install_not_re_downloaded(
     system install is usable, the detector flips green and does NOT
     flag the row for the auto-install button (`ok=True` keeps the
     Auto-install button suppressed)."""
+    monkeypatch.setattr("sys.platform", "win32")
     sys_g = tmp_path / "winlibs" / "mingw64" / "bin" / "g++.exe"
     sys_g.parent.mkdir(parents=True)
     sys_g.write_text("")
@@ -461,6 +465,39 @@ def test_winlibs_existing_install_not_re_downloaded(
     fake_run({f"{sys_g} --version": (0, "g++ (Rev1) 14.0.0\n", "")})
     r = check_winlibs()
     assert r.ok
+
+
+def test_winlibs_posix_path_gxx(
+    isolated_portable_roots, monkeypatch, fake_run,
+) -> None:
+    """Non-Windows: any g++ on PATH qualifies (Nix dev shell / distro
+    compiler) — the WinLibs portable-install machinery is skipped."""
+    monkeypatch.setattr("sys.platform", "linux")
+    monkeypatch.setattr(
+        prereqs.shutil, "which",
+        lambda name: "/usr/bin/g++" if name == "g++" else None,
+    )
+    fake_run({"/usr/bin/g++ --version": (0, "g++ (GCC) 13.2.0\n", "")})
+    r = check_winlibs()
+    assert r.ok
+    # `sys.platform` is monkeypatched but `pathlib` is not — on a Windows
+    # host `Path("/usr/bin/g++").parent` stringifies with backslashes. Build
+    # the expectation the same way the detector does so the test asserts the
+    # behaviour (dirname of the resolved g++) rather than the separator.
+    assert prereqs.resolved_mingw_bin() == str(Path("/usr/bin/g++").parent)
+
+
+def test_winlibs_posix_no_gxx(
+    isolated_portable_roots, monkeypatch, fake_run,
+) -> None:
+    """Non-Windows with no g++ on PATH → not ok, detail points at the
+    Nix dev shell rather than the Windows auto-installer."""
+    monkeypatch.setattr("sys.platform", "linux")
+    monkeypatch.setattr(prereqs.shutil, "which", lambda name: None)
+    fake_run({})
+    r = check_winlibs()
+    assert not r.ok
+    assert "nix develop" in r.detail
 
 
 # ---------- check_sail_python_deps ----------

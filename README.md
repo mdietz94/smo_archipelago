@@ -17,10 +17,10 @@ This project provides an in-game module that:
 
 - **Super Mario Odyssey 1.0.0**
 - **Switch firmware 21.x or 22, with Atmosphere CFW** — or an **emulator**
-- **Windows PC** on the same LAN as the Switch
+- **Windows or Linux PC** on the same LAN as the Switch
 - **Archipelago, Python 3.12, LLVM 19, msys2 mingw64 g++, CMake, Ninja, hactool, prod.keys**
 
-See [`docs/first-time-setup.md`](docs/first-time-setup.md) for the full prereq table with install links.
+See [`docs/first-time-setup.md`](docs/first-time-setup.md) for the full prereq table with install links. On Linux the whole toolchain comes from the Nix flake instead — one `nix develop`, no per-tool installs; see [`docs/build-linux.md`](docs/build-linux.md).
 
 ## Installation
 
@@ -155,4 +155,4 @@ See [LICENSE](LICENSE).
 
 ---
 
-**For contributors:** project architecture, milestone status, build/test workflows, and the wire protocol live in [`CLAUDE.md`](CLAUDE.md), [`docs/architecture.md`](docs/architecture.md), [`docs/wire-protocol.md`](docs/wire-protocol.md), and [`docs/milestones.md`](docs/milestones.md). Project skills under `.claude/skills/` cover the build (`smo-build`), loopback test (`smo-loopback-test`), C++ host tests (`smo-host-tests`), symbol discovery (`smo-symbol-discovery`), data extraction (`smo-extract-data`), and PopTracker pack (`smo-poptracker`).
+**For contributors:** project architecture, milestone status, build/test workflows, and the wire protocol live in [`CLAUDE.md`](CLAUDE.md), [`docs/architecture.md`](docs/architecture.md), [`docs/wire-protocol.md`](docs/wire-protocol.md), and [`docs/milestones.md`](docs/milestones.md). Linux development uses the Nix flake — [`docs/build-linux.md`](docs/build-linux.md). Project skills under `.claude/skills/` cover the build (`smo-build`), loopback test (`smo-loopback-test`), C++ host tests (`smo-host-tests`), symbol discovery (`smo-symbol-discovery`), data extraction (`smo-extract-data`), and PopTracker pack (`smo-poptracker`).

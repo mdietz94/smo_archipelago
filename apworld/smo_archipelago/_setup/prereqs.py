@@ -22,6 +22,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -633,8 +634,30 @@ def check_winlibs() -> PrereqResult:
 
     On success, sets `_resolved_mingw_bin` so the build step can prepend
     the same dir to its subprocess PATH.
+
+    Non-Windows: any g++ on PATH qualifies (the Nix dev shell provides
+    the stdenv gcc wrapper) — the WinLibs portable-install machinery is
+    a Windows workaround for the lack of a system compiler.
     """
     global _resolved_mingw_bin
+
+    if sys.platform != "win32":
+        gxx_path = shutil.which("g++")
+        if gxx_path:
+            r = _safe_run([gxx_path, "--version"])
+            if r is not None and r[0] == 0:
+                first_line = (r[1] or r[2]).splitlines()[0] if (r[1] or r[2]) else "ok"
+                _resolved_mingw_bin = str(Path(gxx_path).parent)
+                return PrereqResult(
+                    "winlibs", "Host g++ (sail)", True,
+                    f"{first_line} ({gxx_path}) [PATH]",
+                )
+        return PrereqResult(
+            "winlibs", "Host g++ (sail)", False,
+            "no g++ on PATH (need a host C++ compiler for sail's build); "
+            "enter the Nix dev shell:  nix develop",
+            INSTALL_URLS["winlibs"],
+        )
 
     tried: list[str] = []
     for label, gxx in _winlibs_probe_paths():

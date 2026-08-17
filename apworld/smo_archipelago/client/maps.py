@@ -235,7 +235,7 @@ class CaptureMap:
 
         Returns None when the cap isn't in the table — caller decides
         whether to fall through (pass `cap` directly to addHackDictionary,
-        works for the ~36/42 captures whose names are 1:1) or to drop the
+        works for the ~36/41 captures whose names are 1:1) or to drop the
         item with a log line. M6 phase B picks the former: empty maps
         gracefully degrade to identity.
         """

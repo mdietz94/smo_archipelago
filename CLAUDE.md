@@ -30,7 +30,7 @@ This repository is open-source and built on a careful line: **functional identif
 - Any moon-name list, capture list, or stage list of more than ~5 entries pasted into a doc, comment, or commit message as illustrative content — bulk transcription is the same exposure as the file.
 
 **Generally OK (already in the repo, established by upstream forks):**
-- `apworld/smo_archipelago/data/locations.json` and `items.json` — the community-curated location and capture names (478 locations + 67 item entries — 42 Captures + 25 Moon items + 27 post-metro items — as of 2026-05-22). Forked from the public [empathy-mp3/SMO-manual-AP](https://github.com/empathy-mp3/SMO-manual-AP) upstream. Edits are fine; bulk additions from a romfs dump are not — alignment with Nintendo's MSBT should happen one mismatch at a time, not as a wholesale copy.
+- `apworld/smo_archipelago/data/locations.json` and `items.json` — the community-curated location and capture names (477 locations + 66 item entries — 41 Captures + 25 Moon items + 27 post-metro items — as of 2026-08-17). Forked from the public [empathy-mp3/SMO-manual-AP](https://github.com/empathy-mp3/SMO-manual-AP) upstream. Edits are fine; bulk additions from a romfs dump are not — alignment with Nintendo's MSBT should happen one mismatch at a time, not as a wholesale copy.
 - Functional identifiers like `WaterfallWorldHomeStage`, `obj214`, `ScenarioName_<ObjId>`, `ShineList`, kingdom internal names (`CapWorld`/`SkyWorld`/etc.). These appear in every public SMO modding project (lunakit, MoonFlow, OdysseyDecomp) and are functional, not expressive.
 - The one M5.7 anchor entry (`"Our First Power Moon"`) appears in CLAUDE.md, the test suite, and docs as a known ground-truth datapoint. One name as a verifiable test fixture is fine; a list of names is not.
 
@@ -153,7 +153,7 @@ C:\Users\maxwe\Documents\smo_archipelago\
                                  against bsd:u (separate from SMO's nn::socket); ApDiscovery
                                  runs the UDP probe chain — loopback (Ryujinx, 250ms) then
                                  unicast sweep across BRIDGE_HOST's /24 (real-Switch, 1s).
-      ap/capture_table.h         AUTO-GENERATED (42 cap names) — run sync_capture_table.py
+      ap/capture_table.h         AUTO-GENERATED (41 cap names) — run sync_capture_table.py
                                  (GITIGNORED — joins items.json with extracted capture_map.json)
       ap/shine_table.h           AUTO-GENERATED (~435 moons) — run sync_shine_table.py
                                  (GITIGNORED — joins locations.json with extracted shine_map.json;
@@ -256,3 +256,17 @@ cd C:\Users\maxwe\Documents\smo_archipelago
 ```
 
 The repo-root `.venv` lives in the main checkout (not in worktrees) — Archipelago's deps are a superset of what SMOClient needs. For switch-mod C++ host tests, use the `smo-host-tests` skill. For the cross-build, use the `smo-build` skill.
+
+## Linux (Nix) workflow — 2026-07-14
+
+The Windows-only setup above has a Linux counterpart driven by `flake.nix` (full doc: [docs/build-linux.md](docs/build-linux.md)). The project skills (`smo-build`, `smo-host-tests`, `smo-extract-data`) still describe the Windows dev machine — on Linux, ignore their PATH/msys2 instructions and use:
+
+```sh
+git submodule update --init --recursive   # --recursive! sys/tools/senobi is a nested submodule
+nix develop                               # clang 19 (unwrapped + -resource-dir), lld, cmake, ninja, gcc, py3.12+lz4/pyelftools/mmh3/pytest, hactool, curl
+python scripts/sync_capture_table.py && python scripts/sync_shine_table.py
+python scripts/build_switchmod.py -DBRIDGE_HOST=<LAN IP>   # platform-branched: POSIX path uses PATH tools, builds sail with host g++
+python -m pytest apworld/smo_archipelago/tests/            # ~620 pass / ~84 skip on a fresh checkout
+```
+
+Load-bearing Nix details: the flake wraps `llvmPackages_19.clang-unwrapped` with `-resource-dir` (nixpkgs splits the builtin headers — `arm_neon.h` — into the `.lib` output; a *wrapped* Nix clang would instead inject host-glibc flags into the freestanding aarch64-none-elf build). The shellHook exports `LD_LIBRARY_PATH` with libstdc++ + zlib so the extractor venv's manylinux `oead` wheel loads on NixOS. `extract_shine_map.py` defaults its output to `apworld/smo_archipelago/client/data/` (the stale `bridge/smo_ap_bridge/` default was fixed 2026-07-14) and additionally mirrors the maps to `~/.local/share/SMOArchipelago/data/` + touches the `.maps-updated` sentinel — the wizard's post-extract contract — so an installed apworld zip resolves them without WINE. The mirror fires **only when `--out`/`--cap-out` are both left at their defaults**: an explicit redirect means the caller owns its output (the wizard writes straight into the user-data dir and stamps the sentinel itself; `test_extract_real_nsp.py` writes under `tmp_path` so a test run — including the corrupted-NSP one, which passes on as few as 500 of 775 moons — can't clobber a real install's maps). Copies stage through a `.tmp` sibling + `os.replace`, since SMOClient prefers the user-data copy over `client/data/` and a truncated file there is worse than none. `SMOAP_APPDATA_ROOT` is honoured, same as `_setup.appdata_root()`, so the release-audit sandbox holds. Verified against a real 1.0.0 NSP 2026-07-14: 775/775 moons, 435 apworld matches, 52 captures, 0 unhit; `test_extract_real_nsp.py` passes via `SMOAP_TEST_NSP`/`SMOAP_TEST_KEYS`. Ryujinx on Linux lives at `~/.config/Ryujinx/`.

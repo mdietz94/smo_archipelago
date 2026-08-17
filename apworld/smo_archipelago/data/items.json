@@ -323,14 +323,6 @@
         "progression": true
     },
     {
-        "name": "Poison Piranha Plant",
-        "category": [
-            "Capture"
-        ],
-        "count": 1,
-        "progression": true
-    },
-    {
         "name": "Uproot",
         "category": [
             "Capture"

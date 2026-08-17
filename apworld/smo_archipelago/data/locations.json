@@ -4010,14 +4010,6 @@
         "requires": "|Puzzle Part|"
     },
     {
-        "name": "Capture: Poison Piranha Plant",
-        "category": [
-            "Capture"
-        ],
-        "region": "Wooded Kingdom",
-        "requires": "({WoodedPeace()}) AND |Poison Piranha Plant|"
-    },
-    {
         "name": "Capture: Uproot",
         "category": [
             "Capture"

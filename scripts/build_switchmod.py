@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Build switch-mod/ (LibHakkun-based subsdk9) with Windows-native CMake + LLVM + Ninja.
+"""Build switch-mod/ (LibHakkun-based subsdk9) with CMake + LLVM 19 + Ninja.
 
-Wraps the CMake invocation so it works on Windows out of the box — Hakkun
-upstream assumes Linux paths in several places (msys2 cmake on PATH first
-breaks the build; sail binary lacks .exe extension; setup_libcxx output
-location resolves wrong from a bash cwd; etc.). This wrapper handles all of
-that.
+On Windows this wraps the CMake invocation so it works out of the box —
+Hakkun upstream assumes Linux paths in several places (msys2 cmake on PATH
+first breaks the build; sail binary lacks .exe extension; setup_libcxx
+output location resolves wrong from a bash cwd; etc.). This wrapper handles
+all of that.
+
+On Linux/macOS the toolchain is taken straight from PATH — enter the Nix
+dev shell first (`nix develop`, see flake.nix + docs/build-linux.md), which
+provides clang 19 / lld / cmake / ninja / python-with-lz4 in one shot.
 
 Run from anywhere; this script always operates against switch-mod/ next to
 itself in the repo.
@@ -51,7 +55,11 @@ SWITCH_MOD = next(
 )
 BUILD_DIR = os.path.join(SWITCH_MOD, "build")
 
-# Windows-native binary directories. Each can be overridden via the matching
+IS_WINDOWS = sys.platform == "win32"
+
+# Windows-native binary directories (used only when IS_WINDOWS — POSIX
+# builds resolve every tool from PATH, which the Nix dev shell populates).
+# Each can be overridden via the matching
 # SMOAP_* env var; the defaults match a dev machine that installed everything
 # via winget + msys2 by hand. The wizard sets these env vars to point at the
 # portable installs under %LOCALAPPDATA%\SMOArchipelago\{llvm,winlibs}\.
@@ -147,6 +155,48 @@ def ensure_libstd_downloaded() -> None:
         )
 
 
+def ensure_sail_built_posix() -> None:
+    """Build sail natively on Linux/macOS (host g++ from PATH).
+
+    Same rationale as the Windows path for not delegating to upstream
+    `tools/setup_sail.py`: the upstream script doesn't `check=True` its
+    subprocess calls, so a silent cmake/ninja failure leaves an empty
+    build dir that only surfaces much later. We drive cmake ourselves
+    and verify the binary landed.
+
+    CC/CXX: prefer the ambient env (the Nix dev shell exports the gcc
+    wrapper), falling back to gcc/g++. The cross clang on PATH is
+    unwrapped and can't link a host binary on NixOS, so we never want
+    cmake's bare `cc` auto-detection to drift there.
+    """
+    sail_dir = os.path.join(SWITCH_MOD, "sys", "sail")
+    sail_build = os.path.join(sail_dir, "build")
+    sail_bin = os.path.join(sail_build, "sail")
+    if os.path.exists(sail_bin):
+        return
+
+    print("[build] sail not yet built — building with host g++")
+    if os.path.exists(sail_build):
+        shutil.rmtree(sail_build)
+    os.makedirs(sail_build)
+
+    env = os.environ.copy()
+    env.setdefault("CC", "gcc")
+    env.setdefault("CXX", "g++")
+    cfg = subprocess.run(
+        ["cmake", "-S", sail_dir, "-B", sail_build, "-G", "Ninja",
+         "-DCMAKE_BUILD_TYPE=Release"],
+        env=env,
+    )
+    if cfg.returncode != 0:
+        sys.exit(f"[build] sail cmake configure failed (exit {cfg.returncode})")
+    bld = subprocess.run(["cmake", "--build", sail_build, "-j", "8"], env=env)
+    if bld.returncode != 0:
+        sys.exit(f"[build] sail build failed (exit {bld.returncode})")
+    if not os.path.exists(sail_bin):
+        sys.exit(f"[build] sail build returned 0 but {sail_bin} is missing")
+
+
 def ensure_sail_built() -> None:
     """Sail is a Windows-native host binary built once per machine.
 
@@ -235,22 +285,86 @@ def _ensure_python3_on_path(env: dict) -> None:
 
 def configure_env() -> dict:
     env = os.environ.copy()
-    env["PATH"] = os.pathsep.join([PYTHON_BIN, LLVM_BIN, CMAKE_BIN, NINJA_BIN, MINGW_BIN, env.get("PATH", "")])
+    if IS_WINDOWS:
+        env["PATH"] = os.pathsep.join([PYTHON_BIN, LLVM_BIN, CMAKE_BIN, NINJA_BIN, MINGW_BIN, env.get("PATH", "")])
     env["CMAKE_GENERATOR"] = "Ninja"
     _ensure_python3_on_path(env)
     return env
+
+
+def check_posix_toolchain() -> None:
+    """Fail fast with an actionable message when the PATH toolchain is
+    incomplete on Linux/macOS. Everything listed here is provided by the
+    repo's Nix dev shell (flake.nix) — `nix develop` is the one-command
+    fix. `python` (not just python3) is checked because Hakkun's
+    generate_exefs.cmake shells out to bare `python` for elf2nso.py."""
+    missing = [t for t in ("clang", "clang++", "ld.lld", "cmake", "ninja", "python")
+               if shutil.which(t) is None]
+    if missing:
+        sys.exit(
+            f"[build] missing tool(s) on PATH: {', '.join(missing)}.\n"
+            f"Enter the Nix dev shell first:  nix develop\n"
+            f"(or install LLVM 19 + lld + cmake + ninja + Python 3.12 with "
+            f"lz4/pyelftools/mmh3 yourself — see docs/build-linux.md)"
+        )
+    clang_probe = subprocess.run(
+        ["clang", "--version"], capture_output=True, text=True,
+    )
+    if "clang version 19." not in clang_probe.stdout:
+        first = (clang_probe.stdout or clang_probe.stderr).splitlines()[:1]
+        sys.exit(
+            f"[build] PATH clang is not LLVM 19 ({first[0] if first else 'unknown'}) "
+            f"— LibHakkun's libc++ is ABI-pinned to 19. Enter `nix develop`."
+        )
+    # Existence of `python` isn't enough: elf2nso.py imports lz4 + pyelftools
+    # and bake_hashes.py imports mmh3, and cmake resolves the bare name off
+    # PATH — not off `sys.executable`. On Windows configure_env() defends
+    # this by pinning PYTHON_BIN first on PATH; the POSIX branch takes the
+    # ambient PATH as-is, so probe the interpreter cmake will actually get.
+    # Without this the build dies several minutes in, mid-link, with a
+    # ModuleNotFoundError from a cmake custom command.
+    dep_probe = subprocess.run(
+        ["python", "-c", "import lz4, elftools, mmh3"],
+        capture_output=True, text=True,
+    )
+    if dep_probe.returncode != 0:
+        sys.exit(
+            f"[build] the `python` on PATH ({shutil.which('python')}) is "
+            f"missing Hakkun's build-time modules — cmake shells out to the "
+            f"bare name for elf2nso.py (lz4, pyelftools) and bake_hashes.py "
+            f"(mmh3).\n"
+            f"{(dep_probe.stderr or dep_probe.stdout).strip()}\n"
+            f"Enter the Nix dev shell first:  nix develop"
+        )
 
 
 def main() -> int:
     if not os.path.isdir(SWITCH_MOD):
         sys.exit(f"[build] {SWITCH_MOD} does not exist — phase 1 hasn't run yet")
 
+    if not IS_WINDOWS:
+        check_posix_toolchain()
+
+    # senobi is a submodule nested inside the LibHakkun submodule — a plain
+    # `git submodule update --init switch-mod/sys` misses it and the build
+    # dies at the main.npdm step, after several minutes of compiling.
+    senobi = os.path.join(SWITCH_MOD, "sys", "tools", "senobi", "build_npdm.py")
+    if not os.path.exists(senobi):
+        sys.exit(
+            f"[build] {senobi} missing — LibHakkun's nested senobi submodule "
+            f"is not checked out. Run:\n"
+            f"    git submodule update --init --recursive"
+        )
+
     ensure_hakkun_patched()
     ensure_libstd_downloaded()
-    ensure_sail_built()
+    if IS_WINDOWS:
+        ensure_sail_built()
+    else:
+        ensure_sail_built_posix()
 
     env = configure_env()
-    cmake = os.path.join(CMAKE_BIN, "cmake.exe")
+    cmake = os.path.join(CMAKE_BIN, "cmake.exe") if IS_WINDOWS else "cmake"
 
     # Clean reconfigure each call — incremental is unreliable across sail
     # re-runs that wipe the build dir.
