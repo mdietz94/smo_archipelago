@@ -17,6 +17,7 @@ What this file covers:
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -196,6 +197,10 @@ def _build_clean_sandbox(appdata: Path, switch_mod: Path) -> None:
         "GIT_CONFIG_GLOBAL": "/dev/null",
         "GIT_CONFIG_SYSTEM": "/dev/null",
         "HOME": str(switch_mod),  # nowhere to find a gitconfig
+        # Keep PATH: on Windows CreateProcess finds git via the parent's
+        # PATH regardless, but on POSIX a PATH-less env falls back to
+        # os.defpath (/bin:/usr/bin), which misses git on NixOS.
+        "PATH": os.environ.get("PATH", ""),
     }
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=switch_mod, env={**env}, check=True)
     subprocess.run(
@@ -330,6 +335,8 @@ def test_run_audit_passes_with_submodule_gitlink(tmp_path, monkeypatch):
         "GIT_CONFIG_GLOBAL": "/dev/null",
         "GIT_CONFIG_SYSTEM": "/dev/null",
         "HOME": str(sub),
+        # Keep PATH — see the note in _build_clean_sandbox's env dict.
+        "PATH": os.environ.get("PATH", ""),
     }
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=sub, env={**env}, check=True)
     subprocess.run(

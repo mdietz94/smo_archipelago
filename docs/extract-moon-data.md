@@ -33,15 +33,33 @@ python scripts/extract_shine_map.py --xci <path-to-SMO_1.0.0.xci>
 
 That writes:
 
-- `bridge/smo_ap_bridge/data/shine_map.json` — the moon lookup table (775 entries on 1.0.0).
-- `bridge/smo_ap_bridge/data/shine_map_review.json` — moon diagnostic report.
-- `bridge/smo_ap_bridge/data/capture_map.json` — capture lookup (52 entries: 41 apworld + 9 out-of-scope, deduped).
-- `bridge/smo_ap_bridge/data/capture_map_review.json` — capture diagnostic report.
+- `apworld/smo_archipelago/client/data/shine_map.json` — the moon lookup table (775 entries on 1.0.0).
+- `apworld/smo_archipelago/client/data/shine_map_review.json` — moon diagnostic report.
+- `apworld/smo_archipelago/client/data/capture_map.json` — capture lookup (52 entries: 41 apworld + 9 out-of-scope, deduped).
+- `apworld/smo_archipelago/client/data/capture_map_review.json` — capture diagnostic report.
 - `.romfs-cache/` — extracted RomFS (~5 GB; reused on subsequent runs).
 - `scripts/.extract-venv/` — Python 3.12 venv with `oead` (created once).
 
 All four output files are gitignored. Re-running the script is fast (~5 s)
 since the romfs and venv caches survive.
+
+A default-path run — one that leaves `--out` and `--cap-out` alone, i.e. the
+command above — additionally **mirrors the two maps** into the per-user data
+dir (`%APPDATA%\SMOArchipelago\data\` on Windows, `~/.local/share/
+SMOArchipelago/data/` elsewhere) and touches the `.maps-updated` sentinel
+there. That's the directory an *installed* SMOClient reads from — the release
+apworld zip never bundles the maps, since they're Nintendo IP — and the
+sentinel is what makes a already-running SMOClient reload them on its next
+AP-Connect instead of needing a restart.
+
+Passing `--out` or `--cap-out` explicitly turns the mirror off, on the
+grounds that a caller directing its own output wants the bytes there and
+nowhere else. That's how the setup wizard (which writes straight into the
+user data dir and stamps the sentinel itself) and `tests/test_extract_real_nsp.py`
+(which writes under a tempdir, so a test run can't clobber a real install's
+maps) both stay out of each other's way. `SMOAP_APPDATA_ROOT` redirects the
+mirror's destination root if you want it somewhere else without moving the
+primary output.
 
 ## Prereqs
 
@@ -123,7 +141,7 @@ stripping all `0x0E…` / `0x0F…` control sequences is enough.
 ```
 == moons ==
 raw shines:           775
-resolved entries:     775  -> bridge/smo_ap_bridge/data/shine_map.json
+resolved entries:     775  -> apworld/smo_archipelago/client/data/shine_map.json
   msbt misses:        0
   unknown home_stage: 0
   duplicate keys:     0
@@ -133,7 +151,7 @@ apworld moons:        436
 
 == captures ==
 raw HackObjList:      130
-emitted entries:      52  -> bridge/smo_ap_bridge/data/capture_map.json
+emitted entries:      52  -> apworld/smo_archipelago/client/data/capture_map.json
   no MSBT match:      77
 apworld captures:     41
   apworld matched:    43
@@ -195,8 +213,7 @@ or malformed. Re-extract the romfs from a known-good NSP.
 ## Validating the result
 
 ```pwsh
-cd bridge
-.\.venv\Scripts\python -m pytest tests/test_shine_map_extraction.py -v
+.\.venv\Scripts\python -m pytest apworld\smo_archipelago\tests\test_shine_map_extraction.py -v
 ```
 
 Nine tests check schema, count, dedup, and a small set of anchor lookups for

@@ -60,39 +60,62 @@ def detect_sd_candidates() -> list[Path]:
     """Return all currently-mounted drive roots that look like a Switch
     SD card (i.e. have an `atmosphere/` directory at the root).
 
-    Windows-only for v1 (the plan scopes Linux/Mac as a follow-up). On
-    non-Windows we return [] — the user can still browse-to-path on the
-    wizard's Deploy page.
+    Windows: scans drive letters. Linux: scans the usual removable-media
+    mount roots (/run/media/<user>/, /media/<user>/, /media/). Elsewhere
+    returns [] — the user can still browse-to-path on the wizard's Deploy
+    page.
     """
-    if sys.platform != "win32":
-        return []
     candidates: list[Path] = []
-    for letter in string.ascii_uppercase:
-        root = Path(f"{letter}:/")
-        if not root.exists():
-            continue
-        atmo = root / "atmosphere"
-        if atmo.is_dir():
-            candidates.append(root)
-    return candidates
+    if sys.platform == "win32":
+        for letter in string.ascii_uppercase:
+            root = Path(f"{letter}:/")
+            if not root.exists():
+                continue
+            atmo = root / "atmosphere"
+            if atmo.is_dir():
+                candidates.append(root)
+        return candidates
+    if sys.platform.startswith("linux"):
+        user = os.environ.get("USER", "")
+        media_roots = [Path("/run/media") / user, Path("/media") / user,
+                       Path("/media")]
+        for media in media_roots:
+            if not media.is_dir():
+                continue
+            try:
+                mounts = list(media.iterdir())
+            except OSError:
+                continue
+            for root in mounts:
+                if (root / "atmosphere").is_dir() and root not in candidates:
+                    candidates.append(root)
+        return candidates
+    return []
 
 
 def detect_ryujinx_path() -> Path | None:
-    """Return `%APPDATA%/Ryujinx/` if it exists, else None.
+    """Return Ryujinx's default data root if it exists, else None.
 
-    Matches the location Ryujinx itself defaults to on Windows — the same
-    one our existing `-DRYU_PATH=...` cmake post-build hook targets. The
+    Windows: `%APPDATA%/Ryujinx/`. Linux: `$XDG_CONFIG_HOME/Ryujinx/`
+    (default `~/.config/Ryujinx/`) — where both Ryujinx upstream and the
+    ryubing/Ryujinx continuation keep mods/ on Linux. Matches the location
+    our existing `-DRYU_PATH=...` cmake post-build hook targets. The
     wizard's Deploy page also lets the user browse to a non-default
     install via "Browse for Ryujinx folder"; this function is just the
     auto-detect hint.
     """
-    if sys.platform != "win32":
-        return None
-    appdata = os.environ.get("APPDATA")
-    if not appdata:
-        return None
-    p = Path(appdata) / "Ryujinx"
-    return p if p.is_dir() else None
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA")
+        if not appdata:
+            return None
+        p = Path(appdata) / "Ryujinx"
+        return p if p.is_dir() else None
+    if sys.platform.startswith("linux"):
+        config_home = os.environ.get("XDG_CONFIG_HOME")
+        base = Path(config_home) if config_home else Path.home() / ".config"
+        p = base / "Ryujinx"
+        return p if p.is_dir() else None
+    return None
 
 
 def _sd_layout(sd_root: Path) -> dict[str, Path]:
