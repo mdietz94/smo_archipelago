@@ -67,6 +67,13 @@ Thumbs.db
 # Local clones we don't track (submodules go in vendor/ instead)
 third_party/
 
+# Nix / direnv. `.envrc` itself IS tracked (it's the two-word `use flake`
+# that docs/build-linux.md tells direnv users to `direnv allow`); the
+# per-checkout cache it builds and `nix build`'s result symlink are not.
+.direnv/
+result
+result-*
+
 # vendor/ holds submodules — tracked via .gitmodules. Don't ignore the dir.
 # Common build artifacts inside Archipelago should still be ignored.
 vendor/Archipelago/host.yaml

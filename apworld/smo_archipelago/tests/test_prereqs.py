@@ -480,7 +480,11 @@ def test_winlibs_posix_path_gxx(
     fake_run({"/usr/bin/g++ --version": (0, "g++ (GCC) 13.2.0\n", "")})
     r = check_winlibs()
     assert r.ok
-    assert prereqs.resolved_mingw_bin() == "/usr/bin"
+    # `sys.platform` is monkeypatched but `pathlib` is not — on a Windows
+    # host `Path("/usr/bin/g++").parent` stringifies with backslashes. Build
+    # the expectation the same way the detector does so the test asserts the
+    # behaviour (dirname of the resolved g++) rather than the separator.
+    assert prereqs.resolved_mingw_bin() == str(Path("/usr/bin/g++").parent)
 
 
 def test_winlibs_posix_no_gxx(

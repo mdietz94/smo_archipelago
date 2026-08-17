@@ -74,6 +74,15 @@ resolves them from. SMOClient's search order is: host.yaml
 source `client/data/` → inside the zip. No Windows path is involved on
 Linux; the client does not need WINE.
 
+The mirror is for exactly the command above — leave `--out`/`--cap-out` at
+their defaults and you get it. Passing either explicitly turns it off, on the
+grounds that a caller directing its own output wants the bytes there and
+nowhere else (that's how the wizard, which writes into the user-data dir and
+stamps the sentinel itself, and the real-NSP tests, which write under a
+tempdir, both stay out of each other's way). `SMOAP_APPDATA_ROOT` overrides
+the destination root if you need to redirect the mirror without moving the
+primary output.
+
 ## Deploy to Ryujinx
 
 Ryujinx on Linux keeps its data under `~/.config/Ryujinx/` (or

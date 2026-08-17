@@ -71,53 +71,24 @@ DEFAULT_KEYS = Path.home() / ".switch" / "prod.keys"
 # e1bcdbd. The legacy `bundled/` path is kept as a secondary probe so
 # users mid-migration aren't broken until the next install_hactool run
 # promotes the file to the new location.
+# `SMOAP_APPDATA_ROOT` is checked FIRST, exactly as `_setup.appdata_root()`
+# does (see apworld/smo_archipelago/_setup/__init__.py). Both the hactool
+# fallback below and the post-extract mirror write/read under this root, and
+# the release-audit sandbox (`scripts/local_release_audit.ps1`,
+# `tests/test_wizard_e2e_live.py`) sets the override precisely so the user's
+# real %APPDATA% is never touched. Deriving it from APPDATA alone here would
+# let the extractor escape that sandbox.
+_APPDATA_OVERRIDE = os.environ.get("SMOAP_APPDATA_ROOT")
 _APPDATA = os.environ.get("APPDATA")
-if _APPDATA:
+if _APPDATA_OVERRIDE:
+    _APPDATA_ROOT = Path(_APPDATA_OVERRIDE)
+elif _APPDATA:
     _APPDATA_ROOT = Path(_APPDATA) / "SMOArchipelago"
 else:
     _APPDATA_ROOT = Path.home() / ".local" / "share" / "SMOArchipelago"
 DEFAULT_HACTOOL_FALLBACK = _APPDATA_ROOT / "hactool.exe"
 LEGACY_HACTOOL_FALLBACK = _APPDATA_ROOT / "bundled" / "hactool.exe"
 
-
-def _mirror_maps_to_user_data(paths: list) -> None:
-    """Copy the freshly-written maps into the per-user data dir
-    (`%APPDATA%/SMOArchipelago/data/` on Windows, `~/.local/share/
-    SMOArchipelago/data/` elsewhere) and touch the `.maps-updated`
-    sentinel — the same post-extract contract the setup wizard fulfils
-    via `_setup/wizard_cli.py` + `client/setup_state.py`.
-
-    This is what makes an *installed* apworld zip resolve the maps: the
-    zip never bundles them (Nintendo IP), and SMOClient probes the
-    user-data dir right after the host.yaml override. Windows users get
-    this via the wizard; direct CLI runs (the Linux path) get it here.
-
-    Per-file no-op when the destination IS the written path (the wizard
-    invokes us with --out already pointing into the user-data dir).
-    Best-effort: a failure to mirror must not fail the extraction —
-    the repo-checkout copy at client/data/ is still fully usable.
-    """
-    data_dir = _APPDATA_ROOT / "data"
-    try:
-        data_dir.mkdir(parents=True, exist_ok=True)
-        copied = False
-        for src in paths:
-            dst = data_dir / src.name
-            if dst.exists() and dst.samefile(src):
-                continue
-            shutil.copy2(src, dst)
-            copied = True
-        # ".maps-updated" mirrors client/setup_state.py's
-        # MAPS_SENTINEL_FILENAME (kept literal — this script must stay
-        # runnable standalone, outside the apworld package).
-        (_APPDATA_ROOT / ".maps-updated").touch()
-        if copied:
-            print(f"[extract] mirrored maps to {data_dir} "
-                  f"(where an installed SMOClient looks for them)",
-                  file=sys.stderr, flush=True)
-    except OSError as e:
-        print(f"[extract] WARNING: could not mirror maps to {data_dir}: {e}",
-              file=sys.stderr, flush=True)
 DEFAULT_ROMFS_CACHE = REPO_ROOT / ".romfs-cache"
 # Default output: the client's gitignored data dir. (These pointed at
 # bridge/smo_ap_bridge/data/ until 2026-07 — a leftover from before the
@@ -131,6 +102,89 @@ DEFAULT_CAP_OUT = _CLIENT_DATA / "capture_map.json"
 DEFAULT_CAP_REVIEW = _CLIENT_DATA / "capture_map_review.json"
 APWORLD_LOCATIONS = REPO_ROOT / "apworld" / "smo_archipelago" / "data" / "locations.json"
 APWORLD_ITEMS = REPO_ROOT / "apworld" / "smo_archipelago" / "data" / "items.json"
+
+
+def _mirror_maps_to_user_data(paths: list[Path]) -> None:
+    """Copy the freshly-written maps into the per-user data dir
+    (`%APPDATA%/SMOArchipelago/data/` on Windows, `~/.local/share/
+    SMOArchipelago/data/` elsewhere) and touch the `.maps-updated`
+    sentinel — the same post-extract contract the setup wizard fulfils
+    via `_setup/wizard_cli.py` + `client/setup_state.py`.
+
+    This is what makes an *installed* apworld zip resolve the maps: the
+    zip never bundles them (Nintendo IP), and SMOClient probes the
+    user-data dir right after the host.yaml override. Windows users get
+    this via the wizard; direct CLI runs (the Linux path) get it here.
+
+    ONLY runs when every output path is still the built-in default (see
+    `_mirror_is_wanted`) — a caller that redirected `--out` somewhere
+    else asked for its bytes to land there and nowhere else. The wizard
+    (`--out <user data dir>`) and the test suite (`--out <tmp>`) both
+    take that opt-out; the wizard touches the sentinel itself.
+
+    Writes are staged through a `.tmp` sibling and `os.replace`d into
+    position, so an interrupted or out-of-space copy can never leave a
+    truncated map where SMOClient's `_resolve_map_path` would find it
+    (the user-data copy outranks the loose `client/data/` one). Each
+    file is independent, and the sentinel is only stamped when every
+    file landed — a partial mirror must not advertise itself as a fresh
+    extraction. Best-effort throughout: a failure to mirror never fails
+    the extraction, since the copy at `client/data/` is fully usable.
+    """
+    data_dir = _APPDATA_ROOT / "data"
+    copied = 0
+    failed = 0
+    for src in paths:
+        dst = data_dir / src.name
+        tmp = dst.with_name(dst.name + ".tmp")
+        try:
+            data_dir.mkdir(parents=True, exist_ok=True)
+            if dst.exists() and dst.samefile(src):
+                continue
+            shutil.copy2(src, tmp)
+            os.replace(tmp, dst)
+            copied += 1
+        except OSError as e:
+            failed += 1
+            print(f"[extract] WARNING: could not mirror {src.name} to "
+                  f"{data_dir}: {e}", file=sys.stderr, flush=True)
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+    if failed:
+        print(f"[extract] WARNING: {failed} map(s) not mirrored — an "
+              f"installed SMOClient will keep using whatever is already "
+              f"in {data_dir}", file=sys.stderr, flush=True)
+        return
+    if copied:
+        # ".maps-updated" mirrors client/setup_state.py's
+        # MAPS_SENTINEL_FILENAME (kept literal — this script must stay
+        # runnable standalone, outside the apworld package).
+        try:
+            (_APPDATA_ROOT / ".maps-updated").touch()
+        except OSError as e:
+            print(f"[extract] WARNING: could not touch the maps sentinel "
+                  f"at {_APPDATA_ROOT}: {e} (a running SMOClient won't "
+                  f"reload until restart)", file=sys.stderr, flush=True)
+        print(f"[extract] mirrored maps to {data_dir} "
+              f"(where an installed SMOClient looks for them)",
+              file=sys.stderr, flush=True)
+
+
+def _mirror_is_wanted(args) -> bool:
+    """True when the run left every output path at its default.
+
+    The mirror is a convenience for the plain `python
+    scripts/extract_shine_map.py --nsp <dump>` invocation. Any explicit
+    `--out`/`--cap-out` means the caller is directing the output itself:
+    the wizard (into the user-data dir, where it also owns the sentinel)
+    and `tests/test_extract_real_nsp.py` (into `tmp_path`, specifically
+    so a test run — including the deliberately-corrupted-NSP one — can
+    never clobber the maps a real install depends on).
+    """
+    return args.out == DEFAULT_OUT and args.cap_out == DEFAULT_CAP_OUT
+
 
 # SMO 1.0.0's rights ID — the lookup key used in title.keys. Final byte (0x03)
 # is the NCA master key revision (FW 3.0.1-3.0.2 → titlekek_02). Stable across
@@ -1385,7 +1439,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  out-of-scope hacks: {cs['out_of_apworld_scope']} (still emitted)")
     print(f"review report:        {args.cap_review}")
 
-    _mirror_maps_to_user_data([args.out, args.cap_out])
+    if _mirror_is_wanted(args):
+        _mirror_maps_to_user_data([args.out, args.cap_out])
     return 0
 
 

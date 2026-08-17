@@ -316,6 +316,26 @@ def check_posix_toolchain() -> None:
             f"[build] PATH clang is not LLVM 19 ({first[0] if first else 'unknown'}) "
             f"— LibHakkun's libc++ is ABI-pinned to 19. Enter `nix develop`."
         )
+    # Existence of `python` isn't enough: elf2nso.py imports lz4 + pyelftools
+    # and bake_hashes.py imports mmh3, and cmake resolves the bare name off
+    # PATH — not off `sys.executable`. On Windows configure_env() defends
+    # this by pinning PYTHON_BIN first on PATH; the POSIX branch takes the
+    # ambient PATH as-is, so probe the interpreter cmake will actually get.
+    # Without this the build dies several minutes in, mid-link, with a
+    # ModuleNotFoundError from a cmake custom command.
+    dep_probe = subprocess.run(
+        ["python", "-c", "import lz4, elftools, mmh3"],
+        capture_output=True, text=True,
+    )
+    if dep_probe.returncode != 0:
+        sys.exit(
+            f"[build] the `python` on PATH ({shutil.which('python')}) is "
+            f"missing Hakkun's build-time modules — cmake shells out to the "
+            f"bare name for elf2nso.py (lz4, pyelftools) and bake_hashes.py "
+            f"(mmh3).\n"
+            f"{(dep_probe.stderr or dep_probe.stdout).strip()}\n"
+            f"Enter the Nix dev shell first:  nix develop"
+        )
 
 
 def main() -> int:
