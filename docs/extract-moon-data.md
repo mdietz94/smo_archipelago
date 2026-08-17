@@ -35,7 +35,7 @@ That writes:
 
 - `bridge/smo_ap_bridge/data/shine_map.json` — the moon lookup table (775 entries on 1.0.0).
 - `bridge/smo_ap_bridge/data/shine_map_review.json` — moon diagnostic report.
-- `bridge/smo_ap_bridge/data/capture_map.json` — capture lookup (52 entries: 42 apworld + 8 out-of-scope, deduped).
+- `bridge/smo_ap_bridge/data/capture_map.json` — capture lookup (52 entries: 41 apworld + 9 out-of-scope, deduped).
 - `bridge/smo_ap_bridge/data/capture_map_review.json` — capture diagnostic report.
 - `.romfs-cache/` — extracted RomFS (~5 GB; reused on subsequent runs).
 - `scripts/.extract-venv/` — Python 3.12 venv with `oead` (created once).
@@ -135,10 +135,10 @@ apworld moons:        436
 raw HackObjList:      130
 emitted entries:      52  -> bridge/smo_ap_bridge/data/capture_map.json
   no MSBT match:      77
-apworld captures:     42
-  apworld matched:    44
+apworld captures:     41
+  apworld matched:    43
   apworld unhit:      0
-  out-of-scope hacks: 8 (still emitted)
+  out-of-scope hacks: 9 (still emitted)
 ```
 
 - **`apworld unhit: 0`** for both is the success criterion: every moon /
@@ -149,10 +149,10 @@ apworld captures:     42
 - **Captures `no MSBT match: 77`** is expected — `HackObjList.byml` includes
   many internal/debug objects (`PukupukuRebuild`, `Bee`, `BigStatuePossessed`,
   …) that have no user-facing display name.
-- **Captures `out-of-scope hacks: 8`** is expected — Frog, Yoshi, T-Rex,
-  Chain Chomp variants, Spark Pylon, and Tostarena letters: SMO captures
-  the apworld doesn't randomize.
-- **Captures `apworld matched: 44 > 42`** because the alias table maps two
+- **Captures `out-of-scope hacks: 9`** is expected — Frog, Yoshi, T-Rex,
+  Chain Chomp variants, Spark Pylon, Poison Piranha Plant, and Tostarena
+  letters: SMO captures the apworld doesn't randomize.
+- **Captures `apworld matched: 43 > 41`** because the alias table maps two
   Nintendo per-kingdom variants (e.g. `Puzzle Part (Lake Kingdom)` and
   `Puzzle Part (Metro Kingdom)`) onto the single apworld `Puzzle Part`
   entry.
