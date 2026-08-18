@@ -1,6 +1,27 @@
 {
   "versions": [
     {
+      "package_version": "1.5.0",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v1.5.0/smo-poptracker-v1.5.0.zip",
+      "sha256": "5faf9ff24d1c6f07f91d49fe37844fbc21574d4653126eef4d02c0ed3e1082d8",
+      "changelog": [
+        "Update docs/extract-moon-data.md for the new extractor output paths",
+        "Parse Windows command lines with list2cmdline's inverse in audit hook",
+        "Fix review findings on the Linux/Nix port",
+        "Drop the Poison Piranha Plant capture from the pool (#281)",
+        "Rename the Launcher button to \"Meatballs Client\"",
+        "Repoint LibHakkun stdlib download at Codeberg (patch 10)",
+        "ci: bump actions/setup-python from 6.3.0 to 7.0.0",
+        "ci: bump actions/checkout from 7.0.0 to 7.0.1",
+        "ci: bump softprops/action-gh-release from 3.0.1 to 3.0.2",
+        "make sherm available earlier",
+        "Mirror extracted maps to the user data dir; validate with a real NSP",
+        "Port the toolchain and build to Linux, managed via a Nix flake",
+        "Replay post-HELLO state on same-id reconnect of the active Switch",
+        "PopTracker auto-update: add v1.4.2 to versions.json"
+      ]
+    },
+    {
       "package_version": "1.4.2",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v1.4.2/smo-poptracker-v1.4.2.zip",
       "sha256": "2d02bd84415e3095053bc7b470a8103c6abca7bfeaf9e7e84d655686c926fb91",
