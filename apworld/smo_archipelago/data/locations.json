@@ -4031,7 +4031,7 @@
             "Capture"
         ],
         "region": "Wooded Kingdom",
-        "requires": "({WoodedPeace()}) AND |Sherm|"
+        "requires": "({WoodedDifficult()}) AND |Sherm|"
     },
     {
         "name": "Capture: Coin Coffer",
