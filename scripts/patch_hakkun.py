@@ -22,6 +22,12 @@ Patches applied (paths are inside switch-mod/sys/, the LibHakkun submodule):
   4. cmake/sail.cmake — expand sys/addons/*/syms glob (cmd.exe doesn't).
   6. (env only) Copy sail/build/sail.exe → sail/build/sail (no ext).
      Handled by scripts/build_switchmod.py.
+ 11. cmake/toolchain.cmake — quote the lib/std include + lib paths that
+     get folded into CMAKE_{C,CXX}_FLAGS / CMAKE_EXE_LINKER_FLAGS.
+ 12. sail/src/fakelib.cpp — quote the `-o` path in the popen cmdline
+     (companion to patch 3).
+     Patches 11 + 12 are what make the build survive a Windows user name
+     with a space in it — see the block comments on each.
 
 Retired at the current pin (9892726b, LibHakkun main HEAD as of 2026-05-22):
   1.  sail CMakeLists clang/clang++ removal  → fruityloops1/LibHakkun PR #71 (a1ae290c2d)
@@ -376,6 +382,90 @@ def main() -> int:
             "            f'If LibHakkun moved its release hosting again, update the '\n"
             "            f'URL in scripts/patch_hakkun.py (patch 10a).')",
             sentinel="SMO_HAKKUN_PATCH_10B",
+        ),
+    )
+
+    # ------------------------------------------------------------------
+    # Patch 11: quote lib/std paths in toolchain.cmake's flag strings.
+    # ------------------------------------------------------------------
+    # `sys/cmake/toolchain.cmake` folds the six aarch64 stdlib include
+    # dirs and the six static libs into two *space-separated flag
+    # strings* (CMAKE_C_FLAGS / CMAKE_CXX_FLAGS / CMAKE_EXE_LINKER_FLAGS)
+    # rather than into CMake lists. Flag strings are pasted verbatim into
+    # the generated command lines and re-split on whitespace by the
+    # shell, so any absolute path that contains a space is torn in half.
+    #
+    # This detonates on a Windows account whose user name has a space
+    # ("C:/Users/Chris Haugh/AppData/Roaming/SMOArchipelago/bundled/..."),
+    # which is where the setup wizard stages the bundled switch_mod tree.
+    # The build dies at `project()` — before a single source file is
+    # compiled — with clang treating each path tail as an input file:
+    #
+    #   clang: error: no such file or directory:
+    #     'Haugh/AppData/Roaming/SMOArchipelago/bundled/switch_mod/lib/std/musl/include'
+    #
+    # Fix: wrap each path in double quotes as it goes into the flag
+    # string. Both generators we support (Ninja on Windows via
+    # CreateProcess/CRT argv parsing, Ninja/Make on POSIX via /bin/sh)
+    # honour double quotes, and quoting a space-free path is a no-op, so
+    # this is safe for every existing checkout. Worth upstreaming.
+    report(
+        "toolchain.cmake quote lib/std paths (spaces in user name)",
+        patch_file(
+            os.path.join(HAKKUN, "cmake", "toolchain.cmake"),
+            'set(DEFAULTINCLUDES_F "")\n'
+            "foreach(item IN LISTS DEFAULTINCLUDES)\n"
+            '    set(DEFAULTINCLUDES_F "${DEFAULTINCLUDES_F} -isystem ${item}")\n'
+            "endforeach()\n"
+            'set(DEFAULTLIBS_F "")\n'
+            "foreach(item IN LISTS DEFAULTLIBS)\n"
+            '    set(DEFAULTLIBS_F "${DEFAULTLIBS_F} ${item}")\n'
+            "endforeach()\n",
+            "# SMO_HAKKUN_PATCH_11: quote each path. These are flag *strings*, not\n"
+            "# CMake lists, so an unquoted path containing a space (a Windows user\n"
+            "# name like `C:/Users/Chris Haugh/...`) is re-split by the shell and\n"
+            "# clang sees the tail as a bogus input file.\n"
+            'set(DEFAULTINCLUDES_F "")\n'
+            "foreach(item IN LISTS DEFAULTINCLUDES)\n"
+            '    set(DEFAULTINCLUDES_F "${DEFAULTINCLUDES_F} -isystem \\"${item}\\"")\n'
+            "endforeach()\n"
+            'set(DEFAULTLIBS_F "")\n'
+            "foreach(item IN LISTS DEFAULTLIBS)\n"
+            '    set(DEFAULTLIBS_F "${DEFAULTLIBS_F} \\"${item}\\"")\n'
+            "endforeach()\n",
+            sentinel="SMO_HAKKUN_PATCH_11",
+        ),
+    )
+
+    # ------------------------------------------------------------------
+    # Patch 12: quote sail's clang output path.
+    # ------------------------------------------------------------------
+    # Companion to patch 3. `sail/src/fakelib.cpp` builds ONE shell
+    # command string and hands it to popen(). Patch 3 quoted the clang
+    # binary; the `-o <outFolder>/<filename>` argument is still bare, and
+    # outFolder is the CMake *binary* dir — under
+    # `%APPDATA%/SMOArchipelago/bundled/switch_mod/build` for a wizard
+    # install. On an account whose user name has a space the command
+    # becomes `-o C:/Users/Chris Haugh/.../build/fakesymbols.so`, clang
+    # writes `.../Chris` and then chokes on the tail as an input file, so
+    # the PRE_LINK step dies right before the only link that matters.
+    # Quoting a space-free path is a no-op. Worth upstreaming.
+    report(
+        "sail fakelib.cpp output path quoting",
+        patch_file(
+            os.path.join(HAKKUN, "sail", "src", "fakelib.cpp"),
+            "        cmd.append(outPath);\n"
+            '        cmd.append("/");\n'
+            "        cmd.append(filename);\n"
+            '        cmd.append(" ");\n',
+            "        // SMO_HAKKUN_PATCH_12: quote the -o path too (see patch 3).\n"
+            "        cmd.push_back('\"');\n"
+            "        cmd.append(outPath);\n"
+            '        cmd.append("/");\n'
+            "        cmd.append(filename);\n"
+            "        cmd.push_back('\"');\n"
+            '        cmd.append(" ");\n',
+            sentinel="SMO_HAKKUN_PATCH_12",
         ),
     )
 
