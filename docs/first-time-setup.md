@@ -158,6 +158,20 @@ If you get a missing-compiler error: re-check that `winget install
 LLVM.LLVM --version 19.1.7` and `winget install MSYS2.MSYS2` (plus
 `pacman -S mingw-w64-x86_64-gcc` inside the msys2 shell) both completed.
 
+### Build fails with `no such file or directory: 'Haugh/AppData/Roaming/...'`
+
+Your Windows user name has a space in it (`C:\Users\Chris Haugh\...`), so
+every path under `%APPDATA%\SMOArchipelago\bundled\` has one too. Two
+places in LibHakkun pasted those paths into a command line without quoting
+them, and the shell tore each one in half at the space — clang then read the
+tail (`Haugh/AppData/Roaming/...`) as a bogus input file. The first failure
+lands at CMake's `project()` line, before anything is compiled; the second
+lands much later, in the `sail` symbol step just before the final link.
+
+**Fix: update to the latest release.** `scripts/patch_hakkun.py` (patches 11
+and 12) quotes both paths before the build runs. Nothing to do by hand, and
+no need to rename your account or move the install.
+
 ### Build fails downloading the "pre-packaged stdlib" (404)
 
 LibHakkun moved its releases from GitHub to Codeberg in August 2026 and
