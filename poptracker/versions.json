@@ -1,6 +1,14 @@
 {
   "versions": [
     {
+      "package_version": "1.5.1",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v1.5.1/smo-poptracker-v1.5.1.zip",
+      "sha256": "4be7770cb732283a45b00d17f2141835f6098180acea609b47d5ed43444d4ef1",
+      "changelog": [
+        "Fix switch-mod build for Windows user names containing a space"
+      ]
+    },
+    {
       "package_version": "1.4.2",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v1.4.2/smo-poptracker-v1.4.2.zip",
       "sha256": "2d02bd84415e3095053bc7b470a8103c6abca7bfeaf9e7e84d655686c926fb91",
