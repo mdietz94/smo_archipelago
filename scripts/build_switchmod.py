@@ -155,6 +155,38 @@ def ensure_libstd_downloaded() -> None:
         )
 
 
+def _sail_binary_is_stale(binary: str, sail_src: str) -> bool:
+    """True when any sail source file is newer than the built binary.
+
+    `ensure_sail_built*` caches the host binary at `sys/sail/build/` and
+    both used to return early on mere existence. That is wrong whenever
+    `patch_hakkun.py` rewrites a sail source under an already-built tree:
+    the stale binary keeps the old behaviour and the patch silently does
+    nothing. Patch 13 is exactly that case — it fixes a Windows-only
+    popen quoting bug that a cached sail.exe would happily keep
+    reproducing, so the staleness check is what actually delivers the fix
+    to a machine that already built sail once.
+
+    `sys/sail/build/` is skipped: it holds the binary and cmake's own
+    artefacts, which are newer than the sources by construction.
+    """
+    try:
+        binary_mtime = os.path.getmtime(binary)
+    except OSError:
+        return True
+
+    build_dir = os.path.join(sail_src, "build")
+    for root, dirs, files in os.walk(sail_src):
+        dirs[:] = [d for d in dirs if os.path.join(root, d) != build_dir]
+        for name in files:
+            try:
+                if os.path.getmtime(os.path.join(root, name)) > binary_mtime:
+                    return True
+            except OSError:
+                continue
+    return False
+
+
 def ensure_sail_built_posix() -> None:
     """Build sail natively on Linux/macOS (host g++ from PATH).
 
@@ -173,9 +205,11 @@ def ensure_sail_built_posix() -> None:
     sail_build = os.path.join(sail_dir, "build")
     sail_bin = os.path.join(sail_build, "sail")
     if os.path.exists(sail_bin):
-        return
-
-    print("[build] sail not yet built — building with host g++")
+        if not _sail_binary_is_stale(sail_bin, sail_dir):
+            return
+        print("[build] sail sources are newer than the cached binary — rebuilding")
+    else:
+        print("[build] sail not yet built — building with host g++")
     if os.path.exists(sail_build):
         shutil.rmtree(sail_build)
     os.makedirs(sail_build)
@@ -214,9 +248,22 @@ def ensure_sail_built() -> None:
     trampoline relocator) that main has. If you re-pin to a branch that
     moves sail again, audit this script + setup_sail_winpath.py together.
     """
-    sail_dir = os.path.join(SWITCH_MOD, "sys", "sail", "build")
+    sail_src = os.path.join(SWITCH_MOD, "sys", "sail")
+    sail_dir = os.path.join(sail_src, "build")
     sail_exe = os.path.join(sail_dir, "sail.exe")
     sail_noext = os.path.join(sail_dir, "sail")
+
+    # A cached binary that predates the current sail sources is worse than
+    # no binary at all: patch_hakkun.py's sail patches would never take
+    # effect and the build would keep reproducing a bug we already fixed.
+    # Drop both copies so the branch below rebuilds and re-stamps them.
+    if os.path.exists(sail_exe) and _sail_binary_is_stale(sail_exe, sail_src):
+        print("[build] sail sources are newer than the cached binary — rebuilding")
+        for stale in (sail_exe, sail_noext):
+            try:
+                os.remove(stale)
+            except OSError:
+                pass
 
     if not os.path.exists(sail_exe):
         print(f"[build] sail not yet built — running setup_sail_winpath.py")

@@ -172,6 +172,32 @@ lands much later, in the `sail` symbol step just before the final link.
 and 12) quotes both paths before the build runs. Nothing to do by hand, and
 no need to rename your account or move the install.
 
+### Build fails at `[93/93] Linking` with `The filename, directory name, or volume label syntax is incorrect.`
+
+Full symptom — the last four lines before ninja gives up:
+
+```
+The filename, directory name, or volume label syntax is incorrect.
+clang compilation failed-- Parsing symbols
+-- Generating symbols
+ninja: build stopped: subcommand failed.
+```
+
+This hits releases that carry patch 12 (the space-in-user-name fix above)
+without patch 13, and it hits **every** Windows install, whether or not your
+user name has a space. `sail`, the symbol step that runs just before the
+final link, invokes clang through `popen()`, which on Windows means
+`cmd.exe /c <command>`. When that command line quotes more than one thing —
+after patch 12 it quotes both the compiler and the output path — `cmd`
+deletes the first and last quote on the line (this is documented under
+`cmd /?`) and leaves the inner ones stranded, so the program name it tries
+to run ends in a stray `"` and Windows rejects it as a malformed path.
+
+**Fix: update to the latest release.** `scripts/patch_hakkun.py` (patch 13)
+wraps the whole command in one more pair of quotes, which is the pair `cmd`
+consumes, and the build wrapper rebuilds the cached `sail.exe` so the fix
+actually takes effect. Nothing to do by hand.
+
 ### Build fails downloading the "pre-packaged stdlib" (404)
 
 LibHakkun moved its releases from GitHub to Codeberg in August 2026 and
