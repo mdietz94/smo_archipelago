@@ -28,6 +28,11 @@ Patches applied (paths are inside switch-mod/sys/, the LibHakkun submodule):
      (companion to patch 3).
      Patches 11 + 12 are what make the build survive a Windows user name
      with a space in it — see the block comments on each.
+ 13. sail/src/fakelib.cpp — wrap the whole popen cmdline in one more pair
+     of quotes on Windows. cmd.exe eats the first and last quote of any
+     `/c` command line carrying more than one quoted token, so patches 3
+     and 12 together left stray quotes and broke EVERY Windows build
+     until this landed. See the block comment on the patch.
 
 Retired at the current pin (9892726b, LibHakkun main HEAD as of 2026-05-22):
   1.  sail CMakeLists clang/clang++ removal  → fruityloops1/LibHakkun PR #71 (a1ae290c2d)
@@ -466,6 +471,65 @@ def main() -> int:
             "        cmd.push_back('\"');\n"
             '        cmd.append(" ");\n',
             sentinel="SMO_HAKKUN_PATCH_12",
+        ),
+    )
+
+    # ------------------------------------------------------------------
+    # Patch 13: give cmd.exe an outer quote pair to eat.
+    # ------------------------------------------------------------------
+    # Patches 3 and 12 leave `compile()`'s popen command line carrying TWO
+    # quoted tokens (the clang binary and the `-o` path). On Windows,
+    # popen() runs `%COMSPEC% /c <command>`, and cmd.exe's documented
+    # quote handling (`cmd /?`) then mangles it:
+    #
+    #   1. Quotes are preserved verbatim only when the command line holds
+    #      EXACTLY TWO quote characters, with whitespace and no `&<>()@^|`
+    #      between them, and the text between them names an executable.
+    #   2. Otherwise — and "otherwise" is any line with four quotes — if
+    #      the first character is a quote, cmd strips that leading quote
+    #      AND the last quote character on the line, keeping everything
+    #      else.
+    #
+    # With patches 3 + 12 the line has four quotes, so rule 2 fires and
+    # eats the OPENING quote of the compiler and the CLOSING quote of the
+    # `-o` path, leaving the two inner ones stranded:
+    #
+    #   C:\...\clang++.exe" ... -o "C:\...\build/fakesymbols.so ... -x assembler -
+    #
+    # cmd then reads `C:\...\clang++.exe"` as the program name and dies
+    # with `The filename, directory name, or volume label syntax is
+    # incorrect.`, which sail reports as `clang compilation failed` at the
+    # PRE_LINK step — i.e. patch 12 alone breaks EVERY Windows build,
+    # spaces or not. (It was verified on Linux, where /bin/sh parses the
+    # same string correctly, so the regression didn't surface there.)
+    #
+    # The fix is the standard `cmd /c ""a" "b""` idiom: wrap the whole
+    # command in one more quote pair, so the pair rule 2 removes is ours
+    # and every inner quote survives. POSIX shells need no wrapper and
+    # would choke on one, hence the `_WIN32` guard.
+    #
+    # Patched at the popen() call rather than inside the string building
+    # so it lands independently of whether patches 3 and 12 applied.
+    # Worth upstreaming alongside 3 and 12.
+    report(
+        "sail fakelib.cpp cmd.exe outer-quote wrap",
+        patch_file(
+            os.path.join(HAKKUN, "sail", "src", "fakelib.cpp"),
+            '        FILE* compilerPipe = popen(cmd.c_str(), "w");',
+            "        // SMO_HAKKUN_PATCH_13: popen() runs `cmd /c <command>` on Windows,\n"
+            "        // and cmd strips the first and last quote of any command line that\n"
+            "        // holds more than one quoted token (`cmd /?`, rule 2). Patches 3 and\n"
+            "        // 12 quote two tokens, so without an outer pair for cmd to eat the\n"
+            "        // compiler path keeps a stray trailing quote and the spawn fails with\n"
+            "        // \"The filename, directory name, or volume label syntax is incorrect.\"\n"
+            "        // POSIX shells parse the inner quoting correctly and must not get the\n"
+            "        // wrapper.\n"
+            "#ifdef _WIN32\n"
+            "        cmd.insert(cmd.begin(), '\"');\n"
+            "        cmd.push_back('\"');\n"
+            "#endif\n"
+            '        FILE* compilerPipe = popen(cmd.c_str(), "w");',
+            sentinel="SMO_HAKKUN_PATCH_13",
         ),
     )
 
