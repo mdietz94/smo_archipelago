@@ -1,6 +1,14 @@
 {
   "versions": [
     {
+      "package_version": "1.5.2",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v1.5.2/smo-poptracker-v1.5.2.zip",
+      "sha256": "c4d46d71e5705d0d0c13b5c1a5a4a2c550a3d6df159618555207eca17630d3e4",
+      "changelog": [
+        "Fix Windows switch-mod build broken by patch 12's cmd.exe quoting"
+      ]
+    },
+    {
       "package_version": "1.4.2",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v1.4.2/smo-poptracker-v1.4.2.zip",
       "sha256": "2d02bd84415e3095053bc7b470a8103c6abca7bfeaf9e7e84d655686c926fb91",
