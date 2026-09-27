@@ -119,6 +119,24 @@ const char* kingdomShortFromWorldId(int world_id) {
     return (short_name && *short_name) ? short_name : nullptr;
 }
 
+std::uint8_t currentKingdomBit() {
+    struct GameDataHolderAccessor { void* mData; };
+    using GetCurrentWorldIdNoDevelopFn = int (*)(GameDataHolderAccessor);
+    auto& s = smoap::ap::ApState::instance();
+    void* holder = s.game_data_holder_cache.load(std::memory_order_relaxed);
+    if (!holder || !s.get_current_world_id_fn) return 0xff;
+    auto fn = reinterpret_cast<GetCurrentWorldIdNoDevelopFn>(s.get_current_world_id_fn);
+    GameDataHolderAccessor acc{holder};
+    return kingdomBitForWorldId(fn(acc));
+}
+
+const char* currentKingdomShort() {
+    const std::uint8_t bit = currentKingdomBit();
+    if (bit == 0xff) return nullptr;
+    const char* short_name = kingdomForBit(bit);
+    return (short_name && *short_name) ? short_name : nullptr;
+}
+
 int worldIdFromKingdomShort(const char* kingdom_short) {
     const std::uint8_t bit = kingdomBitFor(kingdom_short);
     if (bit == 0xff) return -1;

@@ -160,6 +160,10 @@ def _classify_snapshot_for_user_confirm(
 CheckHandler = Callable[[dict], Awaitable["int | None"]]  # returns AP loc_id or None
 GoalHandler = Callable[[], Awaitable[None]]
 DeathHandler = Callable[[int], Awaitable[None]]
+# Odyssey departure. Receives the AP-form kingdom short name being LEFT
+# ("Bowser's") and the raw destination HomeStage. Context uses it for the
+# `sweep_kingdom_on_exit` slot option.
+KingdomExitHandler = Callable[[str, str], Awaitable[None]]
 LabelComposer = Callable[[int], "str | None"]              # loc_id -> label text
 # PaySnapshotHandler(totals=dict[str, int]) -> None.
 # `totals` is keyed by AP-form kingdom name (dispatcher does the
@@ -295,6 +299,7 @@ class SwitchServer:
         on_check: CheckHandler,
         on_goal: GoalHandler,
         on_death: DeathHandler | None = None,
+        on_kingdom_exit: KingdomExitHandler | None = None,
         deathlink_enabled: bool = False,
         compose_moon_label: LabelComposer | None = None,
         on_pay_snapshot: PaySnapshotHandler | None = None,
@@ -314,6 +319,7 @@ class SwitchServer:
         self._on_check = on_check
         self._on_goal = on_goal
         self._on_death = on_death
+        self._on_kingdom_exit = on_kingdom_exit
         self._deathlink_enabled = deathlink_enabled
         self._compose_label = compose_moon_label
         self._on_pay_snapshot = on_pay_snapshot
@@ -348,6 +354,11 @@ class SwitchServer:
         # reconnect; without buffering they hit the same "no AP id" race as
         # the snapshot. Drained by drain_pending_snapshot() alongside it.
         self._pending_live_checks: list[dict] = []
+        # `kingdom_exit` messages that landed before AP was ready. The sweep
+        # needs the datapackage + missing_locations, so hold them and replay
+        # in drain_pending_snapshot — same window as buffered live checks.
+        # (AP-form kingdom, dest_stage) pairs.
+        self._pending_kingdom_exits: list[tuple[str, str]] = []
         # /confirm_snapshot gate. When the classifier ("would this snapshot
         # credit any NEW AP location?") returns auto_confirm=False, the
         # snapshot lands here instead of being forwarded. The operator types
@@ -1141,6 +1152,20 @@ class SwitchServer:
                 await self._on_death(ts_ms)
         elif t == "status":
             log.debug("switch %r status: %s", conn.device_id, msg)
+        elif t == "kingdom_exit":
+            kingdom = protocol.kingdom_switch_to_ap(msg.get("kingdom")) or ""
+            dest_stage = str(msg.get("dest_stage") or "")
+            if not kingdom:
+                log.warning("kingdom_exit without kingdom from %r: %s", conn.device_id, msg)
+                return
+            log.info("switch %r left kingdom %r -> %r", conn.device_id, kingdom, dest_stage)
+            if self._on_kingdom_exit is None:
+                return
+            if self._is_ap_ready is not None and not self._is_ap_ready():
+                self._pending_kingdom_exits.append((kingdom, dest_stage))
+                log.info("kingdom_exit buffered (kingdom=%s) — AP not ready", kingdom)
+                return
+            await self._on_kingdom_exit(kingdom, dest_stage)
         elif t == "state_begin":
             self._state.begin_snapshot(save_slot=msg.get("save_slot"))
             log.info("snapshot begin: mod_ver=%s save_slot=%s",
@@ -1437,6 +1462,12 @@ class SwitchServer:
 
     async def drain_pending_snapshot(self) -> None:
         """Drain anything buffered because AP wasn't ready."""
+        exits = self._pending_kingdom_exits
+        self._pending_kingdom_exits = []
+        if exits and self._on_kingdom_exit is not None:
+            log.info("draining %d buffered kingdom_exit events", len(exits))
+            for kingdom, dest_stage in exits:
+                await self._on_kingdom_exit(kingdom, dest_stage)
         live_checks = self._pending_live_checks
         self._pending_live_checks = []
         if live_checks:

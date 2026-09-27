@@ -8,7 +8,9 @@
 #include "hk/types.h"
 
 #include <cstdint>
+#include <cstring>
 
+#include "../ap/ApFrameBridge.hpp"
 #include "../ap/ApState.hpp"
 #include "../game/KingdomOrderGate.hpp"
 #include "../game/KingdomUnlock.hpp"
@@ -99,7 +101,26 @@ HkTrampoline<bool, GameDataHolderWriter, const char*> tryChangeDemoWarpHook =
             }
         }
         markVisitedFromStage("tryChange.Demo", final_stage);
-        return tryChangeDemoWarpHook.orig(writer, final_stage);
+        // Snapshot the kingdom being LEFT before the warp commits — the
+        // current worldId only flips once the destination scene loads, but
+        // reading it pre-orig keeps this independent of when that happens.
+        const char* departing = smoap::game::currentKingdomShort();
+        const bool ok = tryChangeDemoWarpHook.orig(writer, final_stage);
+        // `kingdom_exit` wire message for the bridge's sweep_kingdom_on_exit
+        // option. Only when the warp actually committed and the destination
+        // resolves to a DIFFERENT kingdom (or none at all — unknown stages
+        // are still treated as leaving). Painting / warp-hole transitions go
+        // through tryChangeWarpHoleHook and never emit.
+        if (ok && departing) {
+            const char* dest_kingdom = final_stage ?
+                smoap::game::kingdomShortFromHomeStage(final_stage) : nullptr;
+            if (!dest_kingdom || std::strcmp(dest_kingdom, departing) != 0) {
+                SMOAP_LOG_INFO("[wmap.tryChange.Demo] kingdom_exit %s -> '%s'",
+                               departing, final_stage ? final_stage : "(null)");
+                smoap::ap::reportKingdomExit(departing, final_stage);
+            }
+        }
+        return ok;
     });
 
 HkTrampoline<bool, GameDataHolderWriter, const char*> tryChangeWarpHoleHook =

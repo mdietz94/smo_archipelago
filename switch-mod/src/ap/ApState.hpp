@@ -134,6 +134,11 @@ struct StatusEvent {
     bool goal = false;
     bool death = false;
     std::int64_t ts_ms = 0;  // populated when death = true
+    // Odyssey departure (see ApProtocol.hpp KingdomExit). Fixed buffers so
+    // the frame thread never allocates when queueing.
+    bool kingdom_exit = false;
+    char kingdom[kCheckFieldCap] = {};
+    char dest_stage[kCheckFieldCap] = {};
 };
 
 // Inbound DeathLink debounce. Covers BOTH "Mario is currently in his death

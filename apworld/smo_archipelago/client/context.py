@@ -20,8 +20,10 @@ from .display import format_moon_label, format_shop_moon_label
 from .maps import CaptureMap, ShineMap
 from .reachability import TalkatooReachability, owned_counts_from_item_names
 from .protocol import (
+    CappyMsg,
     ItemKind,
     ItemMsg,
+    ItemRef,
     KillMsg,
     OutstandingEntry,
     OutstandingMsg,
@@ -30,7 +32,7 @@ from .protocol import (
 )
 from .scout_cache import ScoutCache, request_scout
 from .shop_labels import SHOP_LOCATION_TO_FILEKEY, has_any_populated_keys
-from .state import BridgeState, ItemEvent
+from .state import BridgeState, CheckEvent, ItemEvent
 
 if TYPE_CHECKING:  # pragma: no cover
     from .switch_server import SwitchServer
@@ -305,6 +307,11 @@ class SMOContext(CommonContext):
         # they don't spawn. False (default) leaves Talkatoo and the world
         # vanilla.
         self.talkatoo_mode = False
+        # `sweep_kingdom_on_exit` slot option, populated from slot_data on
+        # AP Connected. When True, a `kingdom_exit` wire message from the
+        # Switch (Odyssey departure) auto-sends every remaining AP moon
+        # location in the departed kingdom — see sweep_kingdom_on_exit().
+        self.sweep_kingdom_on_exit_enabled = False
         # Phase 5 (Gap #3): per-kingdom sphere-safe ordered list of moon
         # shine_ids from the apworld. Empty means "no Phase 5 order shipped"
         # — bridge falls back to shipping the full filtered pool (old
@@ -919,6 +926,10 @@ class SMOContext(CommonContext):
                 capturesanity = bool(slot_data.get("capturesanity", 0))
                 self.capturesanity_enabled = capturesanity
                 self.switch.set_capturesanity_enabled(capturesanity)
+                self.sweep_kingdom_on_exit_enabled = bool(
+                    slot_data.get("sweep_kingdom_on_exit", 0))
+                if self.sweep_kingdom_on_exit_enabled:
+                    log.info("sweep_kingdom_on_exit: ENABLED (per slot_data)")
                 # DeathLink is per-slot: each player opts in via their own
                 # YAML `death_link` setting, and the AP server only bounces
                 # deaths among slots tagged "DeathLink". In a five-player
@@ -1454,6 +1465,87 @@ class SMOContext(CommonContext):
         if self._goal_location_name is not None and loc_name == self._goal_location_name:
             await self.report_goal()
         return loc_id
+
+    def _sweepable_loc_ids_for_kingdom(self, kingdom: str) -> list[tuple[int, str]]:
+        """Unchecked AP moon locations for `kingdom` (AP short form, e.g.
+        "Bowser's"), as (loc_id, shine_id) pairs sorted by id.
+
+        Scope is `missing_locations` — the server's view of what this slot
+        still owes, already filtered by the seed's include_* toggles — minus
+        anything shipped this session but not yet echoed. Capture locations
+        are named "Capture: X" so the kingdom prefix never matches them; the
+        festival goal moon is skipped explicitly (its check must come from
+        the in-game collect so ClientGoal fires at the right moment).
+        """
+        prefix = f"{kingdom}: "
+        out: list[tuple[int, str]] = []
+        for loc_id in sorted(self.missing_locations):
+            if loc_id in self.locations_checked:
+                continue
+            name = self.dp.location_id_to_name.get(loc_id)
+            if not name or not name.startswith(prefix):
+                continue
+            if self._goal_location_name is not None and name == self._goal_location_name:
+                continue
+            out.append((loc_id, name[len(prefix):]))
+        return out
+
+    async def sweep_kingdom_on_exit(self, kingdom: str, dest_stage: str = "") -> int:
+        """`sweep_kingdom_on_exit` slot option: Mario just flew the Odyssey
+        out of `kingdom`, so send every remaining AP moon location there.
+
+        Wired from `SwitchServer` on a `kingdom_exit` wire message (AP-form
+        kingdom name, already translated at the wire boundary). Returns the
+        number of locations sent. No-op when the option is off, AP isn't
+        ready, or nothing in the kingdom is left to send.
+
+        Boarding the Odyssey is only possible once the kingdom's moon
+        threshold is met, so this fires exactly when the player would
+        naturally move on — no separate threshold check is needed here.
+        Painting / warp-hole transitions never emit `kingdom_exit`.
+
+        Feedback: one batched LocationChecks, one chat line, one Cappy
+        summary bubble. Per-item Cappy bubbles for own-slot items found at
+        swept locations are suppressed via `_switch_reported_loc_ids`
+        (a 60-moon sweep would otherwise flood the 8-deep Switch queue);
+        the swept moons stay collectible in-game and re-collecting one is
+        deduped by report_check.
+        """
+        if not self.sweep_kingdom_on_exit_enabled:
+            log.debug("kingdom_exit %r ignored — sweep_kingdom_on_exit off", kingdom)
+            return 0
+        if not self.is_ap_ready():
+            log.warning("kingdom_exit %r ignored — AP not ready", kingdom)
+            return 0
+        entries = self._sweepable_loc_ids_for_kingdom(kingdom)
+        if not entries:
+            log.info("sweep: left %r -> %r; nothing left to send", kingdom, dest_stage)
+            return 0
+        loc_ids = [loc_id for loc_id, _ in entries]
+        for loc_id in loc_ids:
+            self._switch_reported_loc_ids.add(loc_id)
+        log.info(
+            "sweep: left %r -> %r; sending %d location(s) to AP: %s",
+            kingdom, dest_stage, len(loc_ids), loc_ids,
+        )
+        await self.send_msgs([{"cmd": "LocationChecks", "locations": loc_ids}])
+        self.locations_checked.update(loc_ids)
+        for _, shine_id in entries:
+            self.state.add_checked_location(CheckEvent(item=ItemRef(
+                kind=ItemKind.MOON.value, kingdom=kingdom, shine_id=shine_id,
+            )))
+        self.output(
+            f"Sweep: left {kingdom} Kingdom — sent {len(loc_ids)} remaining "
+            f"location(s) to Archipelago."
+        )
+        if self.switch is not None:
+            try:
+                await self.switch.send_cappy(CappyMsg(
+                    text=f"Swept {len(loc_ids)} {kingdom} moons for Archipelago!"
+                ))
+            except Exception:
+                log.exception("sweep: send_cappy failed")
+        return len(loc_ids)
 
     def already_checked_loc_ids(self) -> set[int]:
         """Union of server-known and locally-sent AP location ids.

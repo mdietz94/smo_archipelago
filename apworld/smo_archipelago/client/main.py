@@ -259,6 +259,10 @@ async def main(args: argparse.Namespace) -> None:
         ),
         on_goal=ctx.report_goal,
         on_death=ctx.report_death,
+        # `sweep_kingdom_on_exit` slot option: Odyssey departures arrive as
+        # `kingdom_exit` wire messages; ctx sends the departed kingdom's
+        # remaining AP locations when the option is on (no-op otherwise).
+        on_kingdom_exit=ctx.sweep_kingdom_on_exit,
         deathlink_enabled=cfg.deathlink.enabled,
         compose_moon_label=ctx.compose_moon_label_for_location,
         # M6 phase D: route incoming PaySnapshotMsg through ctx. The
