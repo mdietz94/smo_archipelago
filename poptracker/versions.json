@@ -1,6 +1,17 @@
 {
   "versions": [
     {
+      "package_version": "1.5.3",
+      "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v1.5.3/smo-poptracker-v1.5.3.zip",
+      "sha256": "1362d0d4961e201a115944a1b71f54b4ed2847d0f7649e1f8532dd96798c913d",
+      "changelog": [
+        "Fix extract failing on padded prod.keys entries hactool knows but we don't",
+        "Add sweep_kingdom_on_exit option: auto-send a kingdom's moons on Odyssey departure",
+        "ci: bump softprops/action-gh-release from 3.0.2 to 3.0.3",
+        "PopTracker auto-update: add v1.5.2 to versions.json"
+      ]
+    },
+    {
       "package_version": "1.5.2",
       "download_url": "https://github.com/mdietz94/smo_archipelago/releases/download/v1.5.2/smo-poptracker-v1.5.2.zip",
       "sha256": "c4d46d71e5705d0d0c13b5c1a5a4a2c550a3d6df159618555207eca17630d3e4",
