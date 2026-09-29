@@ -1236,12 +1236,15 @@ def run_setup_wizard(smoap_path: str | None = None) -> bool:
             if evt == "log":
                 on_line(payload.get("line", ""))
             elif evt == "extract_subprocess":
+                _state["extract_rc"] = payload.get("returncode")
                 on_line(
                     f"[wizard] subprocess exit code: "
                     f"{payload.get('returncode')}"
                 )
             elif evt == "maps_present":
-                if not payload.get("present"):
+                # Only noteworthy when the extractor claimed success; a
+                # non-zero exit already explains the missing maps.
+                if not payload.get("present") and _state.get("extract_rc") == 0:
                     on_line(
                         "[wizard] subprocess returned 0 but "
                         "shine_map.json / capture_map.json are missing "

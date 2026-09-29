@@ -41,6 +41,7 @@ print(f"[extract] python={sys.executable!r} argv={sys.argv!r}", file=sys.stderr,
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -633,7 +634,23 @@ def _normalize_keys_file(keys_path: Path, work_dir: Path) -> Path:
             out_lines.append(raw)
             continue
         expected = EXPECTED_KEY_SIZES.get(name)
-        if expected is None or len(value) == expected:
+        if expected is None:
+            # Unknown name — hactool knows far more keys than we list
+            # (`*_source`, `master_kek_*`, `package1_key_*`, ...) and exits
+            # on ANY of them being mis-sized ("Key (...) must be 32 hex
+            # digits!"). Every Switch key is a whole number of AES blocks
+            # (16, 32, 0x90, 0xB0, 0x100, ...), so a length that isn't a
+            # multiple of 16 is padding by construction. Trim only the
+            # same padding shape we trim for known keys (small, all-zero
+            # tail); anything else passes through for hactool to judge —
+            # it ignores names it doesn't recognise.
+            overage = len(value) % 16
+            if (len(value) < 16 or overage == 0 or overage > MAX_KEY_OVERAGE
+                    or any(b != 0 for b in value[-overage:])):
+                out_lines.append(raw)
+                continue
+            expected = len(value) - overage
+        if len(value) == expected:
             out_lines.append(raw)
             continue
         if len(value) < expected:
@@ -675,6 +692,32 @@ def _normalize_keys_file(keys_path: Path, work_dir: Path) -> Path:
             file=sys.stderr, flush=True,
         )
     return normalized
+
+
+# hactool's extkeys.c `parse_hex_key` prints one of these and exits(1) on
+# the first malformed value it hits in the -k file:
+#   Key (<hex>) must be 32 hex digits!
+#   Key (<hex>) must be hex!
+_HACTOOL_BAD_KEY_RE = re.compile(
+    r"^Key \(([^)]*)\) must be (?:\d+ hex digits|hex)!")
+
+
+def _find_key_name_by_value(keys_path: Path, value_hex: str) -> str | None:
+    """Return the name of the entry in `keys_path` whose raw value equals
+    `value_hex` (case-insensitive), or None. Used only to name the bad line
+    in hactool's key-parse error, which prints the value but not the name."""
+    try:
+        text = keys_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return None
+    for raw in text.splitlines():
+        bare = raw.split(";", 1)[0].split("#", 1)[0].strip()
+        if "=" not in bare:
+            continue
+        k, _, v = bare.partition("=")
+        if v.strip().lower() == value_hex:
+            return k.strip()
+    return None
 
 
 def _read_ticket(tik_path: Path) -> tuple[bytes, bytes, int, int]:
@@ -844,6 +887,7 @@ def _run_hactool(
         bufsize=1,
     )
     titlekey_missing = False
+    bad_key_line: str | None = None
     section_corrupt: list[str] = []
     other_errors: list[str] = []
     assert proc.stdout is not None
@@ -852,6 +896,8 @@ def _run_hactool(
         print(line, file=sys.stderr, flush=True)
         if "Unable to match rights id to titlekey" in line:
             titlekey_missing = True
+        if bad_key_line is None and _HACTOOL_BAD_KEY_RE.match(line):
+            bad_key_line = line
         if line.startswith("Error:"):
             if "is corrupted" in line:
                 section_corrupt.append(line)
@@ -872,6 +918,22 @@ def _run_hactool(
             "override the path with --titlekey) with the SMO entry and\n"
             "rerun the extract. NXDumpTool's 'common ticket' option\n"
             "produces an NSP that carries the .tik directly."
+        )
+    if bad_key_line is not None:
+        # hactool's parse_hex_key exits on the FIRST mis-sized / non-hex
+        # value in prod.keys, before it ever opens the dump. Without this
+        # branch the rc != 0 fallback below blames the dump.
+        m = _HACTOOL_BAD_KEY_RE.match(bad_key_line)
+        value = (m.group(1) if m else "").lower()
+        name = _find_key_name_by_value(keys, value) if value else None
+        where = f"the '{name}' entry" if name else "an entry"
+        sys.exit(
+            f"ERROR: hactool rejected {where} in {keys}:\n"
+            f"  {bad_key_line}\n"
+            "  Your dump is fine — the keys file is malformed (usually a\n"
+            "  key with extra or missing hex digits from a buggy key dumper\n"
+            "  or a copy/paste error). Re-dump prod.keys with a current\n"
+            "  Lockpick_RCM, or fix/delete that one line, and rerun."
         )
     if other_errors:
         joined = "\n  ".join(other_errors)
