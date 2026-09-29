@@ -28,6 +28,15 @@ void reportStatus(const char* stage_name, int scenario_no);
 // DeathHook -> sends death event; debounced via ApState::death_pending_send.
 void reportDeath();
 
+// WorldMapSelectHook (DemoWorldWarp trampoline) -> sends a `kingdom_exit`
+// wire message when Mario boards the Odyssey and the warp to `dest_stage`
+// commits. `kingdom_short` is the Switch-form short name of the kingdom
+// being LEFT ("Sand", "Bowser"). Not deduped — the bridge is idempotent
+// (the `sweep_kingdom_on_exit` option only ever sends unchecked
+// locations) and re-leaving a kingdom is a legitimate event. Null /
+// empty kingdom is a no-op.
+void reportKingdomExit(const char* kingdom_short, const char* dest_stage);
+
 // CreditsStartHook -> sends a one-shot `goal` wire message when SMO's credits
 // scene (StaffRollScene) initializes. Vanilla SMO awards no Power Moon for
 // clearing the main game and Mario is simply deposited in PeachWorld after

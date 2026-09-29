@@ -142,6 +142,15 @@ class TalkatooMode(Toggle):
     AP-only playthroughs)."""
     display_name = "Talkatoo Mode"
 
+class SweepKingdomOnExit(Toggle):
+    """Sweep Kingdom on Exit: when Mario boards the Odyssey and flies out of a kingdom, every
+    remaining AP location in that kingdom is sent automatically — even the moons you never
+    touched. Leaving a kingdom already requires enough of its moons to power the Odyssey, so
+    the sweep fires exactly when you'd normally move on. Only Power Moon locations are swept;
+    Capture checks (capturesanity) still need the actual capture. Returning to a kingdom later
+    and collecting a swept moon in-game is harmless — the check is already sent."""
+    display_name = "Sweep Kingdom on Exit"
+
 class DifficultMode(Toggle):
     """Difficult Mode: For non-beginners who know how to do certain 'hard' tricks, aka Dino Skip,
     jump long gaps with good movement, skip certain captures that are otherwise 'required' in a casual playthrough,
@@ -286,6 +295,7 @@ def before_options_defined(options: dict) -> dict:
     options["capturesanity"] = Capturesanity
     options["talkatoo_mode"] = TalkatooMode
     options["difficult_mode"] = DifficultMode
+    options["sweep_kingdom_on_exit"] = SweepKingdomOnExit
     # Per-kingdom Peace toggles
     options["include_cap_peace_moons"] = IncludeCapPeaceMoons
     options["include_cascade_peace_moons"] = IncludeCascadePeaceMoons

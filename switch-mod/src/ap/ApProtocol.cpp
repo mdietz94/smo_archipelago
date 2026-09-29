@@ -112,6 +112,17 @@ void encodeGoal(LineBuffer& line) {
     line.append('\n');
 }
 
+void encodeKingdomExit(LineBuffer& line, const KingdomExit& k) {
+    line.clear();
+    Encoder e{line};
+    e.beginObject()
+        .key("t").value("kingdom_exit")
+        .key("kingdom").value(k.kingdom);
+    if (k.dest_stage[0] != '\0') e.key("dest_stage").value(k.dest_stage);
+    e.endObject();
+    line.append('\n');
+}
+
 void encodeDeath(LineBuffer& line, const Death& d) {
     line.clear();
     Encoder e{line};

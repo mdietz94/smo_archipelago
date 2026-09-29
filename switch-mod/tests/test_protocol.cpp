@@ -160,6 +160,21 @@ TEST(encode_goal) {
     EXPECT_EQ_S(wire([&](auto& b){ encodeGoal(b); }), R"({"t":"goal"})" "\n");
 }
 
+TEST(encode_kingdom_exit) {
+    KingdomExit k{};
+    copyCheckField(k.kingdom, "Sand");
+    copyCheckField(k.dest_stage, "LakeWorldHomeStage");
+    EXPECT_EQ_S(wire([&](auto& b){ encodeKingdomExit(b, k); }),
+        R"({"t":"kingdom_exit","kingdom":"Sand","dest_stage":"LakeWorldHomeStage"})" "\n");
+}
+
+TEST(encode_kingdom_exit_skips_empty_dest) {
+    KingdomExit k{};
+    copyCheckField(k.kingdom, "Bowser");
+    EXPECT_EQ_S(wire([&](auto& b){ encodeKingdomExit(b, k); }),
+        R"({"t":"kingdom_exit","kingdom":"Bowser"})" "\n");
+}
+
 TEST(encode_ping) {
     Ping p{.ts_ms=1731536400000LL};
     EXPECT_EQ_S(wire([&](auto& b){ encodePing(b, p); }),

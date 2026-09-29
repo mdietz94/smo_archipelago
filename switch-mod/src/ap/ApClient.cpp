@@ -748,6 +748,13 @@ void ApClient::pumpOnce() {
             if (sockSend(socket_fd_, line.data(), line.size()).ret < 0) return;
             st.death_pending_send.store(false, std::memory_order_release);
         }
+        if (e.kingdom_exit) {
+            KingdomExit k{};
+            copyCheckField(k.kingdom, e.kingdom);
+            copyCheckField(k.dest_stage, e.dest_stage);
+            encodeKingdomExit(line, k);
+            if (sockSend(socket_fd_, line.data(), line.size()).ret < 0) return;
+        }
         st.outbound_status.popDiscard();
     }
 

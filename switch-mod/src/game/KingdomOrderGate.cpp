@@ -25,20 +25,10 @@ constexpr Rule kRules[] = {
     {"Seaside", "Snow", "SnowWorldHomeStage"},
 };
 
-// Resolve Mario's currently-occupied kingdom bit on demand from the cached
-// GameDataHolder + getCurrentWorldIdNoDevelop symbol (same plumbing
-// AddPayShineHook uses for deposit accounting). Returns 0xff when the holder
-// or symbol isn't ready (caller treats as "not current").
-std::uint8_t currentKingdomBit() {
-    struct GameDataHolderAccessor { void* mData; };
-    using GetCurrentWorldIdNoDevelopFn = int (*)(GameDataHolderAccessor);
-    auto& s = smoap::ap::ApState::instance();
-    void* holder = s.game_data_holder_cache.load(std::memory_order_relaxed);
-    if (!holder || !s.get_current_world_id_fn) return 0xff;
-    auto fn = reinterpret_cast<GetCurrentWorldIdNoDevelopFn>(s.get_current_world_id_fn);
-    GameDataHolderAccessor acc{holder};
-    return kingdomBitForWorldId(fn(acc));
-}
+// Mario's currently-occupied kingdom bit comes from
+// KingdomUnlock::currentKingdomBit() (shared with the kingdom_exit emitter
+// in WorldMapSelectHook). Returns 0xff when the holder or symbol isn't
+// ready (caller treats as "not current").
 
 }  // namespace
 

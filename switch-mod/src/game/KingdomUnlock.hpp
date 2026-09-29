@@ -70,6 +70,15 @@ const char* kingdomShortFromHomeStage(const char* home_stage);
 // gate. Returns nullptr for unknown ids.
 const char* kingdomShortFromWorldId(int world_id);
 
+// Mario's currently-occupied kingdom, resolved on demand from the cached
+// GameDataHolder + getCurrentWorldIdNoDevelop symbol (same plumbing
+// AddPayShineHook uses for deposit accounting). Bit form returns 0xff and
+// short form returns nullptr when the holder / symbol isn't ready yet or
+// the worldId is out of the 17-kingdom range. Same-frame query — no
+// caching, safe from any hook that runs on the frame thread.
+std::uint8_t currentKingdomBit();
+const char* currentKingdomShort();
+
 // Inverse of kingdomShortFromWorldId. Returns -1 for unknown short names.
 // Composes kingdomBitFor + scan over kingdomBitForWorldId so the inverse
 // also honors the Sea/Snow swap.

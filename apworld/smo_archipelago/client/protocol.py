@@ -133,6 +133,26 @@ class GoalMsg:
 
 
 @dataclass
+class KingdomExitMsg:
+    """Mario boarded the Odyssey and is flying out of `kingdom`.
+
+    Emitted by the Switch from the DemoWorldWarp trampoline (the same
+    commit point the M7 kingdom-order gate uses) BEFORE the destination
+    stage loads. `kingdom` is the Switch-form short name of the kingdom
+    being LEFT ("Bowser", not "Bowser's" — SwitchServer translates at the
+    wire boundary); `dest_stage` is the raw SMO HomeStage being flown to.
+    Sent unconditionally — the bridge decides what to do with it (the
+    `sweep_kingdom_on_exit` slot option auto-sends the departed kingdom's
+    remaining AP locations). Painting / warp-hole transitions do NOT emit
+    this: the Odyssey is the only exit that requires the kingdom's moon
+    threshold, which is the semantic the sweep option keys on.
+    """
+    t: str = "kingdom_exit"
+    kingdom: str | None = None
+    dest_stage: str | None = None
+
+
+@dataclass
 class DeathMsg:
     """Mario died on the Switch. Bridge (when DeathLink is enabled) converts
     this into an AP Bounce so other DeathLink-tagged slots take damage too."""

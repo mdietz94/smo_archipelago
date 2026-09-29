@@ -30,6 +30,18 @@ Single persistent TCP connection. Each message is one line of UTF-8 JSON termina
 // Status hint for the tracker (no behavioral effect).
 {"t":"status","kingdom":"Metro","scenario":2,"moons_collected":47}
 
+// Mario boarded the Odyssey and the warp out of `kingdom` committed
+// (GameDataFunction::tryChangeNextStageWithDemoWorldWarp returned true and
+// the destination HomeStage maps to a different kingdom). `kingdom` is the
+// Switch-form short name of the kingdom being LEFT ("Bowser", not
+// "Bowser's" — the bridge translates); `dest_stage` is the raw destination
+// HomeStage. Sent unconditionally, not deduped. Painting / warp-hole
+// transitions never emit this. Consumer: the `sweep_kingdom_on_exit` slot
+// option — when on, SMOClient sends every remaining AP moon location in the
+// departed kingdom as one LocationChecks batch (Capture locations and the
+// festival goal moon excluded) and fires a single Cappy summary bubble.
+{"t":"kingdom_exit","kingdom":"Sand","dest_stage":"LakeWorldHomeStage"}
+
 // Goal completed (Bowser defeated / credits triggered). Idempotent — Switch
 // only sends once per save.
 {"t":"goal"}

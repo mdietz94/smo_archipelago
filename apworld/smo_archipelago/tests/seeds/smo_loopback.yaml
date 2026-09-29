@@ -13,6 +13,9 @@ Spicy Meatball Overdrive:
   # so the seed has a meaningful number of locations regardless of upstream
   # apworld default-flips.
   capturesanity: true
+  # Odyssey departure auto-sends the departed kingdom's remaining moon
+  # locations (default false).
+  sweep_kingdom_on_exit: false
 
   # Per-kingdom Peace toggles (default true).
   include_cap_peace_moons: true

@@ -118,6 +118,18 @@ struct Status {
     std::string stage_name;  // M4: raw stage at the time of the scenario flip
 };
 
+// Odyssey departure. Emitted from the DemoWorldWarp trampoline in
+// WorldMapSelectHook when Mario boards the Odyssey and the warp commits.
+// `kingdom` is the Switch-form short name of the kingdom being LEFT
+// ("Bowser", "Sand"); `dest_stage` the raw HomeStage being flown to. The
+// bridge uses it for the `sweep_kingdom_on_exit` slot option (auto-send
+// every remaining AP location in the departed kingdom). Fixed buffers —
+// same M6.1 frame-thread allocator contract as Check.
+struct KingdomExit {
+    char kingdom[kCheckFieldCap] = {};
+    char dest_stage[kCheckFieldCap] = {};
+};
+
 struct Goal {};
 
 struct Death {
@@ -503,6 +515,7 @@ void encodeHello(smoap::util::json::LineBuffer&, const Hello&);
 void encodeCheck(smoap::util::json::LineBuffer&, const Check&);
 void encodeStatus(smoap::util::json::LineBuffer&, const Status&);
 void encodeGoal(smoap::util::json::LineBuffer&);
+void encodeKingdomExit(smoap::util::json::LineBuffer&, const KingdomExit&);
 void encodeDeath(smoap::util::json::LineBuffer&, const Death&);
 void encodePing(smoap::util::json::LineBuffer&, const Ping&);
 void encodeLog(smoap::util::json::LineBuffer&, const Log&);

@@ -83,6 +83,16 @@ void reportGoal() {
     st.outbound_status.push(e);
 }
 
+void reportKingdomExit(const char* kingdom_short, const char* dest_stage) {
+    if (!kingdom_short || !*kingdom_short) return;
+    auto& st = ApState::instance();
+    StatusEvent e{};
+    e.kingdom_exit = true;
+    copyCheckField(e.kingdom, kingdom_short);
+    copyCheckField(e.dest_stage, dest_stage);
+    st.outbound_status.push(e);
+}
+
 void enqueueRemoteLog(const char* level, const char* msg) {
     auto& st = ApState::instance();
     // Don't bother enqueuing if no one is listening — the line still went out

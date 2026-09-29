@@ -150,6 +150,101 @@ async def test_death_message_dispatches_to_handler():
 
 
 @pytest.mark.asyncio
+async def test_kingdom_exit_dispatches_translated_kingdom():
+    """`kingdom_exit` from the active Switch reaches the handler with the
+    kingdom translated to AP form ("Bowser" -> "Bowser's") and the raw
+    destination stage passed through."""
+    state = BridgeState()
+    exits: list[tuple[str, str]] = []
+
+    async def on_check(_): ...
+    async def on_goal(): ...
+    async def on_kingdom_exit(kingdom: str, dest_stage: str) -> None:
+        exits.append((kingdom, dest_stage))
+
+    sw = SwitchServer("127.0.0.1", 0, state, on_check, on_goal,
+                      on_kingdom_exit=on_kingdom_exit)
+    server = await asyncio.start_server(sw._handle_client, "127.0.0.1", 0)
+    sw._server = server
+    port = server.sockets[0].getsockname()[1]
+
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        writer.write(protocol.encode(HelloMsg()))
+        await writer.drain()
+        await _drain_messages(reader, n=3, timeout=2.0)
+
+        writer.write(protocol.encode(protocol.KingdomExitMsg(
+            kingdom="Bowser", dest_stage="PeachWorldHomeStage")))
+        writer.write(protocol.encode(protocol.KingdomExitMsg(
+            kingdom="Sand", dest_stage="LakeWorldHomeStage")))
+        # Missing kingdom is dropped, not forwarded.
+        writer.write(protocol.encode(protocol.KingdomExitMsg(
+            dest_stage="LakeWorldHomeStage")))
+        await writer.drain()
+        await asyncio.sleep(0.1)
+        assert exits == [
+            ("Bowser's", "PeachWorldHomeStage"),
+            ("Sand", "LakeWorldHomeStage"),
+        ]
+    finally:
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+        await sw.stop()
+
+
+@pytest.mark.asyncio
+async def test_kingdom_exit_buffers_until_ap_ready():
+    """A `kingdom_exit` that lands during the AP handshake window is held
+    and replayed by drain_pending_snapshot — the sweep needs the
+    datapackage + missing_locations, same as buffered live checks."""
+    state = BridgeState()
+    exits: list[tuple[str, str]] = []
+    ap_ready = False
+
+    async def on_check(_): ...
+    async def on_goal(): ...
+    async def on_kingdom_exit(kingdom: str, dest_stage: str) -> None:
+        exits.append((kingdom, dest_stage))
+
+    sw = SwitchServer("127.0.0.1", 0, state, on_check, on_goal,
+                      on_kingdom_exit=on_kingdom_exit,
+                      is_ap_ready=lambda: ap_ready)
+    server = await asyncio.start_server(sw._handle_client, "127.0.0.1", 0)
+    sw._server = server
+    port = server.sockets[0].getsockname()[1]
+
+    reader, writer = await asyncio.open_connection("127.0.0.1", port)
+    try:
+        writer.write(protocol.encode(HelloMsg()))
+        await writer.drain()
+        await _drain_messages(reader, n=3, timeout=2.0)
+
+        writer.write(protocol.encode(protocol.KingdomExitMsg(
+            kingdom="Sand", dest_stage="LakeWorldHomeStage")))
+        await writer.drain()
+        await asyncio.sleep(0.1)
+        assert exits == []
+
+        ap_ready = True
+        await sw.drain_pending_snapshot()
+        assert exits == [("Sand", "LakeWorldHomeStage")]
+        # Drained once; a second drain doesn't replay.
+        await sw.drain_pending_snapshot()
+        assert len(exits) == 1
+    finally:
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+        await sw.stop()
+
+
+@pytest.mark.asyncio
 async def test_hello_ack_advertises_deathlink_enabled():
     """When bridge config has DeathLink on, hello_ack must tell the mod so it
     will act on inbound kill messages. (Outbound is bridge-gated separately,
