@@ -219,3 +219,40 @@ def test_titlekek_padding_is_trimmed(extract_mod, tmp_path):
     assert result == work_dir / "prod.keys.normalized"
     parsed = extract_mod._parse_keys_file(result)
     assert parsed["titlekek_02"].hex() == TITLEKEK_02_16B_HEX
+
+
+def test_unknown_key_with_one_trailing_zero_byte_is_trimmed(extract_mod, tmp_path):
+    """Field report (2026-09-28): a prod.keys entry hactool knows but we
+    don't list in EXPECTED_KEY_SIZES was 17 bytes (32 hex + `00`), and
+    hactool exited with "Key (...) must be 32 hex digits!". Every Switch
+    key is a whole number of AES blocks, so a small all-zero tail past a
+    16-byte boundary is trimmed regardless of the name.
+    """
+    keys = tmp_path / "prod.keys"
+    work_dir = tmp_path / "work"
+    _write_keys(keys, "some_kek_source = " + "33" * 16 + "00\n")
+
+    result = extract_mod._normalize_keys_file(keys, work_dir)
+
+    assert result == work_dir / "prod.keys.normalized"
+    parsed = extract_mod._parse_keys_file(result)
+    assert parsed["some_kek_source"].hex() == "33" * 16
+
+
+def test_unknown_key_block_multiple_is_untouched(extract_mod, tmp_path):
+    """A 0x90-byte keyblob ending in zeros is a legitimate size — the
+    block-multiple heuristic must not shave it."""
+    keys = tmp_path / "prod.keys"
+    work_dir = tmp_path / "work"
+    _write_keys(keys, "keyblob_00 = " + "44" * 0x80 + "00" * 0x10 + "\n")
+
+    assert extract_mod._normalize_keys_file(keys, work_dir) == keys
+
+
+def test_unknown_short_key_is_untouched(extract_mod, tmp_path):
+    """Sub-block values have no 16-byte boundary to trim back to."""
+    keys = tmp_path / "prod.keys"
+    work_dir = tmp_path / "work"
+    _write_keys(keys, "tiny = 0000\n")
+
+    assert extract_mod._normalize_keys_file(keys, work_dir) == keys

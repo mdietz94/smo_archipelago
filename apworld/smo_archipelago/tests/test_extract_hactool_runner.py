@@ -195,6 +195,31 @@ def test_nonzero_returncode_still_exits_with_actionable_message(extract_mod, tmp
     assert "Re-dump" in msg
 
 
+def test_bad_key_length_blames_keys_not_dump(extract_mod, tmp_path):
+    """Field report (2026-09-28): hactool exits 1 on a mis-sized prod.keys
+    entry before touching the dump. The diagnostic must name the keys file
+    and the offending entry, not tell the user to re-dump the game."""
+    bad = "ab" * 16 + "00"
+    keys = tmp_path / "prod.keys"
+    keys.write_text(f"header_key = {'11' * 32}\nfoo_kek_source = {bad.upper()}\n")
+    hactool = tmp_path / "hactool.exe"
+    hactool.write_bytes(b"")
+    fake_output = [
+        "[WARN] prod.keys does not exist.\n",
+        f"Key ({bad}) must be 32 hex digits!\n",
+    ]
+
+    with patch.object(extract_mod.subprocess, "Popen",
+                      side_effect=_fake_popen(fake_output, returncode=1)):
+        with pytest.raises(SystemExit) as exc_info:
+            extract_mod._run_hactool(hactool, keys, "-t", "pfs0")
+
+    msg = str(exc_info.value)
+    assert "'foo_kek_source'" in msg
+    assert str(keys) in msg
+    assert "NXDumpTool" not in msg
+
+
 # -- happy path: no errors, returns clean result --
 
 
